@@ -1,0 +1,6 @@
+{
+  "name": "Guia Comercial e Marketplace Premium",
+  "description": "Plataforma premium de guia comercial, busca de profissionais, vagas de emprego e marketplace local com painel administrativo avançado.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

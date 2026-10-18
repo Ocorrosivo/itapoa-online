@@ -1,0 +1,12 @@
+RewriteEngine On
+
+# Let real files and server-owned endpoints pass through unchanged.
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+RewriteCond %{REQUEST_URI} ^/(api|uploads)(/|$)
+RewriteRule ^ - [L]
+
+# React SPA routes such as /empresa/minha-empresa.
+RewriteRule ^ index.html [L]

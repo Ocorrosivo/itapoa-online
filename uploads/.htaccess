@@ -1,0 +1,19 @@
+# Uploaded files must never be executed as scripts.
+# On Hostinger (Apache in front of the Node app) this neutralises any file
+# that slips past the MIME/extension checks in server.ts.
+
+# Disable all handlers/CGI in this directory.
+RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .phps .cgi .pl .py .jsp .asp .aspx .sh
+RemoveType .php .phtml .php3 .php4 .php5 .php7 .phps .cgi .pl .py .jsp .asp .aspx .sh
+
+<IfModule mod_php.c>
+  php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+  php_flag engine off
+</IfModule>
+
+# Force everything here to be served as a plain download, not interpreted.
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+</IfModule>
