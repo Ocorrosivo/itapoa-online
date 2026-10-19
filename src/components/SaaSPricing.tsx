@@ -40,6 +40,18 @@ export default function SaaSPricing({
   const [pixDetails, setPixDetails] = useState<PixDetails | null>(null);
   const [pixCopied, setPixCopied] = useState(false);
 
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedPlan(null);
+      }
+    };
+    if (selectedPlan) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [selectedPlan]);
+
   const PLANS = [
     {
       id: 'bronze' as const,
@@ -214,12 +226,16 @@ export default function SaaSPricing({
         {/* 2. DYNAMIC PAYMENT CHECKOUT CONTAINER */}
         <AnimatePresence>
           {selectedPlan && (
-            <div className="fixed inset-0 bg-slate-950/45 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div 
+              onClick={() => setSelectedPlan(null)}
+              className="fixed inset-0 bg-slate-950/45 backdrop-blur-sm z-50 flex items-center justify-center p-4 cursor-pointer"
+            >
               <motion.div 
+                onClick={(e) => e.stopPropagation()}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="w-full max-w-2xl bg-white rounded-3xl overflow-hidden shadow-2xl p-6 md:p-8 relative max-h-[90vh] overflow-y-auto"
+                className="w-full max-w-2xl bg-white rounded-3xl overflow-hidden shadow-2xl p-6 md:p-8 relative max-h-[90vh] overflow-y-auto cursor-default"
               >
                 <button 
                   onClick={() => setSelectedPlan(null)}

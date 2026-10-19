@@ -17,7 +17,7 @@ interface PlansPageProps {
 
 export const PlansPage: React.FC<PlansPageProps> = ({
   onSelectPlan,
-  onNavigateTab = () => {},
+  onNavigateTab = (_tab: string) => {},
   onOpenAuthModal = () => {}
 }) => {
   const { cities, categories, refreshData } = useCompany();
@@ -26,6 +26,17 @@ export const PlansPage: React.FC<PlansPageProps> = ({
     title: 'Planos SaaS para Empresas - Anuncie sua Marca em Itapoá',
     description: 'Conheça nossos planos Essencial, Profissional e Premium. Destaque sua empresa com mini-site exclusivo, cupons de desconto, CRM e métricas.'
   });
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // If modal is not active or handled, ESC goes back to home
+      if (e.key === 'Escape') {
+        onNavigateTab('home');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onNavigateTab]);
 
   return (
     <div className="bg-slate-50 text-slate-900 font-sans">

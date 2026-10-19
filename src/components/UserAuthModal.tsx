@@ -30,6 +30,16 @@ export default function UserAuthModal({
   const [role, setRole] = useState<'advertiser' | 'user'>('advertiser');
   const [errorMsg, setErrorMsg] = useState('');
 
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -63,12 +73,16 @@ export default function UserAuthModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/45 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div 
+      onClick={onClose}
+      className="fixed inset-0 bg-slate-950/45 backdrop-blur-sm z-50 flex items-center justify-center p-4 cursor-pointer"
+    >
       <motion.div 
+        onClick={(e) => e.stopPropagation()}
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="w-full max-w-md bg-white rounded-3xl overflow-hidden p-6 md:p-8 shadow-2xl relative"
+        className="w-full max-w-md bg-white rounded-3xl overflow-hidden p-6 md:p-8 shadow-2xl relative cursor-default"
       >
         <button 
           onClick={onClose}

@@ -78,8 +78,8 @@ const getInitialRoute = () => {
   };
 };
 
-// Rotas de painel: área logada, servida sem o Header/Footer do site público.
-const PANEL_TABS = ['admin', 'painel', 'login/admin'];
+// Rotas isoladas: painel e autenticação, servidas em tela cheia sem Header/Footer do site público.
+const PANEL_TABS = ['admin', 'painel', 'login', 'login/admin', 'cadastro', 'esqueci-senha'];
 const isPanelTab = (tab: string) => PANEL_TABS.includes(tab);
 
 export const AppRoutes: React.FC = () => {
