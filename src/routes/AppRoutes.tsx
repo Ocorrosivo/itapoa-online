@@ -23,6 +23,7 @@ import CampaignDetailSection from '../components/CampaignDetailSection';
 import { AIModal } from '../components/common/AIModal';
 import { Header } from '../components/common/Header';
 import { Footer } from '../components/common/Footer';
+import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import UserAuthModal from '../components/UserAuthModal';
 import { useCompany } from '../context/CompanyContext';
 import { useAuth } from '../context/AuthContext';
@@ -136,14 +137,15 @@ export const AppRoutes: React.FC = () => {
   const handleOpenAuthModal = () => handleNavigateTab('login');
 
   const renderContent = () => {
-    // Active Company Mini-Site
     if (activeCompanySlug) {
       return (
-        <CompanyMiniSitePage
-          slug={activeCompanySlug}
-          onBack={() => handleNavigateCompany(null)}
-          onNavigateCompany={handleNavigateCompany}
-        />
+        <ErrorBoundary fallback={<div className="min-h-[calc(100vh-13rem)] bg-slate-950 text-white p-6 text-center flex flex-col items-center justify-center gap-4"><p className="text-sm text-slate-300">Erro ao carregar empresa.</p><button onClick={() => handleNavigateCompany(null)} className="px-4 py-2 bg-blue-600 rounded-xl text-white text-sm font-semibold">Voltar ao Guia</button></div>}>
+          <CompanyMiniSitePage
+            slug={activeCompanySlug}
+            onBack={() => handleNavigateCompany(null)}
+            onNavigateCompany={handleNavigateCompany}
+          />
+        </ErrorBoundary>
       );
     }
 

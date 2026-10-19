@@ -4,6 +4,11 @@ export const normalizeSearch = (value: unknown): string =>
     ? value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
     : '';
 
+export const toNumber = (value: unknown, fallback = 0): number => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
 export const arrayFromPayload = <T>(value: unknown): T[] => {
   if (Array.isArray(value)) return value;
   const data = (value as { data?: unknown } | null)?.data;
