@@ -7,7 +7,7 @@ jobs:
   inspect-caddy:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect Caddy + env
+      - name: Inspect details
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -16,13 +16,12 @@ jobs:
           port: ${{ secrets.VPS_PORT }}
           script: |
             set -e
-            echo "=== Caddyfile ==="
-            cat /etc/caddy/Caddyfile 2>/dev/null || echo "no /etc/caddy/Caddyfile"
-            echo "=== .env in app ==="
-            ls -la /opt/itapoa/app/.env 2>/dev/null | head -5
-            grep -E "^(APP_URL|API_URL|MERCADOPAGO|NODE_ENV|PORT)=" /opt/itapoa/app/.env 2>/dev/null | sed 's/=.*/=***/' | head -20 || echo "no .env or no matching vars"
-            echo "=== pm2 env ==="
-            pm2 env 0 2>/dev/null | grep -E "APP_URL|MERCADOPAGO|NODE_ENV" | sed 's/=.*/=***/' | head -20 || echo "no pm2 env"
-            echo "=== ecosystem ==="
-            cat /opt/itapoa/app/ecosystem.config.js 2>/dev/null | head -40 || echo "no ecosystem file"
+            echo "=== .env values (host only, no secrets) ==="
+            echo "APP_URL=$(grep '^APP_URL=' /opt/itapoa/app/.env 2>/dev/null | cut -d= -f2)"
+            echo "API_URL=$(grep '^API_URL=' /opt/itapoa/app/.env 2>/dev/null | cut -d= -f2)"
+            echo "MERCADOPAGO_ACCESS_TOKEN present: $(grep -c '^MERCADOPAGO_ACCESS_TOKEN=..' /opt/itapoa/app/.env 2>/dev/null || echo 0)"
+            echo "MERCADOPAGO_WEBHOOK_SECRET present: $(grep -c '^MERCADOPAGO_WEBHOOK_SECRET=..' /opt/itapoa/app/.env 2>/dev/null || echo 0)"
+            echo "APP_URL host check: $(grep '^APP_URL=' /opt/itapoa/app/.env 2>/dev/null)"
+            echo "=== Node .env via app ==="
+            cd /opt/itapoa/app && node -e "require('dotenv').config(); console.log('APP_URL='+process.env.APP_URL); console.log('has MP token='+!!process.env.MERCADOPAGO_ACCESS_TOKEN); console.log('has MP webhook='+!!process.env.MERCADOPAGO_WEBHOOK_SECRET)" 2>&1 | head -20
             echo "=== done ==="
