@@ -38,9 +38,10 @@ jobs:
           echo "Build OK: dist/server.cjs $(wc -c < dist/server.cjs) bytes"
           ls -lh dist/assets/
 
-      - name: Deploy via SSH (if secrets present)
-        uses: appleboy/scp-action@v0.1.7
+      - name: Deploy via SSH (if configured)
         if: ${{ hashFiles('dist/**') != '' }}
+        continue-on-error: true
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.HOSTINGER_HOST }}
           username: ${{ secrets.HOSTINGER_USER }}
@@ -51,6 +52,7 @@ jobs:
 
       - name: Deploy via FTP (fallback)
         if: always()
+        continue-on-error: true
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
