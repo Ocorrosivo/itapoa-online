@@ -5,11 +5,12 @@
  */
 
 import React, { useState } from 'react';
-import { 
+import {
   Play, Facebook, Instagram, Phone, Globe
 } from 'lucide-react';
 import { useCompany } from '../context/CompanyContext';
 import { PremiumCompaniesCarousel } from '../components/PremiumCompaniesCarousel';
+import { QuickSearchInput } from '../components/common/QuickSearchInput';
 import { matchesCompanySearch, normalizeSearch } from '../utils/catalogSearch';
 
 interface HomePageProps {
@@ -140,6 +141,14 @@ export const HomePage: React.FC<HomePageProps> = ({
             </p>
           </div>
 
+          {/* Busca rapida com sugestoes: lupa + debounce + acento-insensivel + agrupado por tipo */}
+          <QuickSearchInput
+            onNavigateCompany={onNavigateCompany}
+            onNavigateTab={onNavigateTab}
+            placeholder="Digite o nome da empresa, serviço, bairro ou produto..."
+          />
+
+          {/* Filtro local da secao parceiros (mantido) */}
           <div className="max-w-2xl mx-auto flex items-center shadow-lg rounded-xl overflow-hidden border border-slate-200 bg-white focus-within:ring-2 focus-within:ring-[#C8102E]/30">
             <input
               type="text"
@@ -148,10 +157,11 @@ export const HomePage: React.FC<HomePageProps> = ({
               onKeyDown={e => {
                 if (e.key === 'Enter') handleExecuteSearch();
               }}
-              placeholder="Digite o nome da empresa, serviço, bairro ou produto..."
+              placeholder="Filtrar parceiros abaixo…"
+              aria-label="Filtrar parceiros"
               className="flex-1 px-6 py-4 text-sm focus:outline-none placeholder-slate-400 bg-white"
             />
-            <button 
+            <button
               onClick={handleExecuteSearch}
               className="bg-black text-white px-8 py-4 font-black text-xs tracking-wider uppercase hover:bg-slate-800 transition cursor-pointer"
             >
