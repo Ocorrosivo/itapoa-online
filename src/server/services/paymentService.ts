@@ -85,10 +85,13 @@ class PaymentService {
 
     let subscriptionId: string;
     let nextBilling: Date;
+    let lockKey: string;
     {
       const conn = await pool.getConnection();
+      lockKey = `pix_${companyId}_${planId}_${userId}`.slice(0, 64);
       try {
         await conn.beginTransaction();
+        await conn.query('SELECT GET_LOCK(?, 10)', [lockKey]);
         const [pending]: any = await conn.query(
           `SELECT id FROM subscriptions
             WHERE companyId = ? AND planId = ? AND userId = ? AND status = 'pending' AND paymentMethod = 'pix'
@@ -96,6 +99,7 @@ class PaymentService {
           [companyId, planId, userId]
         );
         if (pending.length > 0) {
+          await conn.query('SELECT RELEASE_LOCK(?)', [lockKey]);
           await conn.rollback();
           conn.release();
           const reuse = await this.getActivePixForCompany(companyId, planId, userId);
@@ -112,9 +116,11 @@ class PaymentService {
            VALUES (?, ?, ?, ?, 'pending', ?, 'pix', ?)`,
           [subscriptionId, userId, companyId, planId, plan.price, nextBilling]
         );
+        await conn.query('SELECT RELEASE_LOCK(?)', [lockKey]);
         await conn.commit();
         conn.release();
       } catch (err) {
+        try { await conn.query('SELECT RELEASE_LOCK(?)', [lockKey]); } catch {}
         try { await conn.rollback(); } catch {}
         try { conn.release(); } catch {}
         if (err instanceof PaymentError) throw err;
@@ -122,13 +128,13 @@ class PaymentService {
       }
     }
 
-    const idempotencyKey = `${subscriptionId}`;
+    const idempotencyKey = `${subscriptionId!}`;
     const dateOfExpiration = new Date(Date.now() + 30 * 60 * 1000).toISOString();
     const body = {
       transaction_amount: Number(plan.price.toFixed(2)),
       description: `Assinatura ${plan.name} — Guia Comercial Itapoá`,
       payment_method_id: 'pix',
-      external_reference: subscriptionId,
+      external_reference: subscriptionId!,
       date_of_expiration: dateOfExpiration,
       payer: { email: payerEmail }
     };
@@ -149,11 +155,19 @@ class PaymentService {
         throw new PaymentError(502, mp?.message || 'Falha ao criar cobrança no gateway.');
       }
     } catch (err) {
-      try {
-        await pool.query('DELETE FROM subscriptions WHERE id = ? AND status = ?', [subscriptionId!, 'pending']);
-      } catch {}
-      if (err instanceof PaymentError) throw err;
-      throw new PaymentError(502, 'Gateway de pagamento indisponível.');
+      if (err instanceof PaymentError) {
+        const sc = (err as PaymentError).status;
+        if (sc === 502) {
+          console.warn(`[payment] MP error for ${subscriptionId!}, keeping pending for reconciliation`);
+        } else {
+          try {
+            await pool.query('UPDATE subscriptions SET status = ? WHERE id = ? AND status = ?', ['canceled', subscriptionId!, 'pending']);
+          } catch {}
+        }
+        throw err;
+      }
+      console.warn(`[payment] MP timeout/network for ${subscriptionId!}, keeping pending for reconciliation (X-Idempotency-Key=${idempotencyKey})`);
+      throw new PaymentError(502, 'Gateway temporariamente indisponível. Sua cobrança foi preservada — tente recuperar ou aguarde confirmação via webhook.');
     }
 
     const gatewayId = String(mp.id);
@@ -353,7 +367,15 @@ class PaymentService {
       } else if (status === 'refunded' || status === 'charged_back') {
         await conn2.query('UPDATE subscriptions SET status = ? WHERE id = ?', ['canceled', subscriptionId]);
         const [comp]: any = await conn2.query('SELECT companyId FROM subscriptions WHERE id = ? LIMIT 1', [subscriptionId]);
-        if (comp[0]?.companyId) await conn2.query('UPDATE companies SET planLevel = ?, isSponsored = ? WHERE id = ?', ['bronze', 0, comp[0].companyId]);
+        if (comp[0]?.companyId) {
+          const [otherActive]: any = await conn2.query(
+            'SELECT id FROM subscriptions WHERE companyId = ? AND status = ? AND id != ? LIMIT 1',
+            [comp[0].companyId, 'active', subscriptionId]
+          );
+          if (otherActive.length === 0) {
+            await conn2.query('UPDATE companies SET planLevel = ?, isSponsored = ? WHERE id = ?', ['bronze', 0, comp[0].companyId]);
+          }
+        }
       }
       await conn2.commit();
       conn2.release();
@@ -385,6 +407,7 @@ class PaymentService {
       const mp: any = await resp.json();
       if (mp.status !== 'pending' && mp.status !== 'in_process') return null;
       if (mp.currency_id && mp.currency_id !== 'BRL') return null;
+      if (mp.external_reference && String(mp.external_reference) !== String(row.id)) return null;
       const expected = Number(row.amount);
       const got = Number(mp.transaction_amount);
       if (Number.isFinite(expected) && Number.isFinite(got) && Math.abs(expected - got) > 0.01) return null;
