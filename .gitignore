@@ -10,3 +10,4 @@ coverage/
 # Pacotes de deploy locais (não versionar)
 *.zip
 *.rar
+.mp-integrate-progress.md

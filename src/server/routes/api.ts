@@ -31,6 +31,10 @@ import { billingService } from '../services/billingService.js';
 import { CrudService, ServiceError } from '../services/crudService.js';
 import { paymentService, PaymentError } from '../services/paymentService.js';
 import {
+  createMpPlan, createSubscription, cancelSubscription,
+  SubscriptionPaymentError
+} from '../services/subscriptionService.js';
+import {
   requireAuth, requireRole, optionalAuth, attachCompanyScope,
   requireCompanyAccess, requireCompanyParam, requireRecordOwnership
 } from '../middleware/auth.js';
@@ -49,7 +53,7 @@ const fail = (res: Response, error: unknown) => {
   if (isDatabaseUnavailable(error)) {
     return res.status(503).json({ error: 'Banco de dados temporariamente indisponível.' });
   }
-  if (error instanceof AuthError || error instanceof ServiceError || error instanceof EngagementError || error instanceof PaymentError) {
+  if (error instanceof AuthError || error instanceof ServiceError || error instanceof EngagementError || error instanceof PaymentError || error instanceof SubscriptionPaymentError) {
     return res.status(error.status).json({ error: error.message });
   }
   console.error('[api]', error instanceof Error ? error.message : error);
@@ -314,6 +318,43 @@ apiRouter.get('/payments/status', requireAuth, attachCompanyScope, handler(async
     ? 'active'
     : await paymentService.getSubscriptionStatus(req.companyIds ?? []);
   res.json({ status });
+}));
+
+// ------------------------------------------------------------
+// Subscriptions (preapproval) — disabled by default (SUBSCRIPTIONS_ENABLED=false)
+// Keep OFF until plans/values/period/cancel rules are confirmed.
+// No auto-creation of MP plans; creation is admin-only + idempotent.
+// ------------------------------------------------------------
+
+apiRouter.post('/admin/mp/plans', requireAuth, requireRole(ADMIN_ONLY), handler(async (req, res) => {
+  if (!env.subscriptionsEnabled) return res.status(404).json({ error: 'Recurso indisponível.' });
+  const planId = String(req.body?.planId ?? '');
+  const reason = String(req.body?.reason ?? '');
+  const amount = Number(req.body?.amount);
+  if (!planId || !reason || !Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ error: 'planId, reason e amount (>0) obrigatórios.' });
+  }
+  const result = await createMpPlan(planId, reason, amount, env.appUrl);
+  res.json({ mpPlanId: result.mpPlanId });
+}));
+
+apiRouter.post('/payments/subscribe', requireAuth, requireCompanyAccess, handler(async (req, res) => {
+  if (!env.subscriptionsEnabled) return res.status(404).json({ error: 'Recurso indisponível.' });
+  const companyId = (req.companyIds && req.companyIds[0]) || String(req.body?.companyId ?? req.body?.company_id ?? '');
+  const planId = String(req.body?.planId ?? '');
+  const cardTokenId = String(req.body?.cardTokenId ?? req.body?.card_token_id ?? '');
+  if (!planId) return res.status(400).json({ error: 'planId obrigatório.' });
+  if (!cardTokenId) return res.status(400).json({ error: 'cardTokenId obrigatório (tokenize o cartão no frontend).' });
+  const payerEmail = typeof req.body?.payerEmail === 'string' ? req.body.payerEmail : req.user!.email;
+  res.json(await createSubscription(req.user!.id, companyId, planId, payerEmail, cardTokenId, env.appUrl));
+}));
+
+apiRouter.post('/payments/subscription/cancel', requireAuth, attachCompanyScope, handler(async (req, res) => {
+  if (!env.subscriptionsEnabled) return res.status(404).json({ error: 'Recurso indisponível.' });
+  const subscriptionId = String(req.body?.subscriptionId ?? '');
+  if (!subscriptionId) return res.status(400).json({ error: 'subscriptionId obrigatório.' });
+  await cancelSubscription(subscriptionId, req.companyIds ?? []);
+  res.json({ success: true });
 }));
 
 // ------------------------------------------------------------

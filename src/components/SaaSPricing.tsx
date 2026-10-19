@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { City, Category } from '../types';
 import { BillingService, PixDetails } from '../services/BillingService';
+import { SubscriptionCheckout } from './SubscriptionCheckout';
 
 interface SaaSPricingProps {
   cities: City[];
@@ -38,6 +39,9 @@ export default function SaaSPricing({
   const [success, setSuccess] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
   const [pixDetails, setPixDetails] = useState<PixDetails | null>(null);
+  const [subscriptionMode, setSubscriptionMode] = useState(false);
+  const [pendingCompanyId, setPendingCompanyId] = useState('');
+  const mpPublicKey = (import.meta as any).env?.VITE_MP_PUBLIC_KEY as string | undefined;
   const [pixCopied, setPixCopied] = useState(false);
 
   React.useEffect(() => {
@@ -150,6 +154,12 @@ export default function SaaSPricing({
       }
 
       const planId = `plan_${selectedPlan}`;
+      // Recurring subscription via CardPayment brick when VITE_MP_PUBLIC_KEY is set
+      if (payMethod === 'card' && (import.meta as any).env?.VITE_SUBSCRIPTIONS_ENABLED === 'true' && (import.meta as any).env?.VITE_MP_PUBLIC_KEY) {
+        setPendingCompanyId(companyId);
+        setSubscriptionMode(true);
+        return;
+      }
       if (payMethod === 'pix') {
         const pix = await BillingService.generatePixPayment(companyId, planId, 0, '');
         setPixDetails(pix);
@@ -272,6 +282,18 @@ export default function SaaSPricing({
                         <Copy className="w-3.5 h-3.5" /> {pixCopied ? 'Copiado' : 'Copiar'}
                       </button>
                     </div>
+                  </div>
+                ) : subscriptionMode ? (
+                  <div className="p-4 md:p-6">
+                    <SubscriptionCheckout
+                      companyId={pendingCompanyId}
+                      planId={`plan_${selectedPlan}`}
+                      amount={selectedPlan === 'gold_vip' ? 49.9 : 99.9}
+                      payerEmail={(() => { try { const u = JSON.parse(localStorage.getItem('saas_user')||'null'); return u?.email || ''; } catch { return ''; } })()}
+                      publicKey={mpPublicKey!}
+                      onSuccess={() => { setSuccess(true); setSubscriptionMode(false); setTimeout(() => onListingCreated(), 1500); }}
+                    />
+                    <button type="button" onClick={() => setSubscriptionMode(false)} className="mt-4 text-xs text-slate-500 underline">Voltar</button>
                   </div>
                 ) : success ? (
                   <div className="p-16 text-center flex flex-col items-center">

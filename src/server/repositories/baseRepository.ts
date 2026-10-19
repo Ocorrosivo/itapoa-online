@@ -66,7 +66,7 @@ const TABLE_COLUMNS: Record<string, string[]> = {
     'createdAt'
   ],
   campaign_comments: ['id', 'campaignId', 'userName', 'comment', 'createdAt'],
-  plans: ['id', 'name', 'price', 'billing_cycle', 'features'],
+  plans: ['id', 'name', 'price', 'billing_cycle', 'features', 'mercado_pago_plan_id'],
   subscriptions: [
     'id', 'userId', 'companyId', 'planId', 'status', 'amount', 'paymentMethod',
     'nextBillingDate', 'createdAt'

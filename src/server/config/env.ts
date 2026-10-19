@@ -61,6 +61,8 @@ if (problems.length > 0) {
 
 const required = (name: RequiredVar): string => process.env[name] as string;
 
+const subscriptionsEnabled = String(process.env.SUBSCRIPTIONS_ENABLED ?? '').toLowerCase() === 'true';
+
 export const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
   isProduction: process.env.NODE_ENV === 'production',
@@ -78,5 +80,6 @@ export const env = {
   },
 
   jwtSecret: required('JWT_SECRET'),
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d'
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  subscriptionsEnabled
 };

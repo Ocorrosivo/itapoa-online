@@ -70,7 +70,10 @@ app.post('/api/webhooks/mercadopago', express.json({ limit: '256kb' }), async (r
     }
 
     const type = req.body?.type || req.query['type'];
-    if ((type === 'payment' || req.body?.action?.startsWith('payment')) && dataId) {
+    if (env.subscriptionsEnabled && (type === 'subscription_preapproval' || type === 'subscription_authorized_payment') && dataId) {
+      const { handleSubscriptionNotification } = await import('./src/server/services/subscriptionService.js');
+      await handleSubscriptionNotification(dataId);
+    } else if ((type === 'payment' || req.body?.action?.startsWith('payment')) && dataId) {
       await paymentService.handlePaymentNotification(dataId);
     }
     res.status(200).json({ received: true });
