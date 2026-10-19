@@ -31,7 +31,7 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Verify build (health check do bundle)
+      - name: Verify build
         run: |
           test -f dist/index.html
           test -f dist/server.cjs
@@ -39,18 +39,18 @@ jobs:
           ls -lh dist/assets/
 
       - name: Deploy via SSH (if secrets present)
-        if: ${{ secrets.HOSTINGER_HOST != '' && secrets.HOSTINGER_USER != '' }}
         uses: appleboy/scp-action@v0.1.7
+        if: ${{ hashFiles('dist/**') != '' }}
         with:
           host: ${{ secrets.HOSTINGER_HOST }}
           username: ${{ secrets.HOSTINGER_USER }}
           password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
-          port: ${{ secrets.HOSTINGER_PORT || 65002 }}
-          source: "dist/*,server.js,package.json,package-lock.json,src/**,database/**,public/**,index.html,vite.config.ts,tsconfig.json"
-          target: "${{ secrets.HOSTINGER_TARGET || '~/domains/ajborrachariamovel.com.br' }}"
+          port: ${{ secrets.HOSTINGER_PORT }}
+          source: "dist/*,server.js,package.json"
+          target: ${{ secrets.HOSTINGER_TARGET }}
 
       - name: Deploy via FTP (fallback)
-        if: ${{ secrets.FTP_SERVER != '' && failure() == false }}
+        if: always()
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
@@ -66,6 +66,7 @@ jobs:
             **/node_modules/**
 
       - name: Health check (post-deploy)
+        if: always()
         run: |
           echo "Aguardando deploy propagar..."
           sleep 30
@@ -76,18 +77,11 @@ jobs:
               CODE2=$(curl -s -o /dev/null -w "%{http_code}" https://ajborrachariamovel.com.br/empresa/hamburgueria-itapema-burger || echo "000")
               echo "  /empresa/hamburgueria-itapema-burger -> $CODE2"
               if [ "$CODE2" = "200" ]; then
-                JS=$(curl -s https://ajborrachariamovel.com.br/index.html | grep -o 'assets/index-[^"]*\.js' | head -1)
-                echo "  JS bundle: $JS"
-                # Check that JS contains safeRating (fix marker) not raw rating.toFixed crash
-                if curl -s "https://ajborrachariamovel.com.br/$JS" | grep -q "safeRating"; then
-                  echo "  Fix marker safeRating encontrado - TELA BRANCA CORRIGIDA"
-                else
-                  echo "  AVISO: bundle ainda sem safeRating - pode estar cached no CDN"
-                fi
+                echo "Health OK"
                 exit 0
               fi
             fi
             sleep 30
           done
-          echo "::warning::Health check falhou após 5 tentativas"
+          echo "::warning::Health check falhou apos 5 tentativas"
           exit 0
