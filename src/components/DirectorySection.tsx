@@ -391,7 +391,7 @@ export default function DirectorySection({
 
                           <div className="flex items-center justify-between border-t border-slate-100 pt-4 mt-4 font-sans text-xs">
                             <div className="flex items-center gap-1 bg-amber-500/5 text-amber-700 px-2 py-0.5 rounded font-bold">
-                              <Star className="w-3 h-3 fill-amber-500 text-amber-500" /> {c.rating.toFixed(1)} <span className="text-slate-400 font-normal">({c.reviewCount})</span>
+                              <Star className="w-3 h-3 fill-amber-500 text-amber-500" /> {Number(c.rating).toFixed(1)} <span className="text-slate-400 font-normal">({c.reviewCount})</span>
                             </div>
                             
                             <button 
