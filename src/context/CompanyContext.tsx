@@ -78,10 +78,17 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
         fetchEndpoint('/api/blog'), fetchEndpoint('/api/coupons')
       ]);
       if (version !== refreshVersion.current) return;
+      const sortedCities = [...cityData].sort((a: any, b: any) => {
+        const aItapoa = String(a?.name || '').toLowerCase().includes('itapoá');
+        const bItapoa = String(b?.name || '').toLowerCase().includes('itapoá');
+        if (aItapoa && !bItapoa) return -1;
+        if (!aItapoa && bItapoa) return 1;
+        return String(a?.name || '').localeCompare(String(b?.name || ''));
+      });
       setCompanies(fetchedCompanies);
       setCategories(fetchedCategories);
-      setCities(cityData);
-      setSelectedCityId(current => current || cityData[0]?.id || '');
+      setCities(sortedCities);
+      setSelectedCityId(current => current || '');
       setCampaigns(campaignData);
       setProfessionals(professionalData);
       setJobs(jobData);
