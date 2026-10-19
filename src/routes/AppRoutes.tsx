@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * Application Routes & SPA Router Navigation Handler
- * Self-contained navigation state manager
+ * Self-contained navigation state manager — 7 tabs em ordem exata, SPA sem reload
  */
 
 import React, { useState, useEffect, lazy, Suspense } from 'react';
@@ -33,22 +33,31 @@ import { LoadingSpinner } from '../components/common/LoadingSpinner';
 const AdminDashboardPage = lazy(() => import('../pages/AdminDashboardPage').then(m => ({ default: m.AdminDashboardPage })));
 const EmpresarioDashboardPage = lazy(() => import('../pages/EmpresarioDashboardPage').then(m => ({ default: m.EmpresarioDashboardPage})));
 
+/**
+ * Mapa canônico SPA — 7 itens do menu + aliases legados para compatibilidade.
+ * Rotas SPA: /, /projetos-sociais, /categorias, /bairros, /empresas, /turismo, /empregos
+ * /turismo agrega Turismo / Eventos / Informativo em seções internas.
+ * Legados (eventos, blog, rh-empregos, praias, etc) normalizam para o canônico.
+ */
 const pathToTabMap: Record<string, string> = {
   'empresas': 'empresas',
   'directory': 'empresas',
-  'eventos': 'eventos',
-  'events': 'eventos',
+  'projetos-sociais': 'projetos-sociais',
+  'categorias': 'categorias',
+  'bairros': 'bairros',
   'turismo': 'turismo',
   'tourism': 'turismo',
-  'praias': 'praias',
-  'bairros': 'bairros',
-  'categorias': 'categorias',
-  'projetos-sociais': 'projetos-sociais',
-  'rh-empregos': 'rh-empregos',
-  'ofertas': 'ofertas',
+  'eventos': 'turismo',
+  'events': 'turismo',
+  'blog': 'turismo',
+  'informativo': 'turismo',
+  'praias': 'turismo',
+  'empregos': 'empregos',
+  'rh-empregos': 'empregos',
+  'jobs': 'empregos',
+  'ofertas': 'empresas',
   'planos': 'planos',
   'plans': 'planos',
-  'blog': 'blog',
   'contato': 'contato',
   'contact': 'contato',
   'sobre': 'sobre',
@@ -123,7 +132,6 @@ export const AppRoutes: React.FC = () => {
   const { isAdminMaster } = useAuth();
   const initialRoute = getInitialRoute();
 
-  // Navigation state — self-contained with URL sync
   const [currentTab, setCurrentTab] = useState<string>(initialRoute.tab);
   const [activeCompanySlug, setActiveCompanySlug] = useState<string | null>(initialRoute.companySlug);
   const [activeBairroSlug, setActiveBairroSlug] = useState<string | null>(initialRoute.bairroSlug);
@@ -141,7 +149,6 @@ export const AppRoutes: React.FC = () => {
       setActiveCompanySlug(route.companySlug);
       setActiveBairroSlug(route.bairroSlug);
       setActivePraiaSlug(route.praiaSlug);
-      // Limpa overlays que não têm rota própria, para não deixar o conteúdo preso.
       setActiveCampaignSlug(null);
       setActiveInstitutional(null);
     };
@@ -210,7 +217,6 @@ export const AppRoutes: React.FC = () => {
   const handleOpenAuthModal = () => handleNavigateTab('login');
 
   const renderContent = () => {
-    // Active Company Mini-Site — tem rota própria (/empresa/:slug)
     if (activeCompanySlug) {
       return (
         <ErrorBoundary fallback={<div className="min-h-[calc(100vh-13rem)] bg-slate-950 text-white p-6 text-center flex flex-col items-center justify-center gap-4"><p className="text-sm text-slate-300">Erro ao carregar empresa.</p><button onClick={() => handleNavigateCompany(null)} className="px-4 py-2 bg-blue-600 rounded-xl text-white text-sm font-semibold">Voltar ao Guia</button></div>}>
@@ -223,7 +229,6 @@ export const AppRoutes: React.FC = () => {
       );
     }
 
-    // Active Bairro Detail — rota própria (/bairro/:slug)
     if (activeBairroSlug) {
       return (
         <BairroDetailPage
@@ -241,7 +246,6 @@ export const AppRoutes: React.FC = () => {
       );
     }
 
-    // Active Praia Detail — rota própria (/praia/:slug)
     if (activePraiaSlug) {
       return (
         <PraiaDetailPage
@@ -259,7 +263,6 @@ export const AppRoutes: React.FC = () => {
       );
     }
 
-    // Active Institutional Page
     if (activeInstitutional) {
       return (
         <InstitutionalPage
@@ -270,7 +273,6 @@ export const AppRoutes: React.FC = () => {
       );
     }
 
-    // Active Solidarity Campaign
     if (activeCampaignSlug) {
       const campaign = campaigns.find(c => c.slug === activeCampaignSlug) || campaigns[0];
       return (
@@ -284,7 +286,6 @@ export const AppRoutes: React.FC = () => {
     return renderTab();
   };
 
-  // Dedicated Auth Routes & Navigation Tabs
   const renderTab = () => {
     switch (currentTab) {
       case 'login':
@@ -300,36 +301,31 @@ export const AppRoutes: React.FC = () => {
         return <ForgotPasswordPage onNavigateTab={handleNavigateTab} />;
 
       case 'empresas':
-      case 'directory':
       case 'categorias':
       case 'bairros':
         return <DirectoryPage onNavigateCompany={handleNavigateCompany} />;
 
       case 'turismo':
-      case 'tourism':
-      case 'praias':
         return (
-          <TourismPage
-            onNavigateCompany={handleNavigateCompany}
-            onNavigateTab={handleNavigateTab}
-            onOpenAuthModal={handleOpenAuthModal}
-          />
+          <div className="space-y-0">
+            <TourismPage
+              onNavigateCompany={handleNavigateCompany}
+              onNavigateTab={handleNavigateTab}
+              onOpenAuthModal={handleOpenAuthModal}
+            />
+            <div id="eventos" className="border-t border-slate-200">
+              <EventsPage
+                onNavigateTab={handleNavigateTab}
+                onOpenAuthModal={handleOpenAuthModal}
+              />
+            </div>
+            <div id="informativo" className="border-t border-slate-200">
+              <BlogPage />
+            </div>
+          </div>
         );
-
-      case 'eventos':
-      case 'events':
-        return (
-          <EventsPage
-            onNavigateTab={handleNavigateTab}
-            onOpenAuthModal={handleOpenAuthModal}
-          />
-        );
-
-      case 'blog':
-        return <BlogPage />;
 
       case 'planos':
-      case 'plans':
         return (
           <PlansPage
             onSelectPlan={() => handleNavigateTab('admin')}
@@ -346,7 +342,7 @@ export const AppRoutes: React.FC = () => {
           />
         );
 
-      case 'rh-empregos':
+      case 'empregos':
         return <JobsPage />;
 
       case 'ofertas':
@@ -375,7 +371,7 @@ export const AppRoutes: React.FC = () => {
       case 'help':
         return (
           <InstitutionalPage
-            type={currentTab as any}
+            type={currentTab as unknown as 'privacy' | 'terms' | 'help'}
             onNavigateBack={() => handleNavigateTab('home')}
             onOpenAuthModal={handleOpenAuthModal}
           />
@@ -386,9 +382,9 @@ export const AppRoutes: React.FC = () => {
           return (
             <Suspense fallback={<LoadingSpinner />}>
               <AdminDashboardPage
-              onOpenAuthModal={handleOpenAuthModal}
-              onNavigateCompany={handleNavigateCompany}
-              onNavigateTab={handleNavigateTab}
+                onOpenAuthModal={handleOpenAuthModal}
+                onNavigateCompany={handleNavigateCompany}
+                onNavigateTab={handleNavigateTab}
               />
             </Suspense>
           );
@@ -416,7 +412,6 @@ export const AppRoutes: React.FC = () => {
     }
   };
 
-  // Telas de autenticação: layout limpo, sem Header/Footer do portal.
   if (!activeCompanySlug && !activeBairroSlug && !activePraiaSlug &&
     !activeInstitutional && !activeCampaignSlug && isAuthTab(currentTab)) {
     return (
@@ -427,7 +422,6 @@ export const AppRoutes: React.FC = () => {
     );
   }
 
-  // /admin e /painel são áreas próprias: shell isolado, sem Header/Footer do portal.
   const isPanelRoute = !activeCompanySlug && !activeBairroSlug && !activePraiaSlug &&
     !activeInstitutional && !activeCampaignSlug && isPanelTab(currentTab);
 
