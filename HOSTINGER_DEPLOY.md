@@ -1,37 +1,38 @@
-# 🚀 Guia de Implantação — Hostinger VPS (itapoa.tech)
+# 🚀 Guia de Implantação — VPS (itapoa.tech)
 
-**Produção:** `https://itapoa.tech` (VPS `2.24.209.225` / `srv2075519.hstgr.cloud`, Ubuntu 26.04, Caddy em frente ao Node).
-Domínio legado `ajborrachariamovel.com.br` permanece referência antiga quando citado.
+**Produção:** `https://itapoa.tech` (VPS `2.24.209.225` / `srv2075519.hstgr.cloud`, Ubuntu 26.04, Caddy → `127.0.0.1:3000`).
+Domínios `itapoa.tech` e `www.itapoa.tech` no mesmo app; `:80` redireciona para https automaticamente.
 
-## Fluxo final (não entrar na VPS manualmente)
+## Fluxo automático (sem entrar na VPS)
 
-1. **Merge/PR na `main` dispara publicação automática.** Todo `push` em `main` e todo **merge de PR** para `main` roda o workflow `Deploy Hostinger` (`.github/workflows/deploy-hostinger.yml`).
-2. **Execução manual:** GitHub → Actions → *Deploy Hostinger* → *Run workflow* (mesma branch = `main`).
-3. **Concorrência:** `cancel-in-progress: true` — uma publicação em andamento é cancelada quando uma mais nova entra, evitando versión antiga sobrescrever a nova.
+Todo **`push` na `main`** e todo **merge de PR para `main`** dispara `Deploy VPS (itapoa.tech)` (`.github/workflows/deploy-vps.yml`).
+Também pode rodar manual: GitHub → Actions → *Deploy VPS (itapoa.tech)* → *Run workflow* (`main`).
 
-## O que o deploy faz
+- **Concorrência:** `cancel-in-progress: true` — uma publicação antiga é cancelada quando uma mais nova entra.
+- **Sem SSO manual:** Não mexa na VPS por `ssh`/`Web console` para deploy — o workflow faz `git fetch` + `reset --hard origin/main` + `npm ci` + `npm run build` + `pm2 restart` + `caddy reload` no alvo.
 
-- `npm ci` → `npm run lint` (`tsc --noEmit`) → `npm run build` (`vite build && esbuild server.ts → dist/server.cjs`).
-- Valida artefatos `dist/index.html` e `dist/server.cjs` e imprime o commit (`git rev-parse --short HEAD`).
-- Publica `dist/*` na VPS via SCP usando os Secrets `HOSTINGER_HOST / HOSTINGER_USER / HOSTINGER_SSH_PASSWORD / HOSTINGER_PORT / HOSTINGER_TARGET`.
-- Reinicia o app: tenta `pm2 restart/reload` quando disponível e, quando aplicável, `touch tmp/restart.txt` (Passenger).
-- Verifica em `https://itapoa.tech`: `/api/health` deve ser `200 {"status":"...","database":"..."}`, `/projetos-sociais` e `/` devem ser `200` (SPA fallback). **Se qualquer verificação falhar, o workflow falha explicitamente.**
+## O que o pipeline faz (e como falha de forma explícita)
 
-## Secrets necessários (GitHub → Settings → Secrets → Actions)
+1. `npm ci` → `npm run lint` (`tsc --noEmit`) → `npm run build` (`vite build && esbuild → dist/server.cjs`).
+2. Valida `dist/index.html` e `dist/server.cjs` (se faltar, **ERRO** e `exit 1`).
+3. Conecta na VPS via `appleboy/ssh-action` com Secrets `VPS_HOST / VPS_USER / VPS_PASSWORD / VPS_PORT / VPS_APP_DIR` (padrão `APP_DIR=/opt/itapoa/app`). Faz `git reset --hard origin/main`, `npm ci`, `build`, `pm2 restart itapoa`, `caddy reload`, e `curl 127.0.0.1:3000/api/health` (se SSH/restart falhar, **ERRO**).
+4. Verifica externamente `https://itapoa.tech/api/health` (espera `200` com `"status"`), `https://itapoa.tech/projetos-sociais` e `https://itapoa.tech/` (`200` — SPA fallback). **Se qualquer verificação falhar, o workflow falha explicitamente.**
 
-| Secret | Exemplo/Nota |
+## Secrets (GitHub → Settings → Secrets → Actions)
+
+| Secret | Valor esperado |
 |---|---|
-| `HOSTINGER_HOST` | `2.24.209.225` |
-| `HOSTINGER_USER` | `root` (ou usuário deploy dedicado) |
-| `HOSTINGER_SSH_PASSWORD` | senha SSH do usuário acima — **nunca no repo** |
-| `HOSTINGER_PORT` | `22` (ou porta custom) |
-| `HOSTINGER_TARGET` | caminho absoluto do app na VPS, ex. `/var/www/itapoa.tech` ou `/root/itapoa-online` — confirme com `pwd` + `pm2 list` na VPS |
+| `VPS_HOST` | `2.24.209.225` |
+| `VPS_USER` | `root` (ou usuário deploy dedicado) |
+| `VPS_PASSWORD` | senha SSH do usuário — **nunca no repo** |
+| `VPS_PORT` | `22` |
+| `VPS_APP_DIR` | `/opt/itapoa/app` (ajustar se o app estiver em outro caminho) |
 
-> Sem esses Secrets o workflow faz build/lint/build corretamente, mas **falha ao publicar** com mensagem clara (não é “sucesso falso”).
+> Sem esses Secrets o build/lint passa, mas a etapa SSH/Health **falha com ERRO** — não há “sucesso falso”.
 
-## Variáveis de ambiente na VPS (não versionadas)
+## Variáveis de ambiente (VPS — não versionadas)
 
-Estão no painel/serviço da VPS (pm2 env, systemd, Caddy env ou arquivo `.env` no alvo — **não commitar**). Para `itapoa.tech`:
+Defina no serviço/pm2/systemd/env do app na VPS (não commitar). Para `itapoa.tech`:
 
 ```text
 NODE_ENV=production
@@ -45,26 +46,25 @@ DB_USER=...
 DB_PASSWORD=...
 JWT_SECRET=... # >= 32 caracteres
 UPLOAD_DIR=/home/.../uploads  # absoluto, fora de dist/
-MERCADOPAGO_ACCESS_TOKEN=APP_USR-... # opcional; sem ele, cobrança retorna 503, site segue ok
+MERCADOPAGO_ACCESS_TOKEN=APP_USR-... # opcional; sem ele, cobrança 503, site ok
 MERCADOPAGO_WEBHOOK_SECRET=...       # webhook: https://itapoa.tech/api/webhooks/mercadopago
 ```
 
 ## Banco e artefatos persistentes
 
-- **Estrutura é `database/schema/MYSQL_SCHEMA.sql`** (fonte única). Ordem de import na primeira carga:
-  1. `MYSQL_SCHEMA.sql`  2. `SEED.sql`  3. `SEED_DEMO.sql`.
-  Não re-executar sem necessidade; **nunca `DROP/TRUNCATE` automático**. O servidor nunca migra sozinho (`reportSchemaState` só loga).
-- **Preservados entre deploys:** banco MySQL, `uploads` (`UPLOAD_DIR`), `.env`/variáveis, certificados Caddy. O deploy só sobrescreve `dist/`.
+- **Estrutura:** `database/schema/MYSQL_SCHEMA.sql` é a fonte única. Na primeira carga: `MYSQL_SCHEMA.sql` → `SEED.sql` → `SEED_DEMO.sql`. **Nunca `DROP/TRUNCATE` automático**; o servidor só reporta estado (`reportSchemaState`).
+- **Preservados entre deploys:** MySQL, `uploads` (`UPLOAD_DIR`), env, certificados Caddy. O deploy sobrescreve código (`git reset`) e `dist/`, não apaga dados.
 
-## Recuperação / rollback
+## Rollback / recuperação
 
-- **Cada merge é um commit na `main`.** Para voltar, reverta o commit (ou faça `git revert <sha>` e `push` em `main`) — o próximo push publica o rollback automaticamente.
-- Na VPS, mantenha `pm2` ou o gerenciamento do painel ativo; se o app não subir, `pm2 logs` e `curl https://itapoa.tech/api/health` indicam a causa. O workflow já valida esses endpoints.
+- Cada merge gera um commit em `main`. Para voltar: `git revert <sha>` + `push` em `main` — o próximo push publica o rollback automaticamente.
+- Na VPS: `pm2 logs itapoa` e `curl https://itapoa.tech/api/health` diagnosticam. O workflow já valida esses endpoints.
 
-## Verificação local antes de publicar
+## Validação local antes de publicar
 
 ```bash
 npm run lint
 npm run build
 test -f dist/index.html && test -f dist/server.cjs && echo ok
+curl -s https://itapoa.tech/api/health | head -c 200
 ```

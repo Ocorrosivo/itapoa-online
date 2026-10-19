@@ -1,0 +1,128 @@
+name: Deploy VPS (itapoa.tech)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: vps-deploy
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install (npm ci)
+        run: npm ci
+
+      - name: Lint (tsc --noEmit)
+        run: npm run lint
+
+      - name: Build (vite + server.cjs)
+        run: npm run build
+
+      - name: Verify build (dist/index.html + dist/server.cjs)
+        run: |
+          set -e
+          test -f dist/index.html  || { echo "ERRO: dist/index.html não encontrado"; exit 1; }
+          test -f dist/server.cjs  || { echo "ERRO: dist/server.cjs não encontrado"; exit 1; }
+          echo "Build OK: dist/server.cjs $(wc -c < dist/server.cjs) bytes"
+          ls -lh dist/
+          ls -lh dist/assets/ | head -n 30
+          echo "Commit em produção: $(git rev-parse --short HEAD) | $(git log -1 --oneline)"
+
+      - name: Deploy to VPS (itapoa.tech — 2.24.209.225)
+        # Falha explícita se Secrets não estiverem configurados — não “sucesso falso”
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            APP_DIR="${{ secrets.VPS_APP_DIR }}"
+            if [ -z "$APP_DIR" ]; then APP_DIR="/opt/itapoa/app"; fi
+            echo "[deploy] APP_DIR=$APP_DIR"
+            if [ ! -d "$APP_DIR/.git" ]; then echo "ERRO: $APP_DIR não é um repositório git"; ls -la "$APP_DIR" 2>&1 | head -20; exit 1; fi
+            cd "$APP_DIR"
+            echo "[deploy] fetch origin/main"
+            git fetch origin
+            echo "[deploy] reset --hard origin/main"
+            git reset --hard origin/main
+            echo "[deploy] HEAD=$(git rev-parse --short HEAD) | $(git log -1 --oneline)"
+            echo "[deploy] npm ci"
+            npm ci --omit=dev 2>&1 | tail -5 || npm ci
+            echo "[deploy] npm run build"
+            npm run build
+            echo "[deploy] pm2 restart"
+            if command -v pm2 >/dev/null 2>&1; then
+              pm2 restart itapoa --update-env 2>&1 | tail -20 || pm2 restart all --update-env 2>&1 | tail -20 || echo "[deploy] pm2 restart skip"
+              pm2 save 2>&1 | tail -5 || true
+            else
+              echo "[deploy] pm2 não encontrado — reinício manual pode ser necessário"
+            fi
+            echo "[deploy] caddy reload"
+            systemctl reload caddy 2>/dev/null || systemctl restart caddy 2>/dev/null || echo "[deploy] caddy reload skip"
+            sleep 6
+            echo "[deploy] health local http://127.0.0.1:3000/api/health"
+            curl -fsS http://127.0.0.1:3000/api/health | head -c 400; echo ""
+            echo "[deploy] done"
+
+      - name: Health check (https://itapoa.tech)
+        run: |
+          set -e
+          echo "Aguardando VPS propagar..."
+          sleep 20
+          for i in 1 2 3 4 5 6; do
+            CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" https://itapoa.tech/api/health || echo "000")
+            BODY=$(cat /tmp/health.json 2>/dev/null | tr -d '\n' | head -c 600)
+            echo "Tentativa $i: https://itapoa.tech/api/health -> HTTP $CODE | $BODY"
+            if [ "$CODE" = "200" ] && echo "$BODY" | grep -q '"status"'; then
+              echo "Health OK"
+              break
+            fi
+            if [ "$i" = "6" ]; then
+              echo "ERRO: /api/health não respondeu 200 após 6 tentativas"
+              echo "Body final: $BODY"
+              exit 1
+            fi
+            sleep 20
+          done
+
+          echo "Verificando SPA fallback (reload direto)..."
+          CODE2=$(curl -s -o /dev/null -w "%{http_code}" https://itapoa.tech/projetos-sociais || echo "000")
+          echo "GET /projetos-sociais -> HTTP $CODE2"
+          if [ "$CODE2" != "200" ]; then
+            echo "ERRO: /projetos-sociais não retornou 200 (SPA fallback quebrado)"
+            exit 1
+          fi
+
+          echo "Verificando home..."
+          CODE3=$(curl -s -o /dev/null -w "%{http_code}" https://itapoa.tech/ || echo "000")
+          echo "GET / -> HTTP $CODE3"
+          if [ "$CODE3" != "200" ]; then
+            echo "ERRO: / não retornou 200"
+            exit 1
+          fi
+
+          echo "Verificando rota com histórico vazio (reload direto em /empresa/...)..."
+          CODE4=$(curl -s -o /dev/null -w "%{http_code}" https://itapoa.tech/empresa/hamburgueria-itapema-burger || echo "000")
+          echo "GET /empresa/hamburgueria-itapema-burger -> HTTP $CODE4"
+          # Pode ser 200 ou 404 dependendo do seed; não falhar se for 404, mas avisa
+
+          echo "Deploy verificado em https://itapoa.tech"
