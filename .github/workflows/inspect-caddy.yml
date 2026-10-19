@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  inspect-caddy:
+  deploy-fix:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect Caddy + env
+      - name: Fix Caddy + .env for itapoa.online
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -16,13 +16,51 @@ jobs:
           port: ${{ secrets.VPS_PORT }}
           script: |
             set -e
-            echo "=== Caddyfile ==="
-            cat /etc/caddy/Caddyfile 2>/dev/null || echo "no /etc/caddy/Caddyfile"
-            echo "=== .env in app ==="
-            ls -la /opt/itapoa/app/.env 2>/dev/null | head -5
-            grep -E "^(APP_URL|API_URL|MERCADOPAGO|NODE_ENV|PORT)=" /opt/itapoa/app/.env 2>/dev/null | sed 's/=.*/=***/' | head -20 || echo "no .env or no matching vars"
-            echo "=== pm2 env ==="
-            pm2 env 0 2>/dev/null | grep -E "APP_URL|MERCADOPAGO|NODE_ENV" | sed 's/=.*/=***/' | head -20 || echo "no pm2 env"
-            echo "=== ecosystem ==="
-            cat /opt/itapoa/app/ecosystem.config.js 2>/dev/null | head -40 || echo "no ecosystem file"
+            echo "=== Before Caddyfile ==="
+            cat /etc/caddy/Caddyfile
+
+            echo "=== Patching Caddyfile ==="
+            cat > /etc/caddy/Caddyfile <<'CADDY'
+            {
+              admin off
+            }
+            itapoa.tech, www.itapoa.tech, itapoa.online, www.itapoa.online {
+              encode zstd gzip
+              reverse_proxy 127.0.0.1:3000
+            }
+            :80 {
+              reverse_proxy 127.0.0.1:3000
+            }
+            CADDY
+            echo "=== After Caddyfile ==="
+            cat /etc/caddy/Caddyfile
+
+            echo "=== Patching .env APP_URL ==="
+            if grep -q '^APP_URL=' /opt/itapoa/app/.env 2>/dev/null; then
+              sed -i 's|^APP_URL=.*|APP_URL=https://itapoa.online|' /opt/itapoa/app/.env
+              sed -i 's|^API_URL=.*|API_URL=https://itapoa.online/api|' /opt/itapoa/app/.env
+            else
+              echo "APP_URL=https://itapoa.online" >> /opt/itapoa/app/.env
+              echo "API_URL=https://itapoa.online/api" >> /opt/itapoa/app/.env
+            fi
+            echo "APP_URL after: $(grep '^APP_URL=' /opt/itapoa/app/.env)"
+            echo "API_URL after: $(grep '^API_URL=' /opt/itapoa/app/.env)"
+
+            echo "=== Caddy reload ==="
+            caddy reload --config /etc/caddy/Caddyfile 2>&1 || systemctl reload caddy 2>&1 || systemctl restart caddy 2>&1 || echo "caddy reload skip"
+
+            echo "=== Rebuild + restart app ==="
+            cd /opt/itapoa/app
+            npm run build 2>&1 | tail -5
+            pm2 restart itapoa --update-env 2>&1 | tail -10
+            pm2 save 2>&1 | tail -2
+            sleep 3
+            curl -fsS http://127.0.0.1:3000/api/health 2>&1 | head -5
+            echo "=== Waiting for TLS ==="
+            sleep 15
+            echo "=== Check TLS ==="
+            curl -fsS https://itapoa.online/api/health 2>&1 | head -5 || echo "TLS check via localhost failed, will check externally"
+            curl -fsSk https://itapoa.online/api/health 2>&1 | head -5 || true
+            echo "=== Caddy certs ==="
+            ls /var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/ 2>&1 | head -15
             echo "=== done ==="
