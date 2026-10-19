@@ -20,7 +20,14 @@ export const PixPaymentModal: React.FC<PixPaymentModalProps> = ({
   onRegeneratePix
 }) => {
   const [copied, setCopied] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState(pixData.expiresInSeconds || 1800);
+  const [secondsLeft, setSecondsLeft] = useState(() =>
+    Math.max(0, pixData.expiresInSeconds || 1800)
+  );
+  const [checking, setChecking] = useState(false);
+
+  useEffect(() => {
+    setSecondsLeft(Math.max(0, pixData.expiresInSeconds || 1800));
+  }, [pixData.paymentId, pixData.expiresInSeconds]);
 
   useEffect(() => {
     if (secondsLeft <= 0) return;
@@ -38,10 +45,32 @@ export const PixPaymentModal: React.FC<PixPaymentModalProps> = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(pixData.qrCode);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(pixData.qrCode);
+    } catch {
+      const el = document.createElement('textarea');
+      el.value = pixData.qrCode;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 3000);
+  };
+
+  const handleVerify = async () => {
+    const sid = (pixData as any).subscriptionId;
+    if (!sid) return;
+    setChecking(true);
+    try {
+      const { BillingService } = await import('../../services/BillingService');
+      const status = await BillingService.getSubscriptionStatusById(sid);
+      if (status === 'active') onClose();
+    } finally {
+      setChecking(false);
+    }
   };
 
   return (
@@ -87,13 +116,19 @@ export const PixPaymentModal: React.FC<PixPaymentModalProps> = ({
 
         {/* QR Code Image / Expired Placeholder */}
         {secondsLeft > 0 ? (
-          <div className="bg-white p-4 rounded-2xl w-48 h-48 mx-auto flex items-center justify-center shadow-lg">
-            <img
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(pixData.qrCode)}`}
-              alt="PIX QR Code Mercado Pago"
-              className="w-full h-full object-contain"
-            />
-          </div>
+          pixData.qrCodeBase64 ? (
+            <div className="bg-white p-4 rounded-2xl w-48 h-48 mx-auto flex items-center justify-center shadow-lg">
+              <img
+                src={`data:image/png;base64,${pixData.qrCodeBase64}`}
+                alt="PIX QR Code Mercado Pago"
+                className="w-full h-full object-contain"
+              />
+            </div>
+          ) : (
+            <div className="bg-white p-4 rounded-2xl w-48 h-48 mx-auto flex items-center justify-center border-2 border-dashed border-slate-300">
+              <p className="text-[11px] text-slate-500 text-center px-4">QR indisponível — use o Copia e Cola abaixo.</p>
+            </div>
+          )
         ) : (
           <div className="bg-red-950/40 border border-red-900/60 p-6 rounded-2xl text-center space-y-3">
             <span className="text-xs font-bold text-red-400 block">O tempo deste PIX expirou</span>
@@ -126,6 +161,13 @@ export const PixPaymentModal: React.FC<PixPaymentModalProps> = ({
                 <span>{copied ? 'Copiado!' : 'Copiar'}</span>
               </button>
             </div>
+            <button
+              onClick={handleVerify}
+              disabled={checking}
+              className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-60 text-white font-bold text-xs rounded-xl transition"
+            >
+              {checking ? 'Verificando...' : 'Já paguei — Verificar status'}
+            </button>
           </div>
         )}
 
