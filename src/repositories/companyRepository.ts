@@ -5,7 +5,8 @@
  */
 
 import { Company } from '../types';
-import { apiFetch } from '../lib/apiClient';
+import { apiFetch, ApiError } from '../lib/apiClient';
+import { arrayFromPayload, featureArray } from '../utils/catalogSearch';
 
 export class CompanyRepository {
   /**
@@ -13,22 +14,22 @@ export class CompanyRepository {
    * Query params are forwarded to GET /api/companies so the server
    * can filter before returning.
    */
-  static async getAll(params?: { categoryId?: string; cityId?: string; search?: string }): Promise<Company[]> {
-    try {
+  static async getAll(params?: { categoryId?: string; cityId?: string; search?: string; q?: string }): Promise<Company[]> {
       const qs = new URLSearchParams();
+      qs.set('limit', '200');
       if (params?.categoryId) qs.set('categoryId', params.categoryId);
       if (params?.cityId) qs.set('cityId', params.cityId);
       if (params?.search) qs.set('search', params.search);
+      if (params?.q) qs.set('q', params.q);
       const url = qs.toString() ? `/api/companies?${qs.toString()}` : '/api/companies';
       const res = await apiFetch(url);
       if (res.ok) {
         const data = await res.json();
-        return Array.isArray(data) ? data : (Array.isArray((data as any)?.data) ? (data as any).data : []);
+        return arrayFromPayload<Company>(data).map(company => ({
+          ...company, features: featureArray(company.features)
+        }));
       }
-    } catch (err) {
-      console.warn('API fallback error for companies');
-    }
-    return [];
+      throw new ApiError(res.status, 'Não foi possível carregar o catálogo.');
   }
 
   /**
@@ -54,7 +55,7 @@ export class CompanyRepository {
     try {
       const isUpdate = Boolean(company.id);
       const method = isUpdate ? 'PUT' : 'POST';
-      const url = isUpdate ? `/api/companies/${company.id}` : '/api/companies/create';
+      const url = isUpdate ? `/api/companies/${encodeURIComponent(company.id!)}` : '/api/companies/create';
       const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -62,7 +63,7 @@ export class CompanyRepository {
       });
       if (res.ok) {
         const payload = await res.json();
-        return (payload as any)?.company ?? payload;
+        return payload?.company ?? payload?.data?.company ?? payload?.data ?? payload;
       }
       const err = await res.json().catch(() => ({}));
       console.error('API error saving company:', err);

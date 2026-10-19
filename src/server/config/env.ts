@@ -37,9 +37,11 @@ const collectMissing = (): string[] => {
     problems.push(`JWT_SECRET curta demais (mínimo ${MIN_JWT_SECRET_LENGTH} caracteres)`);
   }
 
-  const port = process.env.DB_PORT;
-  if (port && Number.isNaN(Number(port))) {
-    problems.push('DB_PORT não é numérica');
+  for (const name of ['PORT', 'DB_PORT']) {
+    const port = Number(process.env[name]);
+    if (process.env[name] && (!Number.isInteger(port) || port < 1 || port > 65535)) {
+      problems.push(`${name} deve ser uma porta válida`);
+    }
   }
 
   return problems;
@@ -64,7 +66,8 @@ export const env = {
   isProduction: process.env.NODE_ENV === 'production',
   port: Number(process.env.PORT || 3000),
   uploadDir: process.env.UPLOAD_DIR || 'uploads',
-  appUrl: process.env.APP_URL || 'https://itapoa.online',
+  appUrl: process.env.APP_URL || 'https://ajborrachariamovel.com.br',
+  apiUrl: process.env.API_URL || `${process.env.APP_URL || 'https://ajborrachariamovel.com.br'}/api`,
 
   db: {
     host: required('DB_HOST'),

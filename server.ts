@@ -177,6 +177,7 @@ app.get('/sitemap.xml', async (_req, res) => {
 });
 
 app.use('/api', apiRouter);
+app.use('/api', (_req, res) => res.status(404).json({ error: 'Endpoint não encontrado.' }));
 
 async function startServer() {
   if (!env.isProduction) {

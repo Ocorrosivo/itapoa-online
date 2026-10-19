@@ -5,20 +5,16 @@
  */
 
 import { Category } from '../types';
-import { apiFetch } from '../lib/apiClient';
+import { apiFetch, ApiError } from '../lib/apiClient';
+import { arrayFromPayload } from '../utils/catalogSearch';
 
 export class CategoryRepository {
   static async getAll(): Promise<Category[]> {
-    try {
       const res = await apiFetch('/api/categories');
       if (res.ok) {
         const data = await res.json();
-        return Array.isArray(data) ? data : (Array.isArray((data as any)?.data) ? (data as any).data : []);
+        return arrayFromPayload<Category>(data);
       }
-    } catch (err) {
-      console.warn('API fallback error for categories');
-    }
-
-    return [];
+      throw new ApiError(res.status, 'Não foi possível carregar as categorias.');
   }
 }

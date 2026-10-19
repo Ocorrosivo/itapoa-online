@@ -34,7 +34,7 @@ import {
   requireAuth, requireRole, optionalAuth, attachCompanyScope,
   requireCompanyAccess, requireCompanyParam, requireRecordOwnership
 } from '../middleware/auth.js';
-import { checkConnection } from '../mysql.js';
+import { checkConnection, isDatabaseUnavailable } from '../mysql.js';
 import { env } from '../config/env.js';
 
 export const apiRouter = Router();
@@ -46,6 +46,9 @@ const ADMIN_ONLY = ['admin_master'];
  * becomes a 500 with a generic body so internals never reach the client.
  */
 const fail = (res: Response, error: unknown) => {
+  if (isDatabaseUnavailable(error)) {
+    return res.status(503).json({ error: 'Banco de dados temporariamente indisponível.' });
+  }
   if (error instanceof AuthError || error instanceof ServiceError || error instanceof EngagementError || error instanceof PaymentError) {
     return res.status(error.status).json({ error: error.message });
   }
@@ -76,7 +79,6 @@ apiRouter.get('/health', async (_req, res) => {
   const connected = await checkConnection();
   res.status(connected ? 200 : 503).json({
     status: connected ? 'ok' : 'degraded',
-    service: 'itapoa-api',
     database: connected ? 'connected' : 'disconnected'
   });
 });

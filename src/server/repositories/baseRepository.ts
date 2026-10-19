@@ -103,6 +103,7 @@ const DEFAULT_LIMIT = 100;
 export interface ListOptions {
   /** Filters forced by the service layer. Never client-controlled. */
   scope?: Record<string, any>;
+  textSearch?: { columns: string[]; term: string };
 }
 
 export class BaseRepository {
@@ -183,6 +184,19 @@ export class BaseRepository {
 
       sql += ` AND \`${key}\` = ?`;
       params.push(value);
+    }
+
+    if (options.textSearch?.term) {
+      const columns = options.textSearch.columns.filter(column => this.isAllowedColumn(column));
+      if (columns.length > 0) {
+        // Accent-insensitive matching happens before LIMIT/OFFSET. Escape user
+        // wildcards explicitly; MariaDB LOCATE does not honor accent folding.
+        sql += ` AND (${columns.map(column =>
+          `CONVERT(\`${column}\` USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE ? ESCAPE '='`
+        ).join(' OR ')})`;
+        const pattern = `%${options.textSearch.term.replace(/[=%_]/g, '=$&')}%`;
+        params.push(...columns.map(() => pattern));
+      }
     }
 
     sql += this.buildOrderBy(filters);

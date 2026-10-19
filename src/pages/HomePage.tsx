@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useCompany } from '../context/CompanyContext';
 import { PremiumCompaniesCarousel } from '../components/PremiumCompaniesCarousel';
+import { matchesCompanySearch, normalizeSearch } from '../utils/catalogSearch';
 
 interface HomePageProps {
   onNavigateCompany: (slug: string) => void;
@@ -26,7 +27,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   onSelectBairro,
   onSelectPraia
 }) => {
-  const { companies, categories, searchCatId, setSearchCatId, loading } = useCompany();
+  const { companies, categories, searchCatId, setSearchCatId, loading, catalogError, refreshData } = useCompany();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBairroFilter, setSelectedBairroFilter] = useState<string | null>(null);
 
@@ -38,8 +39,7 @@ export const HomePage: React.FC<HomePageProps> = ({
     { title: 'Farol de Itapoá', slug: 'praia-itapema-do-norte', img: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=600&q=80', badge: '● Farol de Itapoá' }
   ];
 
-  const normalizeStr = (str: string) => 
-    str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const normalizeStr = normalizeSearch;
 
   const handleExecuteSearch = () => {
     const el = document.getElementById('parceiros_section');
@@ -52,14 +52,12 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [shuffledCompanies, setShuffledCompanies] = useState<any[]>([]);
 
   React.useEffect(() => {
-    if (companies.length > 0) {
       const arr = [...companies];
       for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [arr[i], arr[j]] = [arr[j], arr[i]];
       }
       setShuffledCompanies(arr);
-    }
   }, [companies]);
 
   const companyListToFilter = shuffledCompanies.length > 0 ? shuffledCompanies : companies;
@@ -67,16 +65,12 @@ export const HomePage: React.FC<HomePageProps> = ({
   const filteredCompanies = companyListToFilter.filter((c: any) => {
     const term = normalizeStr(searchTerm.trim());
     const matchesSearch = !term || (() => {
-      const nameMatch = normalizeStr(c.name || '').includes(term);
-      const descMatch = normalizeStr(c.description || '').includes(term) || normalizeStr(c.detailedDescription || '').includes(term);
-      const addrMatch = normalizeStr(c.address || '').includes(term);
       const catObj = categories.find(cat => cat.id === c.categoryId);
       const catMatch = catObj ? normalizeStr(catObj.name || '').includes(term) : false;
       const prodMatch = (c.products || []).some((p: any) => 
         normalizeStr(p.name || '').includes(term) || normalizeStr(p.description || '').includes(term)
       );
-      const featureMatch = (c.features || []).some((f: string) => normalizeStr(f).includes(term));
-      return nameMatch || descMatch || addrMatch || catMatch || prodMatch || featureMatch;
+      return matchesCompanySearch(c, term) || catMatch || prodMatch;
     })();
 
     const matchesCat = !searchCatId || c.categoryId === searchCatId;
@@ -204,19 +198,19 @@ export const HomePage: React.FC<HomePageProps> = ({
               {searchTerm && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-red-100 text-[#C8102E] font-medium">
                   "{searchTerm}"
-                  <button onClick={() => setSearchTerm('')} className="hover:text-red-900 cursor-pointer ml-1 font-bold">×</button>
+                  <button aria-label="Remover termo de busca" onClick={() => setSearchTerm('')} className="hover:text-red-900 cursor-pointer ml-1 font-bold">×</button>
                 </span>
               )}
               {searchCatId && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
                   {categories.find(c => c.id === searchCatId)?.name || 'Categoria'}
-                  <button onClick={() => setSearchCatId('')} className="hover:text-blue-900 cursor-pointer ml-1 font-bold">×</button>
+                  <button aria-label="Remover categoria" onClick={() => setSearchCatId('')} className="hover:text-blue-900 cursor-pointer ml-1 font-bold">×</button>
                 </span>
               )}
               {selectedBairroFilter && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium">
                   {selectedBairroFilter}
-                  <button onClick={() => setSelectedBairroFilter(null)} className="hover:text-amber-950 cursor-pointer ml-1 font-bold">×</button>
+                  <button aria-label="Remover bairro" onClick={() => setSelectedBairroFilter(null)} className="hover:text-amber-950 cursor-pointer ml-1 font-bold">×</button>
                 </span>
               )}
               <button
@@ -255,14 +249,20 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </div>
               ))}
             </div>
+          ) : catalogError ? (
+            <div role="alert" className="bg-white border border-red-200 rounded-3xl p-12 text-center space-y-4 shadow-sm max-w-lg mx-auto">
+              <h3 className="text-lg font-bold text-slate-800">Catálogo indisponível</h3>
+              <p className="text-xs text-slate-500">{catalogError}</p>
+              <button onClick={() => refreshData()} className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold">Tentar novamente</button>
+            </div>
           ) : companies.length === 0 ? (
             <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center space-y-4 shadow-sm max-w-lg mx-auto">
               <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto text-xl font-bold">
                 ℹ️
               </div>
-              <h3 className="text-lg font-bold text-slate-800">Catálogo em Inicialização</h3>
+              <h3 className="text-lg font-bold text-slate-800">Catálogo vazio</h3>
               <p className="text-xs text-slate-500 leading-relaxed">
-                Nenhuma empresa encontrada no banco de dados. Importe o script <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-mono text-[11px]">database/schema/SEED_DEMO.sql</code> para carregar o catálogo de 16 empresas e bairros de Itapoá.
+                Ainda não há empresas cadastradas. Volte em breve para conhecer os parceiros de Itapoá.
               </p>
             </div>
           ) : filteredCompanies.length === 0 ? (

@@ -4,11 +4,12 @@
  * Company Context - Directory Data Management Engine
  */
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Company, Category, City, SolidarityCampaign, Professional, Job, BlogPost, Coupon } from '../types';
 import { CompanyRepository } from '../repositories/companyRepository';
 import { CategoryRepository } from '../repositories/categoryRepository';
 import { apiFetch } from '../lib/apiClient';
+import { arrayFromPayload } from '../utils/catalogSearch';
 
 interface CompanyContextType {
   companies: Company[];
@@ -29,6 +30,7 @@ interface CompanyContextType {
   toggleFavorite: (companyId: string) => void;
   refreshData: () => Promise<void>;
   loading: boolean;
+  catalogError: string | null;
 }
 
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
@@ -47,26 +49,20 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [searchCatId, setSearchCatId] = useState('');
   const [favorites, setFavorites] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const refreshVersion = useRef(0);
 
   const refreshData = async () => {
+    const version = ++refreshVersion.current;
     setLoading(true);
+    setCatalogError(null);
     try {
-      const toArray = (v: unknown): any[] =>
-        Array.isArray(v) ? v : Array.isArray((v as any)?.data) ? (v as any).data : [];
-
-      const [fetchedCompanies, fetchedCategories] = await Promise.all([
-        CompanyRepository.getAll(),
-        CategoryRepository.getAll()
-      ]);
-      setCompanies(toArray(fetchedCompanies));
-      setCategories(toArray(fetchedCategories));
-
       const fetchEndpoint = async (url: string) => {
         try {
           const res = await apiFetch(url);
           if (res.ok) {
             const raw = await res.json();
-            return toArray(raw);
+            return arrayFromPayload<any>(raw);
           }
         } catch {
           // ignore
@@ -74,25 +70,36 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return [];
       };
 
-      fetchEndpoint('/api/cities').then(data => {
-        setCities(data);
-        if (data.length > 0 && !selectedCityId) setSelectedCityId(data[0].id);
-      });
-      fetchEndpoint('/api/campaigns').then(setCampaigns);
-      fetchEndpoint('/api/professionals').then(setProfessionals);
-      fetchEndpoint('/api/jobs').then(setJobs);
-      fetchEndpoint('/api/blog').then(setPosts);
-      fetchEndpoint('/api/coupons').then(setCoupons);
+      const [fetchedCompanies, fetchedCategories, cityData, campaignData,
+        professionalData, jobData, postData, couponData] = await Promise.all([
+        CompanyRepository.getAll(), CategoryRepository.getAll(),
+        fetchEndpoint('/api/cities'), fetchEndpoint('/api/campaigns'),
+        fetchEndpoint('/api/professionals'), fetchEndpoint('/api/jobs'),
+        fetchEndpoint('/api/blog'), fetchEndpoint('/api/coupons')
+      ]);
+      if (version !== refreshVersion.current) return;
+      setCompanies(fetchedCompanies);
+      setCategories(fetchedCategories);
+      setCities(cityData);
+      setSelectedCityId(current => current || cityData[0]?.id || '');
+      setCampaigns(campaignData);
+      setProfessionals(professionalData);
+      setJobs(jobData);
+      setPosts(postData);
+      setCoupons(couponData);
     } catch (err) {
-      console.error('Error refreshing directory data:', err);
+      if (version === refreshVersion.current) {
+        setCatalogError('O catálogo está temporariamente indisponível. Tente novamente.');
+      }
     } finally {
-      setLoading(false);
+      if (version === refreshVersion.current) setLoading(false);
     }
   };
 
   useEffect(() => {
     refreshData();
-    const savedFavs = localStorage.getItem('user_favorites');
+    let savedFavs: string | null = null;
+    try { savedFavs = localStorage.getItem('user_favorites'); } catch { /* private mode */ }
     if (savedFavs) {
       try {
         setFavorites(JSON.parse(savedFavs));
@@ -132,7 +139,8 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
         favorites,
         toggleFavorite,
         refreshData,
-        loading
+        loading,
+        catalogError
       }}
     >
       {children}

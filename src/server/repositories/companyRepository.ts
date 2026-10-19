@@ -7,6 +7,7 @@
 
 import { pool } from '../mysql.js';
 import { BaseRepository, ListOptions } from './baseRepository.js';
+import { normalizeSearch } from '../../utils/catalogSearch.js';
 
 export class CompanyRepositoryClass extends BaseRepository {
   constructor() {
@@ -18,34 +19,13 @@ export class CompanyRepositoryClass extends BaseRepository {
    * Accepts both `search` and `q` and normalizes diacritics.
    */
   async search(filters: Record<string, any> = {}, options: ListOptions = {}) {
-    const rows = await this.findAll(filters, options);
-
-    const rawTerm = (filters.search ?? filters.q);
-    const norm = (s: unknown): string =>
-      typeof s === 'string'
-        ? s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
-        : '';
-
-    const termNorm = norm(rawTerm);
-    if (!termNorm) return rows;
-
-    return rows.filter(row => {
-      const candidates = [row.name, row.description, row.detailedDescription, row.address];
-      if (candidates.some(c => norm(c).includes(termNorm))) return true;
-
-      let featuresArr: unknown[] = [];
-      if (Array.isArray(row.features)) {
-        featuresArr = row.features;
-      } else if (typeof row.features === 'string') {
-        try {
-          const parsed = JSON.parse(row.features);
-          if (Array.isArray(parsed)) featuresArr = parsed;
-        } catch {
-          // ignore parsing error
-        }
+    const term = normalizeSearch(filters.search) || normalizeSearch(filters.q);
+    return this.findAll(filters, {
+      ...options,
+      textSearch: {
+        columns: ['name', 'description', 'detailedDescription', 'address', 'features'],
+        term
       }
-      if (featuresArr.some((f: unknown) => norm(f).includes(termNorm))) return true;
-      return false;
     });
   }
 

@@ -11,8 +11,8 @@
 -- Hambúrguer, Itapema, Lava Rápido" + bairros reais.
 -- ============================================================
 
-SET FOREIGN_KEY_CHECKS = 0;
 SET NAMES utf8mb4;
+START TRANSACTION;
 
 -- ------------------------------------------------------------
 -- CITIES
@@ -244,23 +244,17 @@ ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), 
 -- ------------------------------------------------------------
 -- Vínculo de posse: vincula as empresas demo ao admin master
 -- ------------------------------------------------------------
-INSERT INTO companies_users (user_id, company_id, access_level) VALUES
-  ('user_admin_master', 'comp_love_babys', 'owner'),
-  ('user_admin_master', 'comp_caminho_luz', 'owner'),
-  ('user_admin_master', 'comp_valore', 'owner'),
-  ('user_admin_master', 'comp_cdh', 'owner'),
-  ('user_admin_master', 'comp_agrotudo', 'owner'),
-  ('user_admin_master', 'comp_casa_temp', 'owner'),
-  ('user_admin_master', 'comp_viva_cap', 'owner'),
-  ('user_admin_master', 'comp_ama', 'owner'),
-  ('user_admin_master', 'comp_mercado_central', 'owner'),
-  ('user_admin_master', 'comp_pousada_itapema', 'owner'),
-  ('user_admin_master', 'comp_burger_itapema', 'owner'),
-  ('user_admin_master', 'comp_lava_itapema', 'owner'),
-  ('user_admin_master', 'comp_clinica', 'owner'),
-  ('user_admin_master', 'comp_sabor_mar', 'owner'),
-  ('user_admin_master', 'comp_salao', 'owner'),
-  ('user_admin_master', 'comp_construcao', 'owner')
+INSERT INTO companies_users (user_id, company_id, access_level)
+SELECT u.id, c.id, 'owner'
+FROM users u
+CROSS JOIN companies c
+WHERE u.email = 'admin@itapoa.online'
+  AND c.id IN (
+    'comp_love_babys', 'comp_caminho_luz', 'comp_valore', 'comp_cdh',
+    'comp_agrotudo', 'comp_casa_temp', 'comp_viva_cap', 'comp_ama',
+    'comp_mercado_central', 'comp_pousada_itapema', 'comp_burger_itapema',
+    'comp_lava_itapema', 'comp_clinica', 'comp_sabor_mar', 'comp_salao', 'comp_construcao'
+  )
 ON DUPLICATE KEY UPDATE access_level = VALUES(access_level);
 
-SET FOREIGN_KEY_CHECKS = 1;
+COMMIT;

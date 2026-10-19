@@ -1,6 +1,7 @@
 # 🚀 Guia de Implantação Validado (Hostinger)
 
-Este documento foi revisado estruturalmente para garantir a execução 100% livre de conflitos na Hostinger.
+Produção: `https://ajborrachariamovel.com.br`. O domínio antigo `itapoa.online`
+permanece separado, com seu WordPress.
 
 ## REQUISITOS DO PROJETO
 - **Node.js:** `>= 20.0.0` (Devido à compilação e CommonJS compatibilities).
@@ -27,8 +28,9 @@ Este documento foi revisado estruturalmente para garantir a execução 100% livr
 ### 2. Configurar a Aplicação Node.js
 *No hPanel > Avançado > Node.js:*
 1. **Nova Aplicação**: Configure apontando para a raiz dos arquivos subidos.
-2. **Modo:** Production.
+2. **Tipo:** Express, Node 20+, modo Production.
 3. **Startup File:** `dist/server.cjs`
+   **Output directory:** vazio (`null` na API). Express publica a raiz inteira.
 4. **Porta:** Confirme se a Hostinger irá gerenciar a porta através de `process.env.PORT`. (O app está programado para escutar nela de forma invisível).
 
 ### 3. Inserir Variáveis de Ambiente
@@ -36,8 +38,9 @@ Este documento foi revisado estruturalmente para garantir a execução 100% livr
 ```text
 NODE_ENV=production
 PORT=3000
-APP_URL=https://itapoa.online
-DB_HOST=127.0.0.1 (Confirme no painel)
+APP_URL=https://ajborrachariamovel.com.br
+API_URL=https://ajborrachariamovel.com.br/api
+DB_HOST=srv887.hstgr.io
 DB_PORT=3306
 DB_NAME=<seu-banco>
 DB_USER=<seu-user>
@@ -55,14 +58,15 @@ MERCADOPAGO_WEBHOOK_SECRET=<segredo-do-webhook-do-painel-mp>
 
 > 💳 **Pagamentos:** sem `MERCADOPAGO_ACCESS_TOKEN`, os endpoints de cobrança
 > retornam 503 (o resto do site funciona). Configure a URL de webhook
-> `https://itapoa.online/api/webhooks/mercadopago` no painel do Mercado Pago e
+> `https://ajborrachariamovel.com.br/api/webhooks/mercadopago` no painel do Mercado Pago e
 > copie o *webhook secret* para `MERCADOPAGO_WEBHOOK_SECRET`. A ativação da
 > assinatura acontece **apenas** via webhook verificado — nunca pelo frontend.
 
 ### 4. Upload dos Arquivos
 1. Acesse o Gerenciador de Arquivos.
 2. Envie o conteúdo do projeto **EXCETO** `.env` e `node_modules`.
-3. Verifique se o pacote subiu com a pasta `dist/` gerada pelo `npm run build`.
+3. Inclua o código-fonte e os manifestos. A Hostinger gera `dist/` no build.
+4. Não inclua `public/.htaccess`: ele substitui o roteamento Node.js gerado pela hospedagem e pode causar 403/404.
 
 ### 5. Start
 1. No painel do app, clique em **Executar npm install**.
@@ -70,4 +74,9 @@ MERCADOPAGO_WEBHOOK_SECRET=<segredo-do-webhook-do-painel-mp>
 3. O servidor estará rodando.
 
 ### 6. SSL e Domínio
-Configure o Let's Encrypt padrão da Hostinger para `itapoa.online` e deixe-o fazer proxy para a aplicação Node.js transparente.
+Configure SSL para `ajborrachariamovel.com.br` e mantenha o proxy gerenciado pela aplicação Node.js.
+
+### 7. Verificação
+`GET /api/health` deve responder HTTP 200 com `{"status":"ok","database":"connected"}`.
+`node scripts/smoke-catalog.mjs` valida as buscas no banco configurado.
+`node scripts/smoke-catalog.mjs --offline` verifica o retorno 503 sem queda do processo.
