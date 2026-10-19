@@ -1,16 +1,18 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ * CompanyDetailSection — defensive rendering for companies returned without
+ * products/faqs arrays and with rating/features as strings.
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
+import {
   Phone, Share2, Star, Clock, MapPin, Globe, Sparkles,
-  Send, Bot, CornerDownRight, ShieldCheck, Heart, User, CheckCircle,
-  Filter, ArrowUpDown, Search
+  Send, Bot, Heart, User, Filter, ArrowUpDown, Search
 } from 'lucide-react';
-import { Company, Review, City, Category } from '../types';
+import { Company, Review, City, Category, ProductOrService, FAQItem } from '../types';
+import { featureArray, toNumber, arrayFromPayload } from '../utils/catalogSearch';
 
 interface CompanyDetailSectionProps {
   company: Company;
@@ -37,6 +39,11 @@ export default function CompanyDetailSection({
   onToggleFavorite,
   onBack
 }: CompanyDetailSectionProps) {
+  const safeRating = toNumber((company as any).rating, 0);
+  const safeFeatures = featureArray((company as any).features);
+  const safeProducts: ProductOrService[] = Array.isArray((company as any).products) ? (company as any).products : [];
+  const safeFaqs: FAQItem[] = Array.isArray((company as any).faqs) ? (company as any).faqs : [];
+
   const [activeTab, setActiveTab] = useState<'info' | 'products' | 'reviews'>('info');
   const [reviews, setReviews] = useState<Review[]>([]);
   const [newReviewComment, setNewReviewComment] = useState('');
@@ -44,56 +51,38 @@ export default function CompanyDetailSection({
   const [newReviewAuthor, setNewReviewAuthor] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
 
-  // Reviews filtering and sorting states
   const [ratingFilter, setRatingFilter] = useState<string>('all');
   const [sortOption, setSortOption] = useState<'recent' | 'oldest' | 'highest' | 'lowest'>('recent');
   const [reviewsSearch, setReviewsSearch] = useState<string>('');
 
   const filteredAndSortedReviews = useMemo(() => {
     let result = [...reviews];
-
-    // 1. Text Search Filter
     if (reviewsSearch.trim()) {
       const q = reviewsSearch.toLowerCase();
-      result = result.filter(rev => 
-        rev.userName.toLowerCase().includes(q) || 
+      result = result.filter(rev =>
+        rev.userName.toLowerCase().includes(q) ||
         rev.comment.toLowerCase().includes(q)
       );
     }
-
-    // 2. Rating Filter
     if (ratingFilter !== 'all') {
       const targetRating = parseInt(ratingFilter, 10);
       result = result.filter(rev => rev.rating === targetRating);
     }
-
-    // 3. Sorting
     result.sort((a, b) => {
-      if (sortOption === 'recent') {
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      }
-      if (sortOption === 'oldest') {
-        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      }
-      if (sortOption === 'highest') {
-        return b.rating - a.rating;
-      }
-      if (sortOption === 'lowest') {
-        return a.rating - b.rating;
-      }
+      if (sortOption === 'recent') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      if (sortOption === 'oldest') return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      if (sortOption === 'highest') return b.rating - a.rating;
+      if (sortOption === 'lowest') return a.rating - b.rating;
       return 0;
     });
-
     return result;
   }, [reviews, ratingFilter, sortOption, reviewsSearch]);
 
-  // AI Chat interface states
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [userInputMessage, setUserInputMessage] = useState('');
   const [isAiTyping, setIsAiTyping] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
 
-  // Gallery slider logic
   const [activeGalleryIdx, setActiveGalleryIdx] = useState(0);
 
   const CATEGORY_GALLERY_IMAGES: Record<string, string[]> = useMemo(() => ({
@@ -133,18 +122,15 @@ export default function CompanyDetailSection({
     const images: string[] = [];
     if (company.coverImage) images.push(company.coverImage);
     if (company.logo) images.push(company.logo);
-    
-    if (company.products && company.products.length > 0) {
-      company.products.forEach(p => {
+    if (safeProducts.length > 0) {
+      safeProducts.forEach(p => {
         if (p.imageUrl) images.push(p.imageUrl);
       });
     }
-
     const catImgs = CATEGORY_GALLERY_IMAGES[company.categoryId] || [];
     images.push(...catImgs);
-
     return Array.from(new Set(images.filter(Boolean)));
-  }, [company, CATEGORY_GALLERY_IMAGES]);
+  }, [company.coverImage, company.logo, company.categoryId, safeProducts, CATEGORY_GALLERY_IMAGES]);
 
   const handleNextGallery = () => {
     setActiveGalleryIdx(prev => (prev + 1) % galleryImages.length);
@@ -154,7 +140,6 @@ export default function CompanyDetailSection({
     setActiveGalleryIdx(prev => (prev - 1 + galleryImages.length) % galleryImages.length);
   };
 
-  // Dynamic SEO Metas, Friendly URL Titles, Open Graph & Schema.org LocalBusiness JSON-LD
   useEffect(() => {
     const originalTitle = document.title;
     document.title = `${company.name} | Guia Local Premium de Itapoá`;
@@ -169,17 +154,13 @@ export default function CompanyDetailSection({
       el.setAttribute('content', content);
     };
 
-    // Description Metas
     setMetaTag('name', 'description', company.description || `${company.name} - Encontre serviços, contatos e localização em Itapoá.`);
-
-    // Open Graph Elements
     setMetaTag('property', 'og:title', `${company.name} | Guia Local Itapoá`);
     setMetaTag('property', 'og:description', company.description || '');
     setMetaTag('property', 'og:image', company.coverImage || company.logo || '');
     setMetaTag('property', 'og:url', window.location.href);
     setMetaTag('property', 'og:type', 'business.business');
 
-    // Schema.org Structured Data
     let schemaScript = document.getElementById('company-jsonld') as HTMLScriptElement;
     if (!schemaScript) {
       schemaScript = document.createElement('script');
@@ -187,7 +168,7 @@ export default function CompanyDetailSection({
       schemaScript.type = 'application/ld+json';
       document.head.appendChild(schemaScript);
     }
-    
+
     const schemaData = {
       "@context": "https://schema.org",
       "@type": "LocalBusiness",
@@ -210,9 +191,7 @@ export default function CompanyDetailSection({
       "url": window.location.href,
       "openingHoursSpecification": {
         "@type": "OpeningHoursSpecification",
-        "dayOfWeek": [
-          "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
-        ],
+        "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
         "opens": "08:00",
         "closes": "18:00"
       }
@@ -222,40 +201,42 @@ export default function CompanyDetailSection({
     return () => {
       document.title = originalTitle;
       const scriptToRemove = document.getElementById('company-jsonld');
-      if (scriptToRemove) {
-        scriptToRemove.remove();
-      }
+      if (scriptToRemove) scriptToRemove.remove();
     };
   }, [company]);
 
-  // Load reviews from backend API on mount
   useEffect(() => {
+    let cancelled = false;
     fetch(`/api/reviews?entityId=${company.id}&entityType=company`)
-      .then(res => res.json())
-      .then(data => setReviews(data))
-      .catch(err => console.error('Error fetching reviews:', err));
+      .then(res => res.ok ? res.json() : [])
+      .then(data => {
+        if (cancelled) return;
+        const list = Array.isArray(data) ? data : arrayFromPayload(data);
+        setReviews(list);
+      })
+      .catch(() => {
+        if (!cancelled) setReviews([]);
+      });
 
-    // Register analytical view trigger on server
-    fetch(`/api/companies/${company.slug}`)
-      .catch(err => console.error('Error in analytic view tracking', err));
-      
-    // Welcoming AI message setup:
     setChatMessages([
-      { 
-        id: 'start', 
-        role: 'model', 
-        text: `Olá! Sou o assistente virtual inteligente do **${company.name}**. Posso tirar dúvidas sobre nosso horário de funcionamento (${company.hours}), localização, cardápio/serviços e muito mais! Como posso ajudar você hoje?` 
+      {
+        id: 'start',
+        role: 'model',
+        text: `Olá! Sou o assistente virtual inteligente do **${company.name}**. Posso tirar dúvidas sobre nosso horário de funcionamento (${company.hours}), localização, cardápio/serviços e muito mais! Como posso ajudar você hoje?`
       }
     ]);
-  }, [company]);
+    return () => { cancelled = true; };
+  }, [company.id, company.name, company.hours]);
 
-  // Handle click analytics increment
   const handleLeadWhatsAppClick = () => {
     fetch(`/api/companies/${company.id}/click`, { method: 'POST' })
-      .then(() => {
-        window.open(`https://wa.me/${company.whatsapp}?text=Olá! Encontrei você no Guia Local Premium de Itapoá e gostaria de saber mais informações.`, '_blank');
+      .then(res => {
+        if (!res.ok) throw new Error(String(res.status));
       })
-      .catch(err => console.error('Lead counting crash', err));
+      .catch(() => {})
+      .finally(() => {
+        window.open(`https://wa.me/${company.whatsapp}?text=Olá! Encontrei você no Guia Local Premium de Itapoá e gostaria de saber mais informações.`, '_blank');
+      });
   };
 
   const handleCopyLink = () => {
@@ -264,7 +245,6 @@ export default function CompanyDetailSection({
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  // Submit dynamic review to server
   const handleReviewSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newReviewComment.trim() || !newReviewAuthor.trim()) return;
@@ -280,18 +260,19 @@ export default function CompanyDetailSection({
         comment: newReviewComment
       })
     })
-      .then(res => res.json())
-      .then(() => {
-        // Refetch newest list to reflect live rating changes
+      .then(res => res.ok ? res.json() : Promise.reject(res.status))
+      .then(() =>
         fetch(`/api/reviews?entityId=${company.id}&entityType=company`)
-          .then(res => res.json())
-          .then(data => setReviews(data));
+          .then(res => res.ok ? res.json() : [])
+          .then(data => setReviews(Array.isArray(data) ? data : arrayFromPayload(data)))
+      )
+      .then(() => {
         setNewReviewComment('');
         setNewReviewAuthor('');
-      });
+      })
+      .catch(() => {});
   };
 
-  // Chat with AI assistant
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userInputMessage.trim()) return;
@@ -313,7 +294,7 @@ export default function CompanyDetailSection({
         body: JSON.stringify({
           companyId: company.id,
           message: userMessage.text,
-          conversationHistory: chatMessages.slice(-8) // keep context size small
+          conversationHistory: chatMessages.slice(-8)
         })
       });
 
@@ -342,21 +323,19 @@ export default function CompanyDetailSection({
 
   return (
     <div id="company_detail_container" className="relative w-full min-h-screen bg-slate-50 pb-20">
-      
-      {/* 1. CINEMATIC BANNER COVER */}
+
       <section id="detail_cover" className="relative w-full h-[350px] bg-slate-900 overflow-hidden">
-        <img 
-          src={company.coverImage} 
-          alt={company.name} 
+        <img
+          src={company.coverImage}
+          alt={company.name}
           className="w-full h-full object-cover opacity-70"
           referrerPolicy="no-referrer"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/10 to-transparent" />
-        
-        {/* Superior navigation toolbelt floating */}
+
         <div className="absolute top-6 left-6 right-6 flex items-center justify-between z-10">
-          <button 
-            type="button" 
+          <button
+            type="button"
             onClick={onBack}
             className="px-4 py-2 bg-slate-950/70 border border-white/10 text-white font-semibold text-xs rounded-full hover:bg-slate-950/90 transition flex items-center gap-1.5 backdrop-blur shadow cursor-pointer"
           >
@@ -364,16 +343,16 @@ export default function CompanyDetailSection({
           </button>
 
           <div className="flex items-center gap-2">
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={handleCopyLink}
               className="p-2.5 bg-slate-950/70 border border-white/10 text-white rounded-full hover:bg-slate-950/95 transition backdrop-blur shadow cursor-pointer"
               title="Copiar Link da Empresa"
             >
               <Share2 className="w-4 h-4" />
             </button>
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={() => onToggleFavorite(company.id)}
               className="p-2.5 bg-slate-950/70 border border-white/10 text-white rounded-full hover:bg-slate-950/95 transition backdrop-blur shadow cursor-pointer"
             >
@@ -382,12 +361,11 @@ export default function CompanyDetailSection({
           </div>
         </div>
 
-        {/* Floating title bottom layout over cover slider */}
         <div className="absolute bottom-6 left-6 right-6 z-10 flex flex-col md:flex-row md:items-end md:justify-between gap-6">
           <div className="flex gap-4 items-center">
-            <img 
-              src={company.logo} 
-              alt={company.name} 
+            <img
+              src={company.logo}
+              alt={company.name}
               className="w-16 h-16 md:w-20 md:h-20 rounded-3xl object-cover border-2 border-white shadow-lg bg-white shrink-0"
               referrerPolicy="no-referrer"
             />
@@ -398,28 +376,26 @@ export default function CompanyDetailSection({
               <h1 className="text-xl md:text-3xl font-sans font-black tracking-tight mt-1">{company.name}</h1>
               <div className="flex items-center gap-2 mt-2">
                 <div className="flex items-center gap-1 bg-amber-500 text-slate-950 px-2 py-0.5 rounded text-xs font-bold">
-                  <Star className="w-3.5 h-3.5 fill-slate-950 text-slate-950" /> {company.rating.toFixed(1)}
+                  <Star className="w-3.5 h-3.5 fill-slate-950 text-slate-950" /> {safeRating.toFixed(1)}
                 </div>
-                <span className="text-xs text-slate-300">({company.reviewCount} avaliações autorizadas)</span>
+                <span className="text-xs text-slate-300">({toNumber(company.reviewCount, 0)} avaliações autorizadas)</span>
               </div>
             </div>
           </div>
 
-          {/* 3 Interactive CTA buttons Side-by-Side */}
           <div className="flex flex-wrap gap-2.5">
-            <button 
+            <button
               type="button"
               onClick={handleLeadWhatsAppClick}
               className="px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-2 shadow-md shadow-emerald-500/10 cursor-pointer active:scale-95 shrink-0"
             >
-              {/* Custom responsive WhatsApp green bubble */}
               <svg viewBox="0 0 24 24" className="w-4 h-4 fill-slate-950">
                 <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.731-1.456L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.42 9.864-9.864.002-2.637-1.03-5.114-2.906-6.99C16.554 1.874 14.082.84 11.45.84 6.01.84 1.585 5.265 1.581 10.7a9.81 9.81 0 001.448 4.966l-.1.597-1.002 3.655 3.743-.981.577.342z" />
               </svg>
               Chamar no WhatsApp
             </button>
 
-            <button 
+            <button
               type="button"
               onClick={() => window.open(`tel:${company.phone}`, '_self')}
               className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-2 shadow-md shadow-blue-500/10 cursor-pointer active:scale-95 shrink-0"
@@ -428,7 +404,7 @@ export default function CompanyDetailSection({
               Ligar Agora
             </button>
 
-            <button 
+            <button
               type="button"
               onClick={handleCopyLink}
               className={`px-5 py-3 rounded-xl font-bold text-xs md:text-sm transition flex items-center justify-center gap-2 border shadow-sm cursor-pointer active:scale-95 shrink-0 ${copiedLink ? 'bg-emerald-550 border-emerald-550 text-white' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
@@ -440,22 +416,21 @@ export default function CompanyDetailSection({
         </div>
       </section>
 
-      {/* 2. TABBED SELECTION CONTROLLERS */}
       <div className="max-w-7xl mx-auto px-4 md:px-8 mt-10">
         <div className="flex border-b border-slate-200 gap-4 md:gap-8 mb-8 overflow-x-auto whitespace-nowrap scrollbar-none">
-          <button 
+          <button
             onClick={() => setActiveTab('info')}
             className={`pb-4 text-sm font-semibold transition inline-flex items-center gap-2 border-b-2 cursor-pointer ${activeTab === 'info' ? 'border-bold border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
           >
             Informações Gerais
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('products')}
             className={`pb-4 text-sm font-semibold transition inline-flex items-center gap-2 border-b-2 cursor-pointer ${activeTab === 'products' ? 'border-bold border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
           >
-            Produtos / Serviços <span className="text-xs px-2 py-0.5 bg-slate-100 rounded text-slate-500 font-normal">{company.products.length}</span>
+            Produtos / Serviços <span className="text-xs px-2 py-0.5 bg-slate-100 rounded text-slate-500 font-normal">{safeProducts.length}</span>
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('reviews')}
             className={`pb-4 text-sm font-semibold transition inline-flex items-center gap-2 border-b-2 cursor-pointer ${activeTab === 'reviews' ? 'border-bold border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
           >
@@ -463,34 +438,32 @@ export default function CompanyDetailSection({
           </button>
         </div>
 
-        {/* 3. COLUMNS WRAPPER BASED ON TAB SELECTOR */}
         <div className="flex flex-col lg:flex-row gap-8">
-          
+
           <main className="flex-1 flex flex-col gap-8">
             {activeTab === 'info' && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 className="flex flex-col gap-8"
               >
-                {/* About rich block description */}
                 <div className="p-6 md:p-8 bg-white border border-slate-200 rounded-3xl shadow-sm">
                   <h3 className="text-lg font-sans font-bold text-slate-900 mb-4">Sobre Nós</h3>
                   <p className="text-slate-600 leading-relaxed font-sans text-sm block whitespace-pre-line">
                     {company.detailedDescription || company.description}
                   </p>
 
-                  {/* Highlights lists */}
-                  <div className="flex flex-wrap gap-2 mt-8">
-                    {company.features.map((feat, idx) => (
-                      <span key={idx} className="bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded-lg font-medium flex items-center gap-1">
-                        ✓ {feat}
-                      </span>
-                    ))}
-                  </div>
+                  {safeFeatures.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-8">
+                      {safeFeatures.map((feat, idx) => (
+                        <span key={idx} className="bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded-lg font-medium flex items-center gap-1">
+                          ✓ {feat}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {/* 4. DYNAMIC PREMIUM GALLERY SLIDER */}
                 {galleryImages.length > 0 && (
                   <div className="p-6 md:p-8 bg-white border border-slate-200 rounded-3xl shadow-sm flex flex-col">
                     <h3 className="text-lg font-sans font-bold text-slate-900 mb-2">Galeria de Fotos</h3>
@@ -498,7 +471,7 @@ export default function CompanyDetailSection({
 
                     <div className="relative w-full h-[240px] md:h-[380px] bg-slate-900 rounded-2xl overflow-hidden group shadow-md">
                       <AnimatePresence mode="wait">
-                        <motion.img 
+                        <motion.img
                           key={activeGalleryIdx}
                           src={galleryImages[activeGalleryIdx]}
                           alt={`Galeria ${activeGalleryIdx + 1}`}
@@ -511,20 +484,18 @@ export default function CompanyDetailSection({
                         />
                       </AnimatePresence>
 
-                      {/* Gradient shading */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-transparent to-transparent pointer-events-none" />
 
-                      {/* Left & Right arrows overlay */}
                       {galleryImages.length > 1 && (
                         <>
-                          <button 
+                          <button
                             type="button"
                             onClick={handlePrevGallery}
                             className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/45 backdrop-blur-md text-white hover:bg-black/65 transition flex items-center justify-center cursor-pointer select-none border border-white/10 z-10 font-bold"
                           >
                             ◀
                           </button>
-                          <button 
+                          <button
                             type="button"
                             onClick={handleNextGallery}
                             className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/45 backdrop-blur-md text-white hover:bg-black/65 transition flex items-center justify-center cursor-pointer select-none border border-white/10 z-10 font-bold"
@@ -534,17 +505,15 @@ export default function CompanyDetailSection({
                         </>
                       )}
 
-                      {/* Badge showing index */}
                       <div className="absolute top-4 right-4 bg-black/65 backdrop-blur-md px-3 py-1 rounded-full text-white text-[10px] font-bold uppercase tracking-wider border border-white/15">
                         {activeGalleryIdx + 1} / {galleryImages.length}
                       </div>
                     </div>
 
-                    {/* Dot Indicators */}
                     {galleryImages.length > 1 && (
                       <div className="flex justify-center gap-1.5 mt-4">
                         {galleryImages.map((_, idx) => (
-                          <button 
+                          <button
                             key={idx}
                             type="button"
                             onClick={() => setActiveGalleryIdx(idx)}
@@ -556,12 +525,11 @@ export default function CompanyDetailSection({
                   </div>
                 )}
 
-                {/* FAQ block section */}
-                {company.faqs.length > 0 && (
+                {safeFaqs.length > 0 && (
                   <div className="p-6 md:p-8 bg-white border border-slate-200 rounded-3xl shadow-sm">
                     <h3 className="text-lg font-sans font-bold text-slate-900 mb-6">Perguntas Frequentes</h3>
                     <div className="flex flex-col gap-4">
-                      {company.faqs.map(faq => (
+                      {safeFaqs.map(faq => (
                         <div key={faq.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
                           <h4 className="font-bold text-sm text-slate-900 mb-2 font-sans flex items-center gap-1.5">
                             Q. {faq.question}
@@ -576,24 +544,24 @@ export default function CompanyDetailSection({
             )}
 
             {activeTab === 'products' && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 className="p-6 md:p-8 bg-white border border-slate-200 rounded-3xl shadow-sm"
               >
                 <h3 className="text-lg font-sans font-bold text-slate-900 mb-6">Menu de Serviços / Catálogo</h3>
-                {company.products.length === 0 ? (
+                {safeProducts.length === 0 ? (
                   <div className="text-center p-12 text-slate-400">
                     Nenhum produto em catálogo adicionado até o momento.
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {company.products.map(p => (
+                    {safeProducts.map(p => (
                       <div key={p.id} className="flex gap-4 p-4 rounded-2xl border border-slate-100 bg-slate-50 group hover:border-slate-200 transition">
                         {p.imageUrl && (
-                          <img 
-                            src={p.imageUrl} 
-                            alt={p.name} 
+                          <img
+                            src={p.imageUrl}
+                            alt={p.name}
                             className="w-20 h-20 rounded-xl object-cover border shrink-0 bg-white"
                             referrerPolicy="no-referrer"
                           />
@@ -603,8 +571,8 @@ export default function CompanyDetailSection({
                             <h4 className="font-bold text-sm text-slate-900 group-hover:text-blue-600 transition truncate">{p.name}</h4>
                             <p className="text-xs text-slate-500 line-clamp-2 mt-1">{p.description}</p>
                           </div>
-                          {p.price && (
-                            <span className="text-sm font-sans font-bold text-blue-600 mt-2 block">R$ {p.price.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                          {p.price != null && Number(p.price) > 0 && (
+                            <span className="text-sm font-sans font-bold text-blue-600 mt-2 block">R$ {Number(p.price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                           )}
                         </div>
                       </div>
@@ -615,15 +583,13 @@ export default function CompanyDetailSection({
             )}
 
             {activeTab === 'reviews' && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 className="flex flex-col gap-8"
               >
-                {/* Users testimonials reviews list */}
                 <div className="p-6 bg-white border border-slate-200 rounded-3xl shadow-sm flex flex-col">
-                  
-                  {/* Filter / Sort control panel bar */}
+
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-6 mb-6">
                     <div>
                       <h3 className="text-lg font-sans font-bold text-slate-900 leading-tight">Últimos Depoimentos</h3>
@@ -631,24 +597,22 @@ export default function CompanyDetailSection({
                         Mostrando {filteredAndSortedReviews.length} de {reviews.length} avaliações
                       </p>
                     </div>
-                    
-                    {/* Filter controls */}
+
                     <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center w-full md:w-auto">
-                      
-                      {/* Search in reviews */}
+
                       <div className="relative flex items-center bg-slate-50 border border-slate-200 rounded-xl focus-within:border-blue-400 focus-within:bg-white transition flex-1 sm:w-44">
                         <Search className="absolute left-3 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-                        <input 
-                          type="text" 
+                        <input
+                          type="text"
                           placeholder="Buscar no comentário..."
                           value={reviewsSearch}
                           onChange={(e) => setReviewsSearch(e.target.value)}
                           className="w-full py-2 pl-9 pr-3 bg-transparent text-slate-900 text-xs focus:outline-none placeholder:text-slate-400"
                         />
                         {reviewsSearch && (
-                          <button 
+                          <button
                             type="button"
-                            onClick={() => setReviewsSearch('')} 
+                            onClick={() => setReviewsSearch('')}
                             className="absolute right-3 text-slate-400 hover:text-slate-600 font-sans text-[10px]"
                           >
                             ✕
@@ -656,10 +620,9 @@ export default function CompanyDetailSection({
                         )}
                       </div>
 
-                      {/* Filter dropdown by rating */}
                       <div className="relative flex items-center bg-slate-50 border border-slate-200 rounded-xl focus-within:border-blue-400 focus-within:bg-white transition sm:w-36 shrink-0">
                         <Filter className="absolute left-3 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-                        <select 
+                        <select
                           value={ratingFilter}
                           onChange={(e) => setRatingFilter(e.target.value)}
                           className="w-full py-2.5 pl-9 pr-3 bg-transparent text-slate-900 text-xs font-semibold focus:outline-none appearance-none cursor-pointer"
@@ -673,10 +636,9 @@ export default function CompanyDetailSection({
                         </select>
                       </div>
 
-                      {/* Sort dropdown */}
                       <div className="relative flex items-center bg-slate-50 border border-slate-200 rounded-xl focus-within:border-blue-400 focus-within:bg-white transition sm:w-40 shrink-0">
                         <ArrowUpDown className="absolute left-3 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
-                        <select 
+                        <select
                           value={sortOption}
                           onChange={(e) => setSortOption(e.target.value as any)}
                           className="w-full py-2.5 pl-9 pr-3 bg-transparent text-slate-900 text-xs font-semibold focus:outline-none appearance-none cursor-pointer"
@@ -728,15 +690,14 @@ export default function CompanyDetailSection({
                   )}
                 </div>
 
-                {/* Submitting review box */}
                 <div className="p-6 bg-white border border-slate-200 rounded-3xl shadow-sm">
                   <h3 className="text-lg font-sans font-bold text-slate-900 mb-4">Deixar sua Recomendação</h3>
                   <form onSubmit={handleReviewSubmit} className="flex flex-col gap-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <label className="text-xs font-semibold text-slate-500 mb-2 block">Seu Nome</label>
-                        <input 
-                          type="text" 
+                        <input
+                          type="text"
                           required
                           value={newReviewAuthor}
                           onChange={(e) => setNewReviewAuthor(e.target.value)}
@@ -746,7 +707,7 @@ export default function CompanyDetailSection({
                       </div>
                       <div>
                         <label className="text-xs font-semibold text-slate-500 mb-2 block">Sua Nota</label>
-                        <select 
+                        <select
                           value={newReviewRating}
                           onChange={(e) => setNewReviewRating(Number(e.target.value))}
                           className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-blue-400 font-sans font-semibold text-slate-700"
@@ -762,7 +723,7 @@ export default function CompanyDetailSection({
 
                     <div>
                       <label className="text-xs font-semibold text-slate-500 mb-2 block">Seu Comentário ou Crítica Construtiva</label>
-                      <textarea 
+                      <textarea
                         rows={4}
                         required
                         value={newReviewComment}
@@ -772,7 +733,7 @@ export default function CompanyDetailSection({
                       />
                     </div>
 
-                    <button 
+                    <button
                       type="submit"
                       className="py-3 px-6 bg-slate-950 text-white hover:bg-slate-850 font-semibold text-xs rounded-xl self-end transition cursor-pointer"
                     >
@@ -784,9 +745,7 @@ export default function CompanyDetailSection({
             )}
           </main>
 
-          {/* SIDEBAR RIGHT DETAILS */}
           <aside className="w-full lg:w-80 shrink-0 flex flex-col gap-6">
-            {/* Quick specifications sheet */}
             <div className="p-6 bg-white border border-slate-200 rounded-3xl shadow-sm flex flex-col">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Informações de Contato</h3>
               <div className="flex flex-col gap-4 text-xs text-slate-700 font-sans">
@@ -846,9 +805,7 @@ export default function CompanyDetailSection({
               </div>
             </div>
 
-            {/* Simulated google map box */}
             <div className="w-full rounded-3xl overflow-hidden border border-slate-200 shadow-sm relative h-52 bg-blue-100 flex items-center justify-center">
-              {/* Retro static vector mapping representation */}
               <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url('https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=600&q=80')` }} />
               <div className="absolute inset-0 bg-slate-900/40" />
               <div className="relative z-10 flex flex-col items-center gap-2 p-4 text-center">
@@ -860,7 +817,6 @@ export default function CompanyDetailSection({
               </div>
             </div>
 
-            {/* floating support chat trigger button alternative */}
             <div onClick={() => setIsChatOpen(true)} className="p-4 bg-gradient-to-br from-indigo-650 from-blue-600 to-indigo-600 rounded-3xl text-white shadow shadow-indigo-650/40 hover:opacity-95 transition cursor-pointer flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-white/10 rounded-xl">
@@ -878,17 +834,15 @@ export default function CompanyDetailSection({
         </div>
       </div>
 
-      {/* 4. PREMIUM GLASSMORPHIC CONCIERGE CHAT PANEL WITH AI */}
       <div id="concierge_chat_panel" className="fixed bottom-6 right-6 z-40">
         <AnimatePresence>
           {isChatOpen && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 100 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 100 }}
               className="w-[360px] md:w-[400px] h-[520px] rounded-3xl bg-slate-950 text-white border border-white/10 flex flex-col shadow-2xl overflow-hidden"
             >
-              {/* Header */}
               <header className="p-4 bg-gradient-to-r from-slate-900 via-slate-950 to-indigo-950 border-b border-white/5 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-500 to-indigo-500 flex items-center justify-center relative">
@@ -903,7 +857,7 @@ export default function CompanyDetailSection({
                   </div>
                 </div>
 
-                <button 
+                <button
                   onClick={() => setIsChatOpen(false)}
                   className="p-1 px-2.5 rounded-full hover:bg-white/10 text-slate-400 font-bold hover:text-white transition cursor-pointer text-xs"
                 >
@@ -911,7 +865,6 @@ export default function CompanyDetailSection({
                 </button>
               </header>
 
-              {/* Chat messages stream */}
               <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4 font-sans text-xs scrollbar-none">
                 {chatMessages.map(msg => (
                   <div key={msg.id} className={`flex gap-3 max-w-[85%] ${msg.role === 'user' ? 'self-end flex-row-reverse' : 'self-start'}`}>
@@ -933,16 +886,15 @@ export default function CompanyDetailSection({
                 )}
               </div>
 
-              {/* Chat control box */}
               <form onSubmit={handleSendMessage} className="p-4 bg-slate-900 border-t border-white/5 flex gap-2">
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={userInputMessage}
                   onChange={(e) => setUserInputMessage(e.target.value)}
                   placeholder="Escreva sua pergunta ou dúvida aqui..."
                   className="flex-1 p-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-blue-500/55 placeholder:text-slate-500 font-sans text-xs"
                 />
-                <button 
+                <button
                   type="submit"
                   disabled={!userInputMessage.trim() || isAiTyping}
                   className="p-3 bg-gradient-to-tr from-blue-500 to-indigo-500 hover:opacity-90 disabled:opacity-40 rounded-xl transition cursor-pointer text-white flex items-center justify-center shrink-0"
@@ -954,7 +906,7 @@ export default function CompanyDetailSection({
           )}
 
           {!isChatOpen && (
-            <motion.button 
+            <motion.button
               layoutId="ai_concierge_launcher"
               onClick={() => setIsChatOpen(true)}
               className="py-4 px-6 rounded-full bg-slate-950 text-white border border-white/10 shadow-2xl hover:scale-105 transition flex items-center gap-2 cursor-pointer relative"
@@ -968,10 +920,9 @@ export default function CompanyDetailSection({
         </AnimatePresence>
       </div>
 
-      {/* Toast Notification for Copied Link */}
       <AnimatePresence>
         {copiedLink && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 50, scale: 0.9 }}

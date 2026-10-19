@@ -11,12 +11,42 @@ import { CompanyRepository } from '../repositories/companyRepository';
 import { SeoService } from '../services/seoService';
 import { useCompany } from '../context/CompanyContext';
 import { useAuth } from '../context/AuthContext';
+import { featureArray, toNumber } from '../utils/catalogSearch';
 
 interface CompanyMiniSitePageProps {
   slug: string;
   onBack: () => void;
   onNavigateCompany: (slug: string) => void;
 }
+
+const normalizeCompany = (raw: any): Company => {
+  if (!raw) return raw;
+  return {
+    ...raw,
+    rating: toNumber(raw.rating, 0),
+    reviewCount: toNumber(raw.reviewCount, 0),
+    views: toNumber(raw.views, 0),
+    clicksWhatsapp: toNumber(raw.clicksWhatsapp, 0),
+    clicksPhone: raw.clicksPhone != null ? toNumber(raw.clicksPhone, 0) : undefined,
+    clicksRoutes: raw.clicksRoutes != null ? toNumber(raw.clicksRoutes, 0) : undefined,
+    latitude: raw.latitude != null ? toNumber(raw.latitude, 0) : 0,
+    longitude: raw.longitude != null ? toNumber(raw.longitude, 0) : 0,
+    isSponsored: Boolean(raw.isSponsored),
+    features: featureArray(raw.features),
+    products: Array.isArray(raw.products) ? raw.products : [],
+    faqs: Array.isArray(raw.faqs) ? raw.faqs : [],
+    name: raw.name ?? '',
+    slug: raw.slug ?? '',
+    logo: raw.logo ?? '',
+    coverImage: raw.coverImage ?? '',
+    description: raw.description ?? '',
+    detailedDescription: raw.detailedDescription ?? raw.description ?? '',
+    phone: raw.phone ?? '',
+    whatsapp: raw.whatsapp ?? '',
+    address: raw.address ?? '',
+    hours: raw.hours ?? '',
+  } as Company;
+};
 
 export const CompanyMiniSitePage: React.FC<CompanyMiniSitePageProps> = ({
   slug,
@@ -31,31 +61,35 @@ export const CompanyMiniSitePage: React.FC<CompanyMiniSitePageProps> = ({
     let isMounted = true;
     setLoading(true);
 
-    CompanyRepository.getBySlug(slug).then(data => {
-      if (isMounted) {
+    CompanyRepository.getBySlug(slug)
+      .then(data => {
+        if (!isMounted) return;
         if (data) {
-          setCompany(data);
-          CompanyRepository.incrementMetric(data.id, 'views');
-          
+          const normalized = normalizeCompany(data);
+          setCompany(normalized);
+          CompanyRepository.incrementMetric(normalized.id, 'views').catch(() => {});
+
           SeoService.updateMetaTags({
-            title: `${data.name} | Guia Comercial Itapoá`,
-            description: data.description,
-            image: data.coverImage || data.logo,
+            title: `${normalized.name} | Guia Comercial Itapoá`,
+            description: normalized.description,
+            image: normalized.coverImage || normalized.logo,
             url: window.location.href,
             type: 'business.business'
           });
 
-          const schema = SeoService.generateCompanySchema(data);
+          const schema = SeoService.generateCompanySchema(normalized);
           SeoService.injectJsonLd(schema);
         } else {
           const found = companies.find(c => c.slug === slug);
           if (found) {
-            setCompany(found);
+            setCompany(normalizeCompany(found));
           }
         }
         setLoading(false);
-      }
-    });
+      })
+      .catch(() => {
+        if (isMounted) setLoading(false);
+      });
 
     return () => {
       isMounted = false;
