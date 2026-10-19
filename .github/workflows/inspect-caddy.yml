@@ -1,0 +1,31 @@
+name: Fix Caddy TLS (itapoa.online)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  inspect-caddy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect Caddy config
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            echo "=== Caddyfile ==="
+            cat /etc/caddy/Caddyfile 2>/dev/null || echo "no /etc/caddy/Caddyfile"
+            ls -la /etc/caddy/ 2>/dev/null | head -20
+            find /etc -maxdepth 4 -name "Caddyfile*" 2>/dev/null | head -20
+            echo "=== Caddy version ==="
+            caddy version 2>/dev/null || /usr/bin/caddy version 2>/dev/null || echo "caddy not in PATH"
+            echo "=== PM2 ==="
+            pm2 list 2>/dev/null | head -20
+            echo "=== Env check (names only) ==="
+            pm2 env 0 2>/dev/null | grep -E "APP_URL|MERCADOPAGO|NODE_ENV" | sed 's/=.*/=***/' | head -20
+            echo "=== itapoa.online cert ==="
+            ls /var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/ 2>/dev/null | head -20
+            echo "=== done ==="
