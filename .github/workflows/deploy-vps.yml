@@ -1,0 +1,91 @@
+name: Deploy VPS (itapoa.tech)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: vps-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify build
+        run: |
+          test -f dist/index.html
+          test -f dist/server.cjs
+          echo "Build OK: dist/server.cjs $(wc -c < dist/server.cjs) bytes"
+          ls -lh dist/assets/
+
+      - name: Deploy to VPS (itapoa.tech)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            cd /opt/itapoa/app
+            echo "[deploy] fetch origin/main"
+            git fetch origin
+            echo "[deploy] reset --hard origin/main"
+            git reset --hard origin/main
+            echo "[deploy] HEAD=$(git rev-parse --short HEAD)"
+            echo "[deploy] npm ci"
+            npm ci
+            echo "[deploy] npm run build"
+            npm run build
+            echo "[deploy] pm2 restart"
+            pm2 restart itapoa --update-env
+            pm2 save
+            echo "[deploy] caddy reload (se necessário)"
+            systemctl reload caddy 2>/dev/null || systemctl restart caddy 2>/dev/null || echo "[deploy] caddy reload skip"
+            sleep 4
+            echo "[deploy] health local"
+            curl -fsS http://127.0.0.1:3000/api/health
+            echo "[deploy] done"
+
+      - name: Health check (itapoa.tech)
+        if: always()
+        run: |
+          echo "Aguardando VPS propagar..."
+          sleep 15
+          for i in 1 2 3 4 5; do
+            CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" https://itapoa.tech/api/health || echo "000")
+            echo "Tentativa $i: https://itapoa.tech/api/health -> $CODE $(cat /tmp/health.json 2>/dev/null | head -c 300)"
+            if [ "$CODE" = "200" ] && grep -q "connected" /tmp/health.json 2>/dev/null; then
+              CODE2=$(curl -s -o /dev/null -w "%{http_code}" https://itapoa.tech/empresa/hamburgueria-itapema-burger || echo "000")
+              echo "  https://itapoa.tech/empresa/hamburgueria-itapema-burger -> $CODE2"
+              CODE3=$(curl -s -o /dev/null -w "%{http_code}" http://2.24.209.225/api/health || echo "000")
+              echo "  http://2.24.209.225/api/health -> $CODE3"
+              if [ "$CODE2" = "200" ] && [ "$CODE3" = "200" ]; then
+                echo "Health OK"
+                exit 0
+              fi
+            fi
+            sleep 20
+          done
+          echo "::warning::Health check falhou apos 5 tentativas"
+          exit 0
