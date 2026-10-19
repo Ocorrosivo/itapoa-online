@@ -1,3 +1,10 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ * Application Routes & SPA Router Navigation Handler
+ * Self-contained navigation state manager
+ */
+
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { HomePage } from '../pages/HomePage';
 import { DirectoryPage } from '../pages/DirectoryPage';
@@ -7,6 +14,8 @@ import { EventsPage } from '../pages/EventsPage';
 import { BlogPage } from '../pages/BlogPage';
 import { JobsPage } from '../pages/JobsPage';
 import { PlansPage } from '../pages/PlansPage';
+import { AdminDashboardPage } from '../pages/AdminDashboardPage';
+import { EmpresarioDashboardPage } from '../pages/EmpresarioDashboardPage';
 import { BairroDetailPage } from '../pages/BairroDetailPage';
 import { PraiaDetailPage } from '../pages/PraiaDetailPage';
 import { InstitutionalPage } from '../pages/institutional/InstitutionalPage';
@@ -24,7 +33,7 @@ import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 
 const AdminDashboardPage = lazy(() => import('../pages/AdminDashboardPage').then(m => ({ default: m.AdminDashboardPage })));
-const EmpresarioDashboardPage = lazy(() => import('../pages/EmpresarioDashboardPage').then(m => ({ default: m.EmpresarioDashboardPage })));
+const EmpresarioDashboardPage = lazy(() => import('../pages/EmpresarioDashboardPage').then(m => ({ default: m.EmpresarioDashboardPage})));
 
 const pathToTabMap: Record<string, string> = {
   'empresas': 'empresas',
@@ -56,36 +65,72 @@ const pathToTabMap: Record<string, string> = {
   'admin': 'admin'
 };
 
-const getInitialRoute = () => {
-  const path = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
-  const companyMatch = path.match(/^empresa\/([^/]+)$/);
+const AUTH_TABS = ['login', 'login/admin', 'cadastro', 'esqueci-senha'];
 
+interface ParsedRoute {
+  tab: string;
+  companySlug: string | null;
+  bairroSlug: string | null;
+  praiaSlug: string | null;
+}
+
+const getInitialRoute = (): ParsedRoute => {
+  const path = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+
+  const companyMatch = path.match(/^empresa\/([^/]+)$/);
   if (companyMatch) {
     return {
       tab: 'empresas',
-      companySlug: decodeURIComponent(companyMatch[1])
+      companySlug: decodeURIComponent(companyMatch[1]),
+      bairroSlug: null,
+      praiaSlug: null
+    };
+  }
+
+  const bairroMatch = path.match(/^bairro\/([^/]+)$/);
+  if (bairroMatch) {
+    return {
+      tab: 'home',
+      companySlug: null,
+      bairroSlug: decodeURIComponent(bairroMatch[1]),
+      praiaSlug: null
+    };
+  }
+
+  const praiaMatch = path.match(/^praia\/([^/]+)$/);
+  if (praiaMatch) {
+    return {
+      tab: 'home',
+      companySlug: null,
+      bairroSlug: null,
+      praiaSlug: decodeURIComponent(praiaMatch[1])
     };
   }
 
   return {
     tab: pathToTabMap[path] || 'home',
-    companySlug: null
+    companySlug: null,
+    bairroSlug: null,
+    praiaSlug: null
   };
 };
 
+// Rotas sem Header/Footer do site público (painel e autenticação).
 const PANEL_TABS = ['admin', 'painel', 'login', 'login/admin', 'cadastro', 'esqueci-senha'];
 const isPanelTab = (tab: string) => PANEL_TABS.includes(tab);
+const isAuthTab = (tab: string) => AUTH_TABS.includes(tab);
 
 export const AppRoutes: React.FC = () => {
   const { campaigns } = useCompany();
   const { isAdminMaster } = useAuth();
   const initialRoute = getInitialRoute();
 
+  // Navigation state — self-contained with URL sync
   const [currentTab, setCurrentTab] = useState<string>(initialRoute.tab);
   const [activeCompanySlug, setActiveCompanySlug] = useState<string | null>(initialRoute.companySlug);
+  const [activeBairroSlug, setActiveBairroSlug] = useState<string | null>(initialRoute.bairroSlug);
+  const [activePraiaSlug, setActivePraiaSlug] = useState<string | null>(initialRoute.praiaSlug);
   const [activeCampaignSlug, setActiveCampaignSlug] = useState<string | null>(null);
-  const [activeBairroSlug, setActiveBairroSlug] = useState<string | null>(null);
-  const [activePraiaSlug, setActivePraiaSlug] = useState<string | null>(null);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [activeInstitutional, setActiveInstitutional] = useState<
     'about' | 'contact' | 'advertise' | 'how-it-works' | 'faq' | 'privacy' | 'terms' | 'help' | null
@@ -96,6 +141,11 @@ export const AppRoutes: React.FC = () => {
       const route = getInitialRoute();
       setCurrentTab(route.tab);
       setActiveCompanySlug(route.companySlug);
+      setActiveBairroSlug(route.bairroSlug);
+      setActivePraiaSlug(route.praiaSlug);
+      // Limpa overlays que não têm rota própria, para não deixar o conteúdo preso.
+      setActiveCampaignSlug(null);
+      setActiveInstitutional(null);
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -115,51 +165,102 @@ export const AppRoutes: React.FC = () => {
     if (window.location.pathname !== targetPath) {
       window.history.pushState(null, '', targetPath);
     }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigateCompany = (slug: string | null) => {
     setActiveCompanySlug(slug);
+    if (slug) {
+      setActiveBairroSlug(null);
+      setActivePraiaSlug(null);
+      setActiveInstitutional(null);
+      setActiveCampaignSlug(null);
+    }
     const targetPath = slug ? `/empresa/${encodeURIComponent(slug)}` : '/empresas';
     if (window.location.pathname !== targetPath) {
       window.history.pushState(null, '', targetPath);
     }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSelectBairro = (slug: string) => {
+    setActiveBairroSlug(slug);
+    setActiveCompanySlug(null);
+    setActivePraiaSlug(null);
+    setActiveInstitutional(null);
+    setActiveCampaignSlug(null);
+    const targetPath = `/bairro/${encodeURIComponent(slug)}`;
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState(null, '', targetPath);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSelectPraia = (slug: string) => {
+    setActivePraiaSlug(slug);
+    setActiveCompanySlug(null);
+    setActiveBairroSlug(null);
+    setActiveInstitutional(null);
+    setActiveCampaignSlug(null);
+    const targetPath = `/praia/${encodeURIComponent(slug)}`;
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState(null, '', targetPath);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleOpenAuthModal = () => handleNavigateTab('login');
 
   const renderContent = () => {
+    // Active Company Mini-Site — tem rota própria (/empresa/:slug)
     if (activeCompanySlug) {
       return (
         <ErrorBoundary fallback={<div className="min-h-[calc(100vh-13rem)] bg-slate-950 text-white p-6 text-center flex flex-col items-center justify-center gap-4"><p className="text-sm text-slate-300">Erro ao carregar empresa.</p><button onClick={() => handleNavigateCompany(null)} className="px-4 py-2 bg-blue-600 rounded-xl text-white text-sm font-semibold">Voltar ao Guia</button></div>}>
           <CompanyMiniSitePage
-            slug={activeCompanySlug}
-            onBack={() => handleNavigateCompany(null)}
-            onNavigateCompany={handleNavigateCompany}
-          />
-        </ErrorBoundary>
+          slug={activeCompanySlug}
+          onBack={() => handleNavigateCompany(null)}
+          onNavigateCompany={handleNavigateCompany}
+        />
       );
     }
 
+    // Active Bairro Detail — rota própria (/bairro/:slug)
     if (activeBairroSlug) {
       return (
         <BairroDetailPage
           slug={activeBairroSlug}
-          onNavigateBack={() => setActiveBairroSlug(null)}
+          onNavigateBack={() => {
+            if (window.history.length > 1) {
+              window.history.back();
+            } else {
+              setActiveBairroSlug(null);
+              handleNavigateTab('home');
+            }
+          }}
           onNavigateCompany={handleNavigateCompany}
         />
       );
     }
 
+    // Active Praia Detail — rota própria (/praia/:slug)
     if (activePraiaSlug) {
       return (
         <PraiaDetailPage
           slug={activePraiaSlug}
-          onNavigateBack={() => setActivePraiaSlug(null)}
+          onNavigateBack={() => {
+            if (window.history.length > 1) {
+              window.history.back();
+            } else {
+              setActivePraiaSlug(null);
+              handleNavigateTab('home');
+            }
+          }}
           onNavigateCompany={handleNavigateCompany}
         />
       );
     }
 
+    // Active Institutional Page
     if (activeInstitutional) {
       return (
         <InstitutionalPage
@@ -170,6 +271,7 @@ export const AppRoutes: React.FC = () => {
       );
     }
 
+    // Active Solidarity Campaign
     if (activeCampaignSlug) {
       const campaign = campaigns.find(c => c.slug === activeCampaignSlug) || campaigns[0];
       return (
@@ -183,6 +285,7 @@ export const AppRoutes: React.FC = () => {
     return renderTab();
   };
 
+  // Dedicated Auth Routes & Navigation Tabs
   const renderTab = () => {
     switch (currentTab) {
       case 'login':
@@ -284,9 +387,9 @@ export const AppRoutes: React.FC = () => {
           return (
             <Suspense fallback={<LoadingSpinner />}>
               <AdminDashboardPage
-                onOpenAuthModal={handleOpenAuthModal}
-                onNavigateCompany={handleNavigateCompany}
-                onNavigateTab={handleNavigateTab}
+              onOpenAuthModal={handleOpenAuthModal}
+              onNavigateCompany={handleNavigateCompany}
+              onNavigateTab={handleNavigateTab}
               />
             </Suspense>
           );
@@ -307,13 +410,25 @@ export const AppRoutes: React.FC = () => {
             onNavigateCompany={(slug) => handleNavigateCompany(slug)}
             onNavigateTab={handleNavigateTab}
             onOpenAuthModal={handleOpenAuthModal}
-            onSelectBairro={slug => setActiveBairroSlug(slug)}
-            onSelectPraia={slug => setActivePraiaSlug(slug)}
+            onSelectBairro={handleSelectBairro}
+            onSelectPraia={handleSelectPraia}
           />
         );
     }
   };
 
+  // Telas de autenticação: layout limpo, sem Header/Footer do portal.
+  if (!activeCompanySlug && !activeBairroSlug && !activePraiaSlug &&
+    !activeInstitutional && !activeCampaignSlug && isAuthTab(currentTab)) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col font-sans">
+        {renderContent()}
+        <AIModal isOpen={isAIModalOpen} onClose={() => setIsAIModalOpen(false)} />
+      </div>
+    );
+  }
+
+  // /admin e /painel são áreas próprias: shell isolado, sem Header/Footer do portal.
   const isPanelRoute = !activeCompanySlug && !activeBairroSlug && !activePraiaSlug &&
     !activeInstitutional && !activeCampaignSlug && isPanelTab(currentTab);
 

@@ -19,16 +19,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateTab }) => {
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onNavigateTab('home');
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onNavigateTab]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -54,7 +44,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateTab }) => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center px-4 py-16 font-sans relative overflow-hidden">
-      
+
       {/* Background Subtle Gradient Blobs */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-[#C8102E]/20 rounded-full blur-3xl pointer-events-none" />
 
@@ -70,15 +60,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateTab }) => {
       </div>
 
       <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6 relative z-10">
-        
+
         {/* Brand Header */}
         <div className="text-center space-y-3">
-          <img
-            src="/logotipo.png"
-            alt="Itapoá Online"
-            className="h-14 w-auto mx-auto object-contain drop-shadow-md cursor-pointer"
-            onClick={() => { window.location.href = '/'; }}
-          />
+          <button
+            type="button"
+            onClick={() => onNavigateTab('home')}
+            className="mx-auto block"
+            aria-label="Voltar à página inicial"
+          >
+            <img
+              src="/logotipo.png"
+              alt="Itapoá Online"
+              className="h-14 w-auto object-contain drop-shadow-md"
+            />
+          </button>
           <span className="text-[10px] font-black tracking-widest text-[#C8102E] uppercase block">
             PORTAL & MARKETPLACE PARCEIRO
           </span>

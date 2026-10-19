@@ -18,16 +18,6 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onNavigateTab('login');
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onNavigateTab]);
-
   const SUPPORT_EMAIL = 'contato@itapoa.online';
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -42,7 +32,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
 
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center px-4 py-16 font-sans relative overflow-hidden">
-      
+
       {/* Top Back Link */}
       <div className="absolute top-6 left-6">
         <button
