@@ -22,9 +22,9 @@ interface HeaderProps {
 }
 
 // Ordem exata exigida — labels EXATOS (caixa alta/baixa respeitada)
-const MENU: { label: string; tab: string }[] = [
+const MENU: { label: string; tab: string; badge?: string }[] = [
   { label: 'Início', tab: 'home' },
-  { label: 'PROJETOS SOCIAIS', tab: 'projetos-sociais' },
+  { label: 'PROJETOS SOCIAIS', tab: 'projetos-sociais', badge: 'Em breve' },
   { label: 'CATEGORIAS', tab: 'categorias' },
   { label: 'BAIRROS', tab: 'bairros' },
   { label: 'Empresas', tab: 'empresas' },
@@ -140,7 +140,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <button
                   key={item.tab}
                   onClick={() => handleNav(item.tab)}
-                  className={`h-full px-3 flex items-center justify-center transition whitespace-nowrap ${
+                  className={`h-full px-3 flex items-center justify-center transition whitespace-nowrap gap-1.5 ${
                     isActive(item.tab)
                       ? item.tab === 'home'
                         ? 'bg-[#C8102E] text-white font-black'
@@ -149,6 +149,11 @@ export const Header: React.FC<HeaderProps> = ({
                   }`}
                 >
                   {item.label}
+                  {item.badge && (
+                    <span className="text-[7px] font-black leading-none bg-amber-400 text-slate-900 px-1 py-0.5 rounded uppercase tracking-wider">
+                      {item.badge}
+                    </span>
+                  )}
                 </button>
               ))}
 
@@ -212,11 +217,16 @@ export const Header: React.FC<HeaderProps> = ({
                 <button
                   key={item.tab}
                   onClick={() => handleNav(item.tab)}
-                  className={`text-left px-4 py-3 text-xs font-bold uppercase tracking-wider transition border-b border-slate-800/50 last:border-0 ${
+                  className={`text-left px-4 py-3 text-xs font-bold uppercase tracking-wider transition border-b border-slate-800/50 last:border-0 flex items-center gap-2 ${
                     isActive(item.tab) ? 'bg-[#C8102E] text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                   }`}
                 >
-                  {item.label}
+                  <span>{item.label}</span>
+                  {item.badge && (
+                    <span className="text-[7px] font-black bg-amber-400 text-slate-900 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                      {item.badge}
+                    </span>
+                  )}
                 </button>
               ))}
               <button

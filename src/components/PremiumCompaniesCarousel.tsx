@@ -84,7 +84,7 @@ export const PremiumCompaniesCarousel: React.FC<PremiumCompaniesCarouselProps> =
             </span>
           </div>
           <h2 className="text-2xl md:text-3xl font-black tracking-tight text-slate-900">
-            Empresas Parceiras VIP de Itapoá
+            Top Empresas de Itapoá
           </h2>
           <p className="text-xs text-slate-500 mt-1">
             Exposição rotativa e contínua dos principais estabelecimentos e prestadores de serviços da cidade.
