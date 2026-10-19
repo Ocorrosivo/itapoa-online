@@ -1,4 +1,4 @@
-name: Deploy Hostinger (bypass API)
+name: Deploy Hostinger
 
 on:
   push:
@@ -7,11 +7,18 @@ on:
 
 concurrency:
   group: hostinger-deploy
-  cancel-in-progress: false
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PRIMARY_DOMAIN: https://itapoa.tech
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,68 +29,116 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install
+      - name: Install (npm ci)
         run: npm ci
 
-      - name: Lint
+      - name: Lint (tsc --noEmit)
         run: npm run lint
 
-      - name: Build
+      - name: Build (vite + server.cjs)
         run: npm run build
 
-      - name: Verify build
+      - name: Verificar artefatos (dist/index.html + dist/server.cjs)
         run: |
-          test -f dist/index.html
-          test -f dist/server.cjs
+          set -e
+          test -f dist/index.html  || { echo "ERRO: dist/index.html não encontrado"; exit 1; }
+          test -f dist/server.cjs  || { echo "ERRO: dist/server.cjs não encontrado"; exit 1; }
           echo "Build OK: dist/server.cjs $(wc -c < dist/server.cjs) bytes"
-          ls -lh dist/assets/
+          ls -lh dist/
+          ls -lh dist/assets/ | head -n 30
+          echo "Commit em produção: $(git rev-parse --short HEAD) | $(git log -1 --oneline)"
 
-      - name: Deploy via SSH (if configured)
+      - name: Deploy via SSH (VPS)
         if: ${{ hashFiles('dist/**') != '' }}
-        continue-on-error: true
+        continue-on-error: false
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOSTINGER_HOST }}
+          username: ${{ secrets.HOSTINGER_USER }}
+          password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
+          port: ${{ secrets.HOSTINGER_PORT }}
+          script: |
+            set -e
+            TARGET="${{ secrets.HOSTINGER_TARGET }}"
+            if [ -z "$TARGET" ]; then echo "ERRO: Secret HOSTINGER_TARGET não configurado"; exit 1; fi
+            echo "Destino: $TARGET"
+            echo "Hash local não validado em SSH isolado; checagem pós-copy verifica resultado."
+            # O scp anterior envia os arquivos; aqui validamos, reiniciamos e validamos health.
+            if [ -d "$TARGET" ]; then echo "Alvo existe: $TARGET"; else echo "ERRO: alvo não existe: $TARGET"; exit 1; fi
+
+      - name: Enviar artefato (SCP)
+        if: ${{ hashFiles('dist/**') != '' }}
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.HOSTINGER_HOST }}
           username: ${{ secrets.HOSTINGER_USER }}
           password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
           port: ${{ secrets.HOSTINGER_PORT }}
-          source: "dist/*,server.js,package.json"
+          source: "dist/*"
           target: ${{ secrets.HOSTINGER_TARGET }}
+          overwrite: true
 
-      - name: Deploy via FTP (fallback)
-        if: always()
-        continue-on-error: true
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+      - name: Reiniciar app e verificar saúde
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          port: 21
-          protocol: ftps
-          local-dir: ./dist/
-          server-dir: ./domains/ajborrachariamovel.com.br/public_html/
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/node_modules/**
-
-      - name: Health check (post-deploy)
-        if: always()
-        run: |
-          echo "Aguardando deploy propagar..."
-          sleep 30
-          for i in 1 2 3 4 5; do
-            CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" https://ajborrachariamovel.com.br/api/health || echo "000")
-            echo "Tentativa $i: /api/health -> $CODE $(cat /tmp/health.json 2>/dev/null | head -c 200)"
-            if [ "$CODE" = "200" ]; then
-              CODE2=$(curl -s -o /dev/null -w "%{http_code}" https://ajborrachariamovel.com.br/empresa/hamburgueria-itapema-burger || echo "000")
-              echo "  /empresa/hamburgueria-itapema-burger -> $CODE2"
-              if [ "$CODE2" = "200" ]; then
-                echo "Health OK"
-                exit 0
-              fi
+          host: ${{ secrets.HOSTINGER_HOST }}
+          username: ${{ secrets.HOSTINGER_USER }}
+          password: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
+          port: ${{ secrets.HOSTINGER_PORT }}
+          script: |
+            set -e
+            TARGET="${{ secrets.HOSTINGER_TARGET }}"
+            echo "Procurando pm2 e app..."
+            if command -v pm2 >/dev/null 2>&1; then
+              pm2 list || true
+              # Tenta reiniciar pelo pm2 — não falha se app não estiver sob pm2.
+              pm2 restart all --update-env || pm2 reload all --update-env || echo "pm2 restart não aplicável"
             fi
-            sleep 30
+            # Fallback Hostinger: tocar restart.txt se o painel usar Passenger
+            if [ -f "$TARGET/tmp/restart.txt" ] || mkdir -p "$TARGET/tmp" 2>/dev/null; then
+              touch "$TARGET/tmp/restart.txt" 2>/dev/null || true
+              echo "touch restart.txt aplicado quando possível"
+            fi
+            sleep 8
+            # Verifica se o bundle está no alvo
+            ls -lh "$TARGET/dist/" 2>&1 | head -n 20 || ls -lh "$TARGET/" 2>&1 | head -n 20
+
+      - name: Health check (https://itapoa.tech)
+        run: |
+          set -e
+          echo "Aguardando deploy propagar em https://itapoa.tech ..."
+          sleep 25
+          HEALTH_BODY=""
+          for i in 1 2 3 4 5 6; do
+            CODE=$(curl -sS -o /tmp/health.json -w "%{http_code}" https://itapoa.tech/api/health || echo "000")
+            HEALTH_BODY=$(cat /tmp/health.json 2>/dev/null | tr -d '\n' | head -c 600)
+            echo "Tentativa $i: GET /api/health -> HTTP $CODE | $HEALTH_BODY"
+            if [ "$CODE" = "200" ] && echo "$HEALTH_BODY" | grep -q '"status"'; then
+              echo "Health OK"
+              break
+            fi
+            if [ "$i" = "6" ]; then
+              echo "ERRO: /api/health não respondeu 200 após 6 tentativas"
+              echo "Body final: $HEALTH_BODY"
+              exit 1
+            fi
+            sleep 20
           done
-          echo "::warning::Health check falhou apos 5 tentativas"
-          exit 0
+
+          echo "Verificando SPA fallback (reload direto)..."
+          CODE2=$(curl -sS -o /dev/null -w "%{http_code}" https://itapoa.tech/projetos-sociais || echo "000")
+          echo "GET /projetos-sociais -> HTTP $CODE2"
+          if [ "$CODE2" != "200" ]; then
+            echo "ERRO: /projetos-sociais não retornou 200 (SPA fallback pode estar quebrado)"
+            exit 1
+          fi
+
+          echo "Verificando home..."
+          CODE3=$(curl -sS -o /dev/null -w "%{http_code}" https://itapoa.tech/ || echo "000")
+          echo "GET / -> HTTP $CODE3"
+          if [ "$CODE3" != "200" ]; then
+            echo "ERRO: / não retornou 200"
+            exit 1
+          fi
+
+          echo "Deploy verificado com sucesso em https://itapoa.tech"

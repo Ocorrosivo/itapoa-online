@@ -1,82 +1,70 @@
-# 🚀 Guia de Implantação Validado (Hostinger)
+# 🚀 Guia de Implantação — Hostinger VPS (itapoa.tech)
 
-Produção: `https://ajborrachariamovel.com.br`. O domínio antigo `itapoa.online`
-permanece separado, com seu WordPress.
+**Produção:** `https://itapoa.tech` (VPS `2.24.209.225` / `srv2075519.hstgr.cloud`, Ubuntu 26.04, Caddy em frente ao Node).
+Domínio legado `ajborrachariamovel.com.br` permanece referência antiga quando citado.
 
-## REQUISITOS DO PROJETO
-- **Node.js:** `>= 20.0.0` (Devido à compilação e CommonJS compatibilities).
-- **Banco de Dados:** MySQL ou MariaDB. O script não possui resquícios de PostgreSQL, UUID nativo, nem Row-Level Security. É puro MySQL.
-- **Armazenamento:** Acesso local à pasta de projeto onde o Node.js rodará, com capacidade para ler/escrever arquivos no diretório `uploads`.
+## Fluxo final (não entrar na VPS manualmente)
 
----
+1. **Merge/PR na `main` dispara publicação automática.** Todo `push` em `main` e todo **merge de PR** para `main` roda o workflow `Deploy Hostinger` (`.github/workflows/deploy-hostinger.yml`).
+2. **Execução manual:** GitHub → Actions → *Deploy Hostinger* → *Run workflow* (mesma branch = `main`).
+3. **Concorrência:** `cancel-in-progress: true` — uma publicação em andamento é cancelada quando uma mais nova entra, evitando versión antiga sobrescrever a nova.
 
-## CONFIGURAÇÕES QUE PRECISAM SER CONFIRMADAS NA HOSTINGER
+## O que o deploy faz
 
-### 1. Criar o Banco e Usuário
-*Precisa ser feito no hPanel (Bancos de Dados > Gerenciamento).*
-1. Crie o banco `itapoa_online` e um usuário com todos os privilégios.
-2. Acesse o **phpMyAdmin** fornecido pela Hostinger e importe **NA ORDEM**:
-   1. `database/schema/MYSQL_SCHEMA.sql` (estrutura das tabelas)
-   2. `database/schema/SEED.sql` (dados obrigatórios: papéis, admin master e planos)
-   3. `database/schema/SEED_DEMO.sql` (catálogo demo: cidades, bairros, categorias e 16 empresas — sem ele a busca retorna vazio)
+- `npm ci` → `npm run lint` (`tsc --noEmit`) → `npm run build` (`vite build && esbuild server.ts → dist/server.cjs`).
+- Valida artefatos `dist/index.html` e `dist/server.cjs` e imprime o commit (`git rev-parse --short HEAD`).
+- Publica `dist/*` na VPS via SCP usando os Secrets `HOSTINGER_HOST / HOSTINGER_USER / HOSTINGER_SSH_PASSWORD / HOSTINGER_PORT / HOSTINGER_TARGET`.
+- Reinicia o app: tenta `pm2 restart/reload` quando disponível e, quando aplicável, `touch tmp/restart.txt` (Passenger).
+- Verifica em `https://itapoa.tech`: `/api/health` deve ser `200 {"status":"...","database":"..."}`, `/projetos-sociais` e `/` devem ser `200` (SPA fallback). **Se qualquer verificação falhar, o workflow falha explicitamente.**
 
-> ⚠️ **O SEED.sql é obrigatório, não opcional.** A tabela `users` tem uma
-> foreign key para `roles`, então sem os papéis semeados **todo cadastro falha**.
-> Ele também cria a conta admin master (`admin@itapoa.online`) com uma senha
-> inicial aleatória entregue separadamente — **troque-a após o primeiro login**.
+## Secrets necessários (GitHub → Settings → Secrets → Actions)
 
-### 2. Configurar a Aplicação Node.js
-*No hPanel > Avançado > Node.js:*
-1. **Nova Aplicação**: Configure apontando para a raiz dos arquivos subidos.
-2. **Tipo:** Express, Node 20+, modo Production.
-3. **Startup File:** `dist/server.cjs`
-   **Output directory:** vazio (`null` na API). Express publica a raiz inteira.
-4. **Porta:** Confirme se a Hostinger irá gerenciar a porta através de `process.env.PORT`. (O app está programado para escutar nela de forma invisível).
+| Secret | Exemplo/Nota |
+|---|---|
+| `HOSTINGER_HOST` | `2.24.209.225` |
+| `HOSTINGER_USER` | `root` (ou usuário deploy dedicado) |
+| `HOSTINGER_SSH_PASSWORD` | senha SSH do usuário acima — **nunca no repo** |
+| `HOSTINGER_PORT` | `22` (ou porta custom) |
+| `HOSTINGER_TARGET` | caminho absoluto do app na VPS, ex. `/var/www/itapoa.tech` ou `/root/itapoa-online` — confirme com `pwd` + `pm2 list` na VPS |
 
-### 3. Inserir Variáveis de Ambiente
-*Insira diretamente no painel de controle do app Node.js:*
+> Sem esses Secrets o workflow faz build/lint/build corretamente, mas **falha ao publicar** com mensagem clara (não é “sucesso falso”).
+
+## Variáveis de ambiente na VPS (não versionadas)
+
+Estão no painel/serviço da VPS (pm2 env, systemd, Caddy env ou arquivo `.env` no alvo — **não commitar**). Para `itapoa.tech`:
+
 ```text
 NODE_ENV=production
 PORT=3000
-APP_URL=https://ajborrachariamovel.com.br
-API_URL=https://ajborrachariamovel.com.br/api
-DB_HOST=srv887.hstgr.io
+APP_URL=https://itapoa.tech
+API_URL=https://itapoa.tech/api
+DB_HOST=srv...hstgr.io
 DB_PORT=3306
-DB_NAME=<seu-banco>
-DB_USER=<seu-user>
-DB_PASSWORD=<sua-senha>
-JWT_SECRET=<hash-longo-e-seguro-min-32-caracteres>
-
-# Pagamentos (Mercado Pago) — necessários para cobranças reais
-MERCADOPAGO_ACCESS_TOKEN=APP_USR-xxxx
-MERCADOPAGO_WEBHOOK_SECRET=<segredo-do-webhook-do-painel-mp>
-
-# Opcional: caminho absoluto persistente para uploads (recomendado na Hostinger,
-# para que os arquivos não sejam apagados a cada deploy)
-# UPLOAD_DIR=/home/uXXXX/uploads
+DB_NAME=...
+DB_USER=...
+DB_PASSWORD=...
+JWT_SECRET=... # >= 32 caracteres
+UPLOAD_DIR=/home/.../uploads  # absoluto, fora de dist/
+MERCADOPAGO_ACCESS_TOKEN=APP_USR-... # opcional; sem ele, cobrança retorna 503, site segue ok
+MERCADOPAGO_WEBHOOK_SECRET=...       # webhook: https://itapoa.tech/api/webhooks/mercadopago
 ```
 
-> 💳 **Pagamentos:** sem `MERCADOPAGO_ACCESS_TOKEN`, os endpoints de cobrança
-> retornam 503 (o resto do site funciona). Configure a URL de webhook
-> `https://ajborrachariamovel.com.br/api/webhooks/mercadopago` no painel do Mercado Pago e
-> copie o *webhook secret* para `MERCADOPAGO_WEBHOOK_SECRET`. A ativação da
-> assinatura acontece **apenas** via webhook verificado — nunca pelo frontend.
+## Banco e artefatos persistentes
 
-### 4. Upload dos Arquivos
-1. Acesse o Gerenciador de Arquivos.
-2. Envie o conteúdo do projeto **EXCETO** `.env` e `node_modules`.
-3. Inclua o código-fonte e os manifestos. A Hostinger gera `dist/` no build.
-4. Não inclua `public/.htaccess`: ele substitui o roteamento Node.js gerado pela hospedagem e pode causar 403/404.
+- **Estrutura é `database/schema/MYSQL_SCHEMA.sql`** (fonte única). Ordem de import na primeira carga:
+  1. `MYSQL_SCHEMA.sql`  2. `SEED.sql`  3. `SEED_DEMO.sql`.
+  Não re-executar sem necessidade; **nunca `DROP/TRUNCATE` automático**. O servidor nunca migra sozinho (`reportSchemaState` só loga).
+- **Preservados entre deploys:** banco MySQL, `uploads` (`UPLOAD_DIR`), `.env`/variáveis, certificados Caddy. O deploy só sobrescreve `dist/`.
 
-### 5. Start
-1. No painel do app, clique em **Executar npm install**.
-2. Clique em **Iniciar**.
-3. O servidor estará rodando.
+## Recuperação / rollback
 
-### 6. SSL e Domínio
-Configure SSL para `ajborrachariamovel.com.br` e mantenha o proxy gerenciado pela aplicação Node.js.
+- **Cada merge é um commit na `main`.** Para voltar, reverta o commit (ou faça `git revert <sha>` e `push` em `main`) — o próximo push publica o rollback automaticamente.
+- Na VPS, mantenha `pm2` ou o gerenciamento do painel ativo; se o app não subir, `pm2 logs` e `curl https://itapoa.tech/api/health` indicam a causa. O workflow já valida esses endpoints.
 
-### 7. Verificação
-`GET /api/health` deve responder HTTP 200 com `{"status":"ok","database":"connected"}`.
-`node scripts/smoke-catalog.mjs` valida as buscas no banco configurado.
-`node scripts/smoke-catalog.mjs --offline` verifica o retorno 503 sem queda do processo.
+## Verificação local antes de publicar
+
+```bash
+npm run lint
+npm run build
+test -f dist/index.html && test -f dist/server.cjs && echo ok
+```
