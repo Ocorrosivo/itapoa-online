@@ -21,15 +21,18 @@ interface HeaderProps {
   onOpenAIModal: () => void;
 }
 
-// Ordem exata exigida — labels EXATOS (caixa alta/baixa respeitada)
-const MENU: { label: string; tab: string; badge?: string }[] = [
+// Fase 7 — 10 itens exatos, sem badge, Turismo/Eventos/Informativo separados
+const MENU: { label: string; tab: string }[] = [
   { label: 'Início', tab: 'home' },
-  { label: 'PROJETOS SOCIAIS', tab: 'projetos-sociais', badge: 'Em breve' },
-  { label: 'CATEGORIAS', tab: 'categorias' },
-  { label: 'BAIRROS', tab: 'bairros' },
+  { label: 'Projetos Sociais', tab: 'projetos-sociais' },
+  { label: 'Categorias', tab: 'categorias' },
+  { label: 'Bairros', tab: 'bairros' },
   { label: 'Empresas', tab: 'empresas' },
-  { label: 'Turismo / Eventos / Informativo', tab: 'turismo' },
-  { label: 'EMPREGOS', tab: 'empregos' },
+  { label: 'Turismo', tab: 'turismo' },
+  { label: 'Eventos', tab: 'eventos' },
+  { label: 'Informativo', tab: 'informativo' },
+  { label: 'Empregos', tab: 'empregos' },
+  { label: 'Contato', tab: 'contato' },
 ];
 
 export const Header: React.FC<HeaderProps> = ({
@@ -134,13 +137,13 @@ export const Header: React.FC<HeaderProps> = ({
 
       <header className="sticky top-0 z-40 bg-[#0A0915] border-b border-slate-800 text-white shadow-xl">
         <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-center justify-between h-12 text-[10px] sm:text-xs font-bold uppercase tracking-wider">
-            <nav className="hidden lg:flex items-center h-full">
-              {MENU.map(item => (
+          <div className="flex items-center justify-between min-h-12 text-[11px] sm:text-xs font-bold uppercase tracking-wider">
+            <nav className="hidden lg:flex items-center h-full flex-wrap">
+              {MENU.slice(0, 5).map(item => (
                 <button
                   key={item.tab}
                   onClick={() => handleNav(item.tab)}
-                  className={`h-full px-3 flex items-center justify-center transition whitespace-nowrap gap-1.5 ${
+                  className={`h-12 px-3 flex items-center justify-center transition whitespace-nowrap gap-1.5 ${
                     isActive(item.tab)
                       ? item.tab === 'home'
                         ? 'bg-[#C8102E] text-white font-black'
@@ -149,17 +152,36 @@ export const Header: React.FC<HeaderProps> = ({
                   }`}
                 >
                   {item.label}
-                  {item.badge && (
-                    <span className="text-[7px] font-black leading-none bg-amber-400 text-slate-900 px-1 py-0.5 rounded uppercase tracking-wider">
-                      {item.badge}
-                    </span>
-                  )}
+                </button>
+              ))}
+              <div className="flex flex-col border-l border-slate-800 ml-1 pl-1">
+                {MENU.slice(5, 8).map(item => (
+                  <button
+                    key={item.tab}
+                    onClick={() => handleNav(item.tab)}
+                    className={`h-6 px-3 flex items-center justify-start transition whitespace-nowrap text-[10px] ${
+                      isActive(item.tab) ? 'bg-slate-800 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              {MENU.slice(8).map(item => (
+                <button
+                  key={item.tab}
+                  onClick={() => handleNav(item.tab)}
+                  className={`h-12 px-3 flex items-center justify-center transition whitespace-nowrap gap-1.5 ${
+                    isActive(item.tab) ? 'bg-slate-800 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  {item.label}
                 </button>
               ))}
 
               <button
                 onClick={onOpenAuthModal}
-                className="px-3 py-3 text-cyan-400 hover:text-cyan-300 hover:bg-slate-800 transition flex items-center gap-1 font-bold whitespace-nowrap"
+                className="h-12 px-3 text-cyan-400 hover:text-cyan-300 hover:bg-slate-800 transition flex items-center gap-1 font-bold whitespace-nowrap"
               >
                 <span>VIP 💎</span>
               </button>
@@ -209,7 +231,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Mobile drawer — mesma ordem e labels exatos */}
+        {/* Mobile drawer — mesma ordem, lista vertical */}
         {mobileOpen && (
           <div className="lg:hidden border-t border-slate-800 bg-[#0A0915]">
             <nav className="flex flex-col py-2">
@@ -222,11 +244,6 @@ export const Header: React.FC<HeaderProps> = ({
                   }`}
                 >
                   <span>{item.label}</span>
-                  {item.badge && (
-                    <span className="text-[7px] font-black bg-amber-400 text-slate-900 px-1.5 py-0.5 rounded uppercase tracking-wider">
-                      {item.badge}
-                    </span>
-                  )}
                 </button>
               ))}
               <button

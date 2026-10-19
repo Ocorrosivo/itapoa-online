@@ -47,10 +47,10 @@ const pathToTabMap: Record<string, string> = {
   'bairros': 'bairros',
   'turismo': 'turismo',
   'tourism': 'turismo',
-  'eventos': 'turismo',
-  'events': 'turismo',
-  'blog': 'turismo',
-  'informativo': 'turismo',
+  'eventos': 'eventos',
+  'events': 'eventos',
+  'blog': 'informativo',
+  'informativo': 'informativo',
   'praias': 'turismo',
   'empregos': 'empregos',
   'rh-empregos': 'empregos',
@@ -323,23 +323,23 @@ export const AppRoutes: React.FC = () => {
 
       case 'turismo':
         return (
-          <div className="space-y-0">
-            <TourismPage
-              onNavigateCompany={handleNavigateCompany}
-              onNavigateTab={handleNavigateTab}
-              onOpenAuthModal={handleOpenAuthModal}
-            />
-            <div id="eventos" className="border-t border-slate-200">
-              <EventsPage
-                onNavigateTab={handleNavigateTab}
-                onOpenAuthModal={handleOpenAuthModal}
-              />
-            </div>
-            <div id="informativo" className="border-t border-slate-200">
-              <BlogPage />
-            </div>
-          </div>
+          <TourismPage
+            onNavigateCompany={handleNavigateCompany}
+            onNavigateTab={handleNavigateTab}
+            onOpenAuthModal={handleOpenAuthModal}
+          />
         );
+
+      case 'eventos':
+        return (
+          <EventsPage
+            onNavigateTab={handleNavigateTab}
+            onOpenAuthModal={handleOpenAuthModal}
+          />
+        );
+
+      case 'informativo':
+        return <BlogPage />;
 
       case 'planos':
         return (

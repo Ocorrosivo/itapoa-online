@@ -4,4 +4,4 @@ Disallow: /admin
 Disallow: /painel
 Disallow: /api/
 
-Sitemap: https://ajborrachariamovel.com.br/sitemap.xml
+Sitemap: https://itapoa.online/sitemap.xml

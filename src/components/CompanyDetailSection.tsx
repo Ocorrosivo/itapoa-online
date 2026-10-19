@@ -324,99 +324,135 @@ export default function CompanyDetailSection({
   return (
     <div id="company_detail_container" className="relative w-full min-h-screen bg-slate-50 pb-20">
 
-      <section id="detail_cover" className="relative w-full h-[350px] bg-slate-900 overflow-hidden">
-        <img
-          src={company.coverImage}
-          alt={company.name}
-          className="w-full h-full object-cover opacity-70"
-          referrerPolicy="no-referrer"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/10 to-transparent" />
+      <section
+        id="detail_cover"
+        className="relative w-full max-w-[1280px] mx-auto rounded-none md:rounded-3xl overflow-hidden bg-slate-900 shadow-sm border border-transparent md:border-slate-200"
+      >
+        {/* Imagem: area fixa com aspect-ratio reserva layout, object-cover cuidadoso */}
+        <div className="relative w-full h-[280px] sm:h-[360px] md:h-[420px] lg:h-[460px] overflow-hidden bg-slate-800">
+          {company.coverImage ? (
+            <img
+              src={company.coverImage}
+              alt={company.name}
+              className="w-full h-full object-cover object-center opacity-85"
+              referrerPolicy="no-referrer"
+              loading="eager"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-slate-800 via-slate-700 to-slate-900 flex items-center justify-center">
+              <span className="text-slate-400 text-sm font-semibold">{company.name}</span>
+            </div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-900/35 to-slate-900/10 pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/15 to-transparent pointer-events-none" />
 
-        <div className="absolute top-6 left-6 right-6 flex items-center justify-between z-10">
-          <button
-            type="button"
-            onClick={onBack}
-            className="px-4 py-2 bg-slate-950/70 border border-white/10 text-white font-semibold text-xs rounded-full hover:bg-slate-950/90 transition flex items-center gap-1.5 backdrop-blur shadow cursor-pointer"
-          >
-            ← Voltar para o Guia
-          </button>
-
-          <div className="flex items-center gap-2">
+          {/* Top bar sobre a imagem: Voltar + Favoritar/Compartilhar */}
+          <div className="absolute top-4 left-4 right-4 sm:top-5 sm:left-5 sm:right-5 flex items-center justify-between z-10 gap-2">
             <button
               type="button"
-              onClick={handleCopyLink}
-              className="p-2.5 bg-slate-950/70 border border-white/10 text-white rounded-full hover:bg-slate-950/95 transition backdrop-blur shadow cursor-pointer"
-              title="Copiar Link da Empresa"
+              onClick={onBack}
+              className="px-4 py-2 bg-slate-950/75 border border-white/20 text-white font-semibold text-xs rounded-full hover:bg-slate-950/90 transition flex items-center gap-1.5 backdrop-blur shadow cursor-pointer shrink-0"
             >
-              <Share2 className="w-4 h-4" />
+              ← Voltar para o Guia
             </button>
-            <button
-              type="button"
-              onClick={() => onToggleFavorite(company.id)}
-              className="p-2.5 bg-slate-950/70 border border-white/10 text-white rounded-full hover:bg-slate-950/95 transition backdrop-blur shadow cursor-pointer"
-            >
-              <Heart className={`w-4 h-4 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-white'}`} />
-            </button>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="p-2.5 bg-slate-950/75 border border-white/20 text-white rounded-full hover:bg-slate-950/95 transition backdrop-blur shadow cursor-pointer"
+                title="Copiar Link da Empresa"
+                aria-label="Copiar link"
+              >
+                <Share2 className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onToggleFavorite(company.id)}
+                className="p-2.5 bg-slate-950/75 border border-white/20 text-white rounded-full hover:bg-slate-950/95 transition backdrop-blur shadow cursor-pointer"
+                aria-label={isFavorited ? 'Remover dos favoritos' : 'Favoritar'}
+              >
+                <Heart className={`w-4 h-4 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-white'}`} />
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="absolute bottom-6 left-6 right-6 z-10 flex flex-col md:flex-row md:items-end md:justify-between gap-6">
-          <div className="flex gap-4 items-center">
-            <img
-              src={company.logo}
-              alt={company.name}
-              className="w-16 h-16 md:w-20 md:h-20 rounded-3xl object-cover border-2 border-white shadow-lg bg-white shrink-0"
-              referrerPolicy="no-referrer"
-            />
-            <div className="text-white">
-              <span className="text-xs font-semibold text-teal-400 uppercase tracking-widest flex items-center gap-1">
-                {currentCategory?.name} • {currentCity?.name}
-              </span>
-              <h1 className="text-xl md:text-3xl font-sans font-black tracking-tight mt-1">{company.name}</h1>
-              <div className="flex items-center gap-2 mt-2">
-                <div className="flex items-center gap-1 bg-amber-500 text-slate-950 px-2 py-0.5 rounded text-xs font-bold">
-                  <Star className="w-3.5 h-3.5 fill-slate-950 text-slate-950" /> {safeRating.toFixed(1)}
+        {/* Faixa de identidade: abaixo da foto, clara, sem sobrepor rostos */}
+        <div className="relative bg-white border-t border-slate-100 px-4 sm:px-6 md:px-8 py-5 md:py-6">
+          <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5 md:gap-6">
+            <div className="flex gap-4 items-start min-w-0 flex-1">
+              {company.logo ? (
+                <img
+                  src={company.logo}
+                  alt={`Logo ${company.name}`}
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border border-slate-200 shadow-sm bg-white shrink-0"
+                  referrerPolicy="no-referrer"
+                  loading="lazy"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 text-slate-500 font-black text-lg">
+                  {company.name.slice(0, 2).toUpperCase()}
                 </div>
-                <span className="text-xs text-slate-300">({toNumber(company.reviewCount, 0)} avaliações autorizadas)</span>
+              )}
+              <div className="min-w-0 flex-1 pt-0.5">
+                <span className="text-[11px] font-bold text-teal-700 uppercase tracking-widest block truncate">
+                  {[currentCategory?.name, currentCity?.name].filter(Boolean).join(' • ') || 'Itapoá'}
+                </span>
+                <h1 className="text-lg sm:text-xl md:text-2xl lg:text-[28px] font-black tracking-tight mt-1 text-slate-900 leading-tight break-words [overflow-wrap:anywhere]">
+                  {company.name}
+                </h1>
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  <span className="inline-flex items-center gap-1 bg-amber-500 text-slate-950 px-2.5 py-1 rounded-full text-xs font-black">
+                    <Star className="w-3.5 h-3.5 fill-slate-950 text-slate-950" aria-hidden /> {safeRating.toFixed(1)}
+                  </span>
+                  <span className="text-xs text-slate-500">({toNumber(company.reviewCount, 0)} avaliações)</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="flex flex-wrap gap-2.5">
-            <button
-              type="button"
-              onClick={handleLeadWhatsAppClick}
-              className="px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-2 shadow-md shadow-emerald-500/10 cursor-pointer active:scale-95 shrink-0"
-            >
-              <svg viewBox="0 0 24 24" className="w-4 h-4 fill-slate-950">
-                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.731-1.456L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.42 9.864-9.864.002-2.637-1.03-5.114-2.906-6.99C16.554 1.874 14.082.84 11.45.84 6.01.84 1.585 5.265 1.581 10.7a9.81 9.81 0 001.448 4.966l-.1.597-1.002 3.655 3.743-.981.577.342z" />
-              </svg>
-              Chamar no WhatsApp
-            </button>
+            <div className="flex flex-wrap gap-2.5 lg:justify-end shrink-0 w-full lg:w-auto">
+              <button
+                type="button"
+                onClick={handleLeadWhatsAppClick}
+                className="flex-1 lg:flex-none min-w-[44px] px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs md:text-sm rounded-xl transition inline-flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-[0.98]"
+              >
+                <svg viewBox="0 0 24 24" className="w-4 h-4 fill-white shrink-0" aria-hidden>
+                  <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.731-1.456L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.42 9.864-9.864.002-2.637-1.03-5.114-2.906-6.99C16.554 1.874 14.082.84 11.45.84 6.01.84 1.585 5.265 1.581 10.7a9.81 9.81 0 001.448 4.966l-.1.597-1.002 3.655 3.743-.981.577.342z" />
+                </svg>
+                <span className="whitespace-nowrap">WhatsApp</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => window.open(`tel:${company.phone}`, '_self')}
-              className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-2 shadow-md shadow-blue-500/10 cursor-pointer active:scale-95 shrink-0"
-            >
-              <Phone className="w-4 h-4 fill-white" />
-              Ligar Agora
-            </button>
+              <button
+                type="button"
+                onClick={() => window.open(`tel:${company.phone}`, '_self')}
+                className="flex-1 lg:flex-none min-w-[44px] px-5 py-3 bg-[#0A0915] hover:bg-slate-800 text-white font-bold text-xs md:text-sm rounded-xl transition inline-flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-[0.98]"
+              >
+                <Phone className="w-4 h-4 shrink-0" aria-hidden />
+                <span className="whitespace-nowrap">Ligar</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={handleCopyLink}
-              className={`px-5 py-3 rounded-xl font-bold text-xs md:text-sm transition flex items-center justify-center gap-2 border shadow-sm cursor-pointer active:scale-95 shrink-0 ${copiedLink ? 'bg-emerald-550 border-emerald-550 text-white' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
-            >
-              <Share2 className="w-4 h-4" />
-              {copiedLink ? '✓ Link Copiado!' : 'Compartilhar Link'}
-            </button>
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className={`flex-1 lg:flex-none min-w-[44px] px-5 py-3 rounded-xl font-bold text-xs md:text-sm transition inline-flex items-center justify-center gap-2 border shadow-sm cursor-pointer active:scale-[0.98] ${copiedLink ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
+                aria-live="polite"
+              >
+                <Share2 className="w-4 h-4 shrink-0" aria-hidden />
+                <span className="whitespace-nowrap">{copiedLink ? 'Copiado!' : 'Compartilhar'}</span>
+              </button>
+            </div>
           </div>
         </div>
       </section>
 
-      <div className="max-w-7xl mx-auto px-4 md:px-8 mt-10">
+      <div className="max-w-[1280px] mx-auto px-4 md:px-6 lg:px-8 mt-6 md:mt-8">
         <div className="flex border-b border-slate-200 gap-4 md:gap-8 mb-8 overflow-x-auto whitespace-nowrap scrollbar-none">
           <button
             onClick={() => setActiveTab('info')}
