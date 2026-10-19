@@ -128,7 +128,7 @@ const isPanelTab = (tab: string) => PANEL_TABS.includes(tab);
 const isAuthTab = (tab: string) => AUTH_TABS.includes(tab);
 
 export const AppRoutes: React.FC = () => {
-  const { campaigns } = useCompany();
+  const { campaigns, loading } = useCompany();
   const { isAdminMaster } = useAuth();
   const initialRoute = getInitialRoute();
 
@@ -274,12 +274,28 @@ export const AppRoutes: React.FC = () => {
     }
 
     if (activeCampaignSlug) {
-      const campaign = campaigns.find(c => c.slug === activeCampaignSlug) || campaigns[0];
+      const campaign = campaigns.find(c => c.slug === activeCampaignSlug);
+      if (campaign) {
+        return (
+          <CampaignDetailSection
+            campaign={campaign}
+            onBack={() => setActiveCampaignSlug(null)}
+          />
+        );
+      }
+      if (loading) {
+        return <LoadingSpinner text="Carregando projeto social..." />;
+      }
       return (
-        <CampaignDetailSection
-          campaign={campaign}
-          onBack={() => setActiveCampaignSlug(null)}
-        />
+        <div className="max-w-lg mx-auto my-12 p-8 bg-white border border-slate-200 rounded-3xl text-center space-y-4">
+          <h2 className="text-lg font-bold text-slate-800">Projeto social não encontrado</h2>
+          <button
+            onClick={() => setActiveCampaignSlug(null)}
+            className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold"
+          >
+            Voltar
+          </button>
+        </div>
       );
     }
 
@@ -335,13 +351,31 @@ export const AppRoutes: React.FC = () => {
         );
 
       case 'projetos-sociais':
+        if (campaigns[0]) {
+          return (
+            <CampaignDetailSection
+              campaign={campaigns[0]}
+              onBack={() => handleNavigateTab('home')}
+            />
+          );
+        }
+        if (loading) {
+          return <LoadingSpinner text="Carregando projetos sociais..." />;
+        }
         return (
           <div className="max-w-3xl mx-auto px-4 py-16 text-center">
             <span className="inline-block text-[11px] font-black uppercase tracking-widest bg-amber-400 text-slate-900 px-3 py-1 rounded-full mb-4">Em breve</span>
             <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">Projetos Sociais</h1>
             <p className="text-sm text-slate-500 mt-3 leading-relaxed">
-              Estamos preparando novidades para esta seção. Volte em breve para conhecer os projetos sociais de Itapoá.
+              {loading
+                ? 'Carregando projetos sociais...'
+                : 'Estamos preparando novidades para esta seção. Volte em breve para conhecer os projetos sociais de Itapoá.'}
             </p>
+            {loading && (
+              <div className="mt-6 flex justify-center">
+                <LoadingSpinner text="Carregando projetos sociais..." />
+              </div>
+            )}
             <button
               onClick={() => handleNavigateTab('home')}
               className="mt-8 inline-flex items-center gap-2 px-6 py-3 bg-[#C8102E] hover:bg-red-700 text-white text-xs font-black uppercase tracking-wider rounded-xl transition shadow-md"

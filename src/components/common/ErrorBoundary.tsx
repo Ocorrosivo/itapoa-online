@@ -6,18 +6,18 @@
  * and "Voltar ao Início" recovery (navegacao fix).
  */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ReactAny: any = require('react');
+import React from 'react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
+
+const ReactAny: any = React;
 const ComponentBase: any = ReactAny.Component;
-const AlertTriangle: any = (() => {
-  try { return require('lucide-react').AlertTriangle; } catch { return () => null; }
-})();
-const RefreshCw: any = (() => {
-  try { return require('lucide-react').RefreshCw; } catch { return () => null; }
-})();
+
+type ErrorBoundaryState = { hasError: boolean; error: Error | null };
 
 export class ErrorBoundary extends ComponentBase {
-  state = { hasError: false, error: null };
+  declare props: { fallback?: React.ReactNode; children?: React.ReactNode };
+  declare setState: (state: Partial<ErrorBoundaryState>) => void;
+  state: ErrorBoundaryState = { hasError: false, error: null };
 
   static getDerivedStateFromError(error: Error) {
     return { hasError: true, error };
@@ -29,11 +29,19 @@ export class ErrorBoundary extends ComponentBase {
 
   componentDidMount(): void {
     this._attachWindowListeners();
+    window.addEventListener('popstate', this._popStateHandler);
   }
 
   componentWillUnmount(): void {
     this._detachWindowListeners();
+    window.removeEventListener('popstate', this._popStateHandler);
   }
+
+  _popStateHandler = (): void => {
+    if (this.state.hasError) {
+      this.setState({ hasError: false, error: null });
+    }
+  };
 
   _errorHandler = (event: ErrorEvent) => {
     const msg = event.message || '';
