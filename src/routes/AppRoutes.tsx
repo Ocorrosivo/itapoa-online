@@ -14,8 +14,6 @@ import { EventsPage } from '../pages/EventsPage';
 import { BlogPage } from '../pages/BlogPage';
 import { JobsPage } from '../pages/JobsPage';
 import { PlansPage } from '../pages/PlansPage';
-import { AdminDashboardPage } from '../pages/AdminDashboardPage';
-import { EmpresarioDashboardPage } from '../pages/EmpresarioDashboardPage';
 import { BairroDetailPage } from '../pages/BairroDetailPage';
 import { PraiaDetailPage } from '../pages/PraiaDetailPage';
 import { InstitutionalPage } from '../pages/institutional/InstitutionalPage';
@@ -217,10 +215,11 @@ export const AppRoutes: React.FC = () => {
       return (
         <ErrorBoundary fallback={<div className="min-h-[calc(100vh-13rem)] bg-slate-950 text-white p-6 text-center flex flex-col items-center justify-center gap-4"><p className="text-sm text-slate-300">Erro ao carregar empresa.</p><button onClick={() => handleNavigateCompany(null)} className="px-4 py-2 bg-blue-600 rounded-xl text-white text-sm font-semibold">Voltar ao Guia</button></div>}>
           <CompanyMiniSitePage
-          slug={activeCompanySlug}
-          onBack={() => handleNavigateCompany(null)}
-          onNavigateCompany={handleNavigateCompany}
-        />
+            slug={activeCompanySlug}
+            onBack={() => handleNavigateCompany(null)}
+            onNavigateCompany={handleNavigateCompany}
+          />
+        </ErrorBoundary>
       );
     }
 
