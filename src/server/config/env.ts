@@ -66,8 +66,8 @@ export const env = {
   isProduction: process.env.NODE_ENV === 'production',
   port: Number(process.env.PORT || 3000),
   uploadDir: process.env.UPLOAD_DIR || 'uploads',
-  appUrl: process.env.APP_URL || 'https://ajborrachariamovel.com.br',
-  apiUrl: process.env.API_URL || `${process.env.APP_URL || 'https://ajborrachariamovel.com.br'}/api`,
+  appUrl: (process.env.APP_URL || 'https://itapoa.online').replace(/\/$/, ''),
+  apiUrl: (process.env.API_URL || `${(process.env.APP_URL || 'https://itapoa.online').replace(/\/$/, '')}/api`).replace(/\/$/, ''),
 
   db: {
     host: required('DB_HOST'),

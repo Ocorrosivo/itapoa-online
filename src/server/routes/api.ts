@@ -296,6 +296,36 @@ apiRouter.post('/payments/pix', requireAuth, requireCompanyAccess, handler(async
   res.json(await paymentService.createPixPayment(req.user!.id, companyId, planId, payerEmail));
 }));
 
+// Recover a valid PIX attempt after a reload without creating a duplicate charge.
+apiRouter.get('/payments/pix/active', requireAuth, attachCompanyScope, handler(async (req, res) => {
+  const companyId = String(req.query.companyId ?? req.query.company_id ?? '');
+  const planId = String(req.query.planId ?? '');
+  if (!companyId || !planId) return res.status(400).json({ error: 'companyId e planId obrigatórios.' });
+  const owned = req.companyIds ?? [];
+  if (owned.length > 0 && !owned.includes(companyId) && req.user!.role !== 'admin_master') {
+    return res.status(403).json({ error: 'Acesso negado a esta empresa.' });
+  }
+  const active = await paymentService.getActivePixForCompany(companyId, planId, req.user!.id);
+  if (!active) return res.json(null);
+  res.json(active);
+}));
+
+// Lightweight status poll: Pix (pending/approved) + Checkout (pending/active).
+// Does not mark anything paid — the webhook remains the sole activation path.
+apiRouter.get('/payments/subscription/:id/status', requireAuth, handler(async (req, res) => {
+  const subId = String(req.params.id || '');
+  if (!subId) return res.status(400).json({ error: 'subscriptionId obrigatório.' });
+  const [rows]: any = await (await import('../mysql.js')).pool.query(
+    'SELECT status, planId, companyId FROM subscriptions WHERE id = ? LIMIT 1',
+    [subId]
+  );
+  if (rows.length === 0) return res.status(404).json({ error: 'Assinatura não encontrada.' });
+  const owns = req.user!.role === 'admin_master'
+    || (await (await import('../middleware/auth.js')).loadUserCompanies(req.user!.id)).includes(String(rows[0].companyId));
+  if (!owns) return res.status(403).json({ error: 'Acesso negado.' });
+  res.json({ status: rows[0].status, planId: rows[0].planId, companyId: rows[0].companyId });
+}));
+
 // Create a Checkout Pro preference (card) and return the hosted checkout URL.
 apiRouter.post('/payments/checkout', requireAuth, requireCompanyAccess, handler(async (req, res) => {
   const companyId = (req.companyIds && req.companyIds[0]) || String(req.body?.companyId ?? req.body?.company_id ?? '');

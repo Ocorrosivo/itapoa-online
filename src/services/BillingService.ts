@@ -14,6 +14,7 @@ export interface PixDetails {
   amount: number;
   expirationDate: string;
   expiresInSeconds: number;
+  subscriptionId: string;
 }
 
 interface PixApiResponse {
@@ -26,6 +27,36 @@ interface PixApiResponse {
 }
 
 export class BillingService {
+  private static toPixDetails(res: PixApiResponse): PixDetails {
+    const expiresInSeconds = Math.max(
+      0,
+      Math.floor((new Date(res.expirationDate).getTime() - Date.now()) / 1000)
+    );
+    return {
+      paymentId: res.paymentId,
+      qrCode: res.qrCode,
+      qrCodeBase64: res.qrCodeBase64,
+      amount: res.amount,
+      expirationDate: res.expirationDate,
+      expiresInSeconds: expiresInSeconds || 1800,
+      subscriptionId: res.subscriptionId
+    };
+  }
+
+  /** Active PIX for a company/plan (recover after reload without duplicate). */
+  static async getActivePix(companyId: string, planCode: string): Promise<PixDetails | null> {
+    const params = new URLSearchParams({ companyId, planId: planCode });
+    const res = await api.get<PixApiResponse | null>(`/api/payments/pix/active?${params.toString()}`);
+    if (!res) return null;
+    return BillingService.toPixDetails(res as PixApiResponse);
+  }
+
+  /** Poll per-subscription status (Pix + Checkout). Webhook remains activation path. */
+  static async getSubscriptionStatusById(subscriptionId: string): Promise<string> {
+    const res = await api.get<{ status: string }>(`/api/payments/subscription/${encodeURIComponent(subscriptionId)}/status`);
+    return res.status;
+  }
+
   /**
    * Creates a real PIX charge on the backend and returns the QR issued by
    * Mercado Pago. planCode is the plan id (e.g. plan_gold_vip).
@@ -42,19 +73,7 @@ export class BillingService {
       payerEmail
     });
 
-    const expiresInSeconds = Math.max(
-      0,
-      Math.floor((new Date(res.expirationDate).getTime() - Date.now()) / 1000)
-    );
-
-    return {
-      paymentId: res.paymentId,
-      qrCode: res.qrCode,
-      qrCodeBase64: res.qrCodeBase64,
-      amount: res.amount,
-      expirationDate: res.expirationDate,
-      expiresInSeconds: expiresInSeconds || 1800
-    };
+    return BillingService.toPixDetails(res);
   }
 
   /**

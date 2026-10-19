@@ -61,16 +61,23 @@ app.post('/api/webhooks/mercadopago', express.json({ limit: '256kb' }), async (r
     const signature = req.header('x-signature');
     const requestId = req.header('x-request-id');
     const dataId = String(
-      (req.query['data.id'] as string) || req.body?.data?.id || req.body?.id || ''
-    );
+      (req.query['data.id'] as string) ||
+      (req.query['topic'] === 'payment' ? (req.query['id'] as string) : '') ||
+      req.body?.data?.id ||
+      req.body?.id ||
+      (typeof req.body?.resource === 'string' ? req.body.resource.split('/').pop() : '') ||
+      ''
+    ).trim();
 
-    if (!paymentService.verifyWebhookSignature(signature, requestId, dataId)) {
-      // Acknowledge to stop retries, but do nothing on an unverified call.
+    const ok = paymentService.verifyWebhookSignature(signature, requestId, dataId);
+    if (!ok) {
+      console.warn(`[webhook] invalid signature dataId=${dataId || 'missing'} ts=${String(req.header('x-signature') || '').slice(0, 80)}`);
       return res.status(200).json({ received: true });
     }
 
-    const type = req.body?.type || req.query['type'];
-    if ((type === 'payment' || req.body?.action?.startsWith('payment')) && dataId) {
+    const type = req.body?.type || req.query['type'] || req.query['topic'];
+    const action: string = req.body?.action || '';
+    if ((type === 'payment' || action.startsWith('payment')) && dataId) {
       await paymentService.handlePaymentNotification(dataId);
     }
     res.status(200).json({ received: true });
@@ -145,7 +152,7 @@ app.post('/api/upload', requireAuth, upload.single('file'), (req, res) => {
 // Public sitemap. Built from live company slugs so search engines can reach
 // every mini-site. Falls back to static pages only if the DB is unreachable.
 app.get('/sitemap.xml', async (_req, res) => {
-  const base = (env.appUrl || 'https://itapoa.online').replace(/\/$/, '');
+  const base = env.appUrl.replace(/\/$/, '');
   const now = new Date().toISOString().split('T')[0];
   const staticPages = ['', '/empresas', '/turismo', '/eventos', '/blog', '/planos'];
 
