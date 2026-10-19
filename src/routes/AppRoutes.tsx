@@ -1,11 +1,4 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- * Application Routes & SPA Router Navigation Handler
- * Self-contained navigation state manager
- */
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { HomePage } from '../pages/HomePage';
 import { DirectoryPage } from '../pages/DirectoryPage';
 import { CompanyMiniSitePage } from '../pages/CompanyMiniSitePage';
@@ -14,8 +7,6 @@ import { EventsPage } from '../pages/EventsPage';
 import { BlogPage } from '../pages/BlogPage';
 import { JobsPage } from '../pages/JobsPage';
 import { PlansPage } from '../pages/PlansPage';
-import { AdminDashboardPage } from '../pages/AdminDashboardPage';
-import { EmpresarioDashboardPage } from '../pages/EmpresarioDashboardPage';
 import { BairroDetailPage } from '../pages/BairroDetailPage';
 import { PraiaDetailPage } from '../pages/PraiaDetailPage';
 import { InstitutionalPage } from '../pages/institutional/InstitutionalPage';
@@ -23,13 +14,16 @@ import CampaignDetailSection from '../components/CampaignDetailSection';
 import { AIModal } from '../components/common/AIModal';
 import { Header } from '../components/common/Header';
 import { Footer } from '../components/common/Footer';
-import UserAuthModal from '../components/UserAuthModal';
 import { useCompany } from '../context/CompanyContext';
 import { useAuth } from '../context/AuthContext';
 import { LoginPage } from '../pages/auth/LoginPage';
 import { AdminLoginPage } from '../pages/auth/AdminLoginPage';
 import { RegisterPage } from '../pages/auth/RegisterPage';
 import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage';
+import { LoadingSpinner } from '../components/common/LoadingSpinner';
+
+const AdminDashboardPage = lazy(() => import('../pages/AdminDashboardPage').then(m => ({ default: m.AdminDashboardPage })));
+const EmpresarioDashboardPage = lazy(() => import('../pages/EmpresarioDashboardPage').then(m => ({ default: m.EmpresarioDashboardPage })));
 
 const pathToTabMap: Record<string, string> = {
   'empresas': 'empresas',
@@ -78,7 +72,6 @@ const getInitialRoute = () => {
   };
 };
 
-// Rotas isoladas: painel e autenticação, servidas em tela cheia sem Header/Footer do site público.
 const PANEL_TABS = ['admin', 'painel', 'login', 'login/admin', 'cadastro', 'esqueci-senha'];
 const isPanelTab = (tab: string) => PANEL_TABS.includes(tab);
 
@@ -87,7 +80,6 @@ export const AppRoutes: React.FC = () => {
   const { isAdminMaster } = useAuth();
   const initialRoute = getInitialRoute();
 
-  // Navigation state — self-contained with URL sync
   const [currentTab, setCurrentTab] = useState<string>(initialRoute.tab);
   const [activeCompanySlug, setActiveCompanySlug] = useState<string | null>(initialRoute.companySlug);
   const [activeCampaignSlug, setActiveCampaignSlug] = useState<string | null>(null);
@@ -114,8 +106,7 @@ export const AppRoutes: React.FC = () => {
     setActiveBairroSlug(null);
     setActivePraiaSlug(null);
     setActiveInstitutional(null);
-    
-    // Normalize tab alias if passed legacy name
+
     const normalizedTab = pathToTabMap[tab] || tab;
     setCurrentTab(normalizedTab);
 
@@ -136,7 +127,6 @@ export const AppRoutes: React.FC = () => {
   const handleOpenAuthModal = () => handleNavigateTab('login');
 
   const renderContent = () => {
-    // Active Company Mini-Site
     if (activeCompanySlug) {
       return (
         <CompanyMiniSitePage
@@ -147,7 +137,6 @@ export const AppRoutes: React.FC = () => {
       );
     }
 
-    // Active Bairro Detail
     if (activeBairroSlug) {
       return (
         <BairroDetailPage
@@ -158,7 +147,6 @@ export const AppRoutes: React.FC = () => {
       );
     }
 
-    // Active Praia Detail
     if (activePraiaSlug) {
       return (
         <PraiaDetailPage
@@ -169,7 +157,6 @@ export const AppRoutes: React.FC = () => {
       );
     }
 
-    // Active Institutional Page
     if (activeInstitutional) {
       return (
         <InstitutionalPage
@@ -180,7 +167,6 @@ export const AppRoutes: React.FC = () => {
       );
     }
 
-    // Active Solidarity Campaign
     if (activeCampaignSlug) {
       const campaign = campaigns.find(c => c.slug === activeCampaignSlug) || campaigns[0];
       return (
@@ -194,7 +180,6 @@ export const AppRoutes: React.FC = () => {
     return renderTab();
   };
 
-  // Dedicated Auth Routes & Navigation Tabs
   const renderTab = () => {
     switch (currentTab) {
       case 'login':
@@ -294,17 +279,23 @@ export const AppRoutes: React.FC = () => {
       case 'admin':
         if (isAdminMaster) {
           return (
-            <AdminDashboardPage
-              onOpenAuthModal={handleOpenAuthModal}
-              onNavigateCompany={handleNavigateCompany}
-              onNavigateTab={handleNavigateTab}
-            />
+            <Suspense fallback={<LoadingSpinner />}>
+              <AdminDashboardPage
+                onOpenAuthModal={handleOpenAuthModal}
+                onNavigateCompany={handleNavigateCompany}
+                onNavigateTab={handleNavigateTab}
+              />
+            </Suspense>
           );
         }
         return <AdminLoginPage onNavigateTab={handleNavigateTab} />;
 
       case 'painel':
-        return <EmpresarioDashboardPage onOpenAuthModal={handleOpenAuthModal} />;
+        return (
+          <Suspense fallback={<LoadingSpinner />}>
+            <EmpresarioDashboardPage onOpenAuthModal={handleOpenAuthModal} />
+          </Suspense>
+        );
 
       case 'home':
       default:
@@ -320,8 +311,6 @@ export const AppRoutes: React.FC = () => {
     }
   };
 
-  // /admin e /painel são áreas próprias: shell isolado, sem Header/Footer do portal.
-  // Vale também para as telas de login/bloqueio dos guards, que são fullscreen.
   const isPanelRoute = !activeCompanySlug && !activeBairroSlug && !activePraiaSlug &&
     !activeInstitutional && !activeCampaignSlug && isPanelTab(currentTab);
 

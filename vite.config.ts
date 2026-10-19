@@ -11,11 +11,22 @@ export default defineConfig(() => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) return 'react';
+            if (id.includes('node_modules/motion') || id.includes('node_modules/framer')) return 'motion';
+            if (id.includes('admin_master') || id.includes('AdminPanel') || id.includes('AdminDashboard')) return 'admin';
+            if (id.includes('portal_lojista') || id.includes('EmpresarioDashboard')) return 'lojista';
+            return undefined;
+          },
+        },
+      },
+      chunkSizeWarningLimit: 600,
+    },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
-      // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
   };
