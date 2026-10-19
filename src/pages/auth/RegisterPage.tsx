@@ -63,8 +63,8 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateTab }) => 
   };
 
   return (
-    <div className="min-h-[calc(100vh-13rem)] bg-slate-950 text-white flex flex-col justify-center items-center px-4 py-16 font-sans relative overflow-hidden">
-      
+    <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center px-4 py-16 font-sans relative overflow-hidden">
+
       {/* Background Aura */}
       <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
 
@@ -80,15 +80,21 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateTab }) => 
       </div>
 
       <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6 relative z-10">
-        
+
         {/* Header */}
         <div className="text-center space-y-2">
-          <img
-            src="/logotipo.png"
-            alt="Itapoá Online"
-            className="h-12 w-auto mx-auto object-contain cursor-pointer"
-            onClick={() => { window.location.href = '/'; }}
-          />
+          <button
+            type="button"
+            onClick={() => onNavigateTab('home')}
+            className="mx-auto block"
+            aria-label="Voltar à página inicial"
+          >
+            <img
+              src="/logotipo.png"
+              alt="Itapoá Online"
+              className="h-12 w-auto object-contain"
+            />
+          </button>
           <span className="text-[10px] font-black tracking-widest text-emerald-400 uppercase block">
             CADASTRO DE PARCEIRO COMERCIAL
           </span>

@@ -23,7 +23,6 @@ import CampaignDetailSection from '../components/CampaignDetailSection';
 import { AIModal } from '../components/common/AIModal';
 import { Header } from '../components/common/Header';
 import { Footer } from '../components/common/Footer';
-import UserAuthModal from '../components/UserAuthModal';
 import { useCompany } from '../context/CompanyContext';
 import { useAuth } from '../context/AuthContext';
 import { LoginPage } from '../pages/auth/LoginPage';
@@ -61,26 +60,60 @@ const pathToTabMap: Record<string, string> = {
   'admin': 'admin'
 };
 
-const getInitialRoute = () => {
-  const path = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
-  const companyMatch = path.match(/^empresa\/([^/]+)$/);
+const AUTH_TABS = ['login', 'login/admin', 'cadastro', 'esqueci-senha'];
 
+interface ParsedRoute {
+  tab: string;
+  companySlug: string | null;
+  bairroSlug: string | null;
+  praiaSlug: string | null;
+}
+
+const getInitialRoute = (): ParsedRoute => {
+  const path = window.location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+
+  const companyMatch = path.match(/^empresa\/([^/]+)$/);
   if (companyMatch) {
     return {
       tab: 'empresas',
-      companySlug: decodeURIComponent(companyMatch[1])
+      companySlug: decodeURIComponent(companyMatch[1]),
+      bairroSlug: null,
+      praiaSlug: null
+    };
+  }
+
+  const bairroMatch = path.match(/^bairro\/([^/]+)$/);
+  if (bairroMatch) {
+    return {
+      tab: 'home',
+      companySlug: null,
+      bairroSlug: decodeURIComponent(bairroMatch[1]),
+      praiaSlug: null
+    };
+  }
+
+  const praiaMatch = path.match(/^praia\/([^/]+)$/);
+  if (praiaMatch) {
+    return {
+      tab: 'home',
+      companySlug: null,
+      bairroSlug: null,
+      praiaSlug: decodeURIComponent(praiaMatch[1])
     };
   }
 
   return {
     tab: pathToTabMap[path] || 'home',
-    companySlug: null
+    companySlug: null,
+    bairroSlug: null,
+    praiaSlug: null
   };
 };
 
-// Rotas de painel: área logada, servida sem o Header/Footer do site público.
+// Rotas sem Header/Footer do site público (painel e autenticação).
 const PANEL_TABS = ['admin', 'painel', 'login/admin'];
 const isPanelTab = (tab: string) => PANEL_TABS.includes(tab);
+const isAuthTab = (tab: string) => AUTH_TABS.includes(tab);
 
 export const AppRoutes: React.FC = () => {
   const { campaigns } = useCompany();
@@ -90,9 +123,9 @@ export const AppRoutes: React.FC = () => {
   // Navigation state — self-contained with URL sync
   const [currentTab, setCurrentTab] = useState<string>(initialRoute.tab);
   const [activeCompanySlug, setActiveCompanySlug] = useState<string | null>(initialRoute.companySlug);
+  const [activeBairroSlug, setActiveBairroSlug] = useState<string | null>(initialRoute.bairroSlug);
+  const [activePraiaSlug, setActivePraiaSlug] = useState<string | null>(initialRoute.praiaSlug);
   const [activeCampaignSlug, setActiveCampaignSlug] = useState<string | null>(null);
-  const [activeBairroSlug, setActiveBairroSlug] = useState<string | null>(null);
-  const [activePraiaSlug, setActivePraiaSlug] = useState<string | null>(null);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [activeInstitutional, setActiveInstitutional] = useState<
     'about' | 'contact' | 'advertise' | 'how-it-works' | 'faq' | 'privacy' | 'terms' | 'help' | null
@@ -103,6 +136,11 @@ export const AppRoutes: React.FC = () => {
       const route = getInitialRoute();
       setCurrentTab(route.tab);
       setActiveCompanySlug(route.companySlug);
+      setActiveBairroSlug(route.bairroSlug);
+      setActivePraiaSlug(route.praiaSlug);
+      // Limpa overlays que não têm rota própria, para não deixar o conteúdo preso.
+      setActiveCampaignSlug(null);
+      setActiveInstitutional(null);
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -114,8 +152,7 @@ export const AppRoutes: React.FC = () => {
     setActiveBairroSlug(null);
     setActivePraiaSlug(null);
     setActiveInstitutional(null);
-    
-    // Normalize tab alias if passed legacy name
+
     const normalizedTab = pathToTabMap[tab] || tab;
     setCurrentTab(normalizedTab);
 
@@ -123,20 +160,54 @@ export const AppRoutes: React.FC = () => {
     if (window.location.pathname !== targetPath) {
       window.history.pushState(null, '', targetPath);
     }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleNavigateCompany = (slug: string | null) => {
     setActiveCompanySlug(slug);
+    if (slug) {
+      setActiveBairroSlug(null);
+      setActivePraiaSlug(null);
+      setActiveInstitutional(null);
+      setActiveCampaignSlug(null);
+    }
     const targetPath = slug ? `/empresa/${encodeURIComponent(slug)}` : '/empresas';
     if (window.location.pathname !== targetPath) {
       window.history.pushState(null, '', targetPath);
     }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSelectBairro = (slug: string) => {
+    setActiveBairroSlug(slug);
+    setActiveCompanySlug(null);
+    setActivePraiaSlug(null);
+    setActiveInstitutional(null);
+    setActiveCampaignSlug(null);
+    const targetPath = `/bairro/${encodeURIComponent(slug)}`;
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState(null, '', targetPath);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSelectPraia = (slug: string) => {
+    setActivePraiaSlug(slug);
+    setActiveCompanySlug(null);
+    setActiveBairroSlug(null);
+    setActiveInstitutional(null);
+    setActiveCampaignSlug(null);
+    const targetPath = `/praia/${encodeURIComponent(slug)}`;
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState(null, '', targetPath);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleOpenAuthModal = () => handleNavigateTab('login');
 
   const renderContent = () => {
-    // Active Company Mini-Site
+    // Active Company Mini-Site — tem rota própria (/empresa/:slug)
     if (activeCompanySlug) {
       return (
         <CompanyMiniSitePage
@@ -147,23 +218,37 @@ export const AppRoutes: React.FC = () => {
       );
     }
 
-    // Active Bairro Detail
+    // Active Bairro Detail — rota própria (/bairro/:slug)
     if (activeBairroSlug) {
       return (
         <BairroDetailPage
           slug={activeBairroSlug}
-          onNavigateBack={() => setActiveBairroSlug(null)}
+          onNavigateBack={() => {
+            if (window.history.length > 1) {
+              window.history.back();
+            } else {
+              setActiveBairroSlug(null);
+              handleNavigateTab('home');
+            }
+          }}
           onNavigateCompany={handleNavigateCompany}
         />
       );
     }
 
-    // Active Praia Detail
+    // Active Praia Detail — rota própria (/praia/:slug)
     if (activePraiaSlug) {
       return (
         <PraiaDetailPage
           slug={activePraiaSlug}
-          onNavigateBack={() => setActivePraiaSlug(null)}
+          onNavigateBack={() => {
+            if (window.history.length > 1) {
+              window.history.back();
+            } else {
+              setActivePraiaSlug(null);
+              handleNavigateTab('home');
+            }
+          }}
           onNavigateCompany={handleNavigateCompany}
         />
       );
@@ -313,15 +398,25 @@ export const AppRoutes: React.FC = () => {
             onNavigateCompany={(slug) => handleNavigateCompany(slug)}
             onNavigateTab={handleNavigateTab}
             onOpenAuthModal={handleOpenAuthModal}
-            onSelectBairro={slug => setActiveBairroSlug(slug)}
-            onSelectPraia={slug => setActivePraiaSlug(slug)}
+            onSelectBairro={handleSelectBairro}
+            onSelectPraia={handleSelectPraia}
           />
         );
     }
   };
 
+  // Telas de autenticação: layout limpo, sem Header/Footer do portal.
+  if (!activeCompanySlug && !activeBairroSlug && !activePraiaSlug &&
+    !activeInstitutional && !activeCampaignSlug && isAuthTab(currentTab)) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col font-sans">
+        {renderContent()}
+        <AIModal isOpen={isAIModalOpen} onClose={() => setIsAIModalOpen(false)} />
+      </div>
+    );
+  }
+
   // /admin e /painel são áreas próprias: shell isolado, sem Header/Footer do portal.
-  // Vale também para as telas de login/bloqueio dos guards, que são fullscreen.
   const isPanelRoute = !activeCompanySlug && !activeBairroSlug && !activePraiaSlug &&
     !activeInstitutional && !activeCampaignSlug && isPanelTab(currentTab);
 

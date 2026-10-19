@@ -68,14 +68,8 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
           
           {/* Brand Logo - ITAPOÁ ONLINE */}
-          <div 
-            onClick={() => {
-              if (window.location.pathname === '/') {
-                window.location.reload();
-              } else {
-                window.location.href = '/';
-              }
-            }}
+          <div
+            onClick={() => onNavigateTab('home')}
             className="flex items-center gap-3 cursor-pointer group"
           >
             <img

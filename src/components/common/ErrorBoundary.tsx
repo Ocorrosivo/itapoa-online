@@ -17,19 +17,31 @@ export function ErrorBoundary({ children }: Props) {
 
   useEffect(() => {
     const errorHandler = (event: ErrorEvent) => {
+      // Ignore errors from browser extensions or non-app scripts.
+      const msg = event.message || '';
+      if (msg.includes('chrome-extension') || msg.includes('moz-extension')) return;
       console.error('Captured window error:', event.error);
       setHasError(true);
       setError(event.error || new Error(event.message));
     };
 
+    const rejectionHandler = (event: PromiseRejectionEvent) => {
+      console.error('Captured unhandled rejection:', event.reason);
+      setHasError(true);
+      setError(event.reason instanceof Error ? event.reason : new Error(String(event.reason)));
+    };
+
     window.addEventListener('error', errorHandler);
-    return () => window.removeEventListener('error', errorHandler);
+    window.addEventListener('unhandledrejection', rejectionHandler);
+    return () => {
+      window.removeEventListener('error', errorHandler);
+      window.removeEventListener('unhandledrejection', rejectionHandler);
+    };
   }, []);
 
   const handleReset = () => {
     setHasError(false);
     setError(null);
-    window.location.reload();
   };
 
   if (hasError) {
@@ -43,7 +55,7 @@ export function ErrorBoundary({ children }: Props) {
           <div className="space-y-2">
             <h2 className="text-xl font-black text-white">Algo deu errado</h2>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Ocorreu uma exceção inesperada na interface. Os dados permanecem seguros no banco de dados.
+              Tente voltar à página inicial. Se o erro persistir, recarregue a aplicação.
             </p>
           </div>
 
@@ -53,13 +65,30 @@ export function ErrorBoundary({ children }: Props) {
             </div>
           )}
 
-          <button
-            onClick={handleReset}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 font-bold text-white text-xs rounded-xl transition shadow-lg flex items-center justify-center gap-2"
-          >
-            <RefreshCw className="w-4 h-4" />
-            <span>Recarregar Aplicação</span>
-          </button>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => {
+                handleReset();
+                // Volta à home sem recarregar toda a aplicação quando possível.
+                try {
+                  window.history.pushState(null, '', '/');
+                  window.dispatchEvent(new PopStateEvent('popstate'));
+                } catch {
+                  window.location.href = '/';
+                }
+              }}
+              className="w-full py-3 bg-slate-800 hover:bg-slate-700 font-bold text-white text-xs rounded-xl transition shadow flex items-center justify-center gap-2"
+            >
+              <span>Voltar ao Início</span>
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 font-bold text-white text-xs rounded-xl transition shadow-lg flex items-center justify-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Recarregar Aplicação</span>
+            </button>
+          </div>
         </div>
       </div>
     );
