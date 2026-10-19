@@ -1,4 +1,4 @@
-name: Fix Caddy TLS (itapoa.online)
+name: Deploy Fix Caddy+APP_URL (itapoa.online)
 
 on:
   workflow_dispatch:
@@ -49,9 +49,6 @@ jobs:
             echo "=== Caddy reload ==="
             caddy reload --config /etc/caddy/Caddyfile 2>&1 || systemctl reload caddy 2>&1 || systemctl restart caddy 2>&1 || echo "caddy reload skip"
 
-            echo "=== Caddy fmt ==="
-            caddy fmt --overwrite /etc/caddy/Caddyfile 2>&1 || true
-
             echo "=== Rebuild + restart app ==="
             cd /opt/itapoa/app
             npm run build 2>&1 | tail -5
@@ -62,8 +59,8 @@ jobs:
             echo "=== Waiting for TLS ==="
             sleep 15
             echo "=== Check TLS ==="
-            curl -fsS https://itapoa.online/api/health 2>&1 | head -5 || echo "TLS check via curl failed, trying openssl"
-            curl -fsS -k https://itapoa.online/api/health 2>&1 | head -5 || true
+            curl -fsS https://itapoa.online/api/health 2>&1 | head -5 || echo "TLS check failed via localhost curl, will check externally"
+            curl -fsSk https://itapoa.online/api/health 2>&1 | head -5 || true
             echo "=== Caddy certs ==="
-            ls /var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/ 2>&1 | head -10
+            ls /var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/ 2>&1 | head -15
             echo "=== done ==="
