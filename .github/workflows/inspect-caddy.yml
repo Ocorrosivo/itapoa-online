@@ -7,7 +7,7 @@ jobs:
   inspect-caddy:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect Caddy config
+      - name: Inspect Caddy + env
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -18,14 +18,11 @@ jobs:
             set -e
             echo "=== Caddyfile ==="
             cat /etc/caddy/Caddyfile 2>/dev/null || echo "no /etc/caddy/Caddyfile"
-            ls -la /etc/caddy/ 2>/dev/null | head -20
-            find /etc -maxdepth 4 -name "Caddyfile*" 2>/dev/null | head -20
-            echo "=== Caddy version ==="
-            caddy version 2>/dev/null || /usr/bin/caddy version 2>/dev/null || echo "caddy not in PATH"
-            echo "=== PM2 ==="
-            pm2 list 2>/dev/null | head -20
-            echo "=== Env check (names only) ==="
-            pm2 env 0 2>/dev/null | grep -E "APP_URL|MERCADOPAGO|NODE_ENV" | sed 's/=.*/=***/' | head -20
-            echo "=== itapoa.online cert ==="
-            ls /var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/ 2>/dev/null | head -20
+            echo "=== .env in app ==="
+            ls -la /opt/itapoa/app/.env 2>/dev/null | head -5
+            grep -E "^(APP_URL|API_URL|MERCADOPAGO|NODE_ENV|PORT)=" /opt/itapoa/app/.env 2>/dev/null | sed 's/=.*/=***/' | head -20 || echo "no .env or no matching vars"
+            echo "=== pm2 env ==="
+            pm2 env 0 2>/dev/null | grep -E "APP_URL|MERCADOPAGO|NODE_ENV" | sed 's/=.*/=***/' | head -20 || echo "no pm2 env"
+            echo "=== ecosystem ==="
+            cat /opt/itapoa/app/ecosystem.config.js 2>/dev/null | head -40 || echo "no ecosystem file"
             echo "=== done ==="
