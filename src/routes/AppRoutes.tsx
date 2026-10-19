@@ -336,10 +336,19 @@ export const AppRoutes: React.FC = () => {
 
       case 'projetos-sociais':
         return (
-          <CampaignDetailSection
-            campaign={campaigns[0]}
-            onBack={() => handleNavigateTab('home')}
-          />
+          <div className="max-w-3xl mx-auto px-4 py-16 text-center">
+            <span className="inline-block text-[11px] font-black uppercase tracking-widest bg-amber-400 text-slate-900 px-3 py-1 rounded-full mb-4">Em breve</span>
+            <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">Projetos Sociais</h1>
+            <p className="text-sm text-slate-500 mt-3 leading-relaxed">
+              Estamos preparando novidades para esta seção. Volte em breve para conhecer os projetos sociais de Itapoá.
+            </p>
+            <button
+              onClick={() => handleNavigateTab('home')}
+              className="mt-8 inline-flex items-center gap-2 px-6 py-3 bg-[#C8102E] hover:bg-red-700 text-white text-xs font-black uppercase tracking-wider rounded-xl transition shadow-md"
+            >
+              Voltar ao início
+            </button>
+          </div>
         );
 
       case 'empregos':
