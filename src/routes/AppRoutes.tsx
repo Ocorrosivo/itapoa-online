@@ -166,11 +166,32 @@ export const AppRoutes: React.FC = () => {
     const normalizedTab = pathToTabMap[tab] || tab;
     setCurrentTab(normalizedTab);
 
-    const targetPath = normalizedTab === 'home' ? '/' : `/${normalizedTab}`;
+    // Turismo: destinos distintos preservando URL e permitindo acesso direto / refresh.
+    // /turismo, /eventos e /informativo mapeiam para o mesmo tab mas com path próprio;
+    // a página /turismo contém as três seções com âncoras #turismo/#eventos/#informativo.
+    const turismoPathMap: Record<string, string> = {
+      turismo: '/turismo',
+      eventos: '/eventos',
+      informativo: '/informativo',
+      blog: '/informativo',
+      events: '/eventos',
+    };
+    const distinctPath = turismoPathMap[tab];
+    const targetPath = distinctPath ?? (normalizedTab === 'home' ? '/' : `/${normalizedTab}`);
+
     if (window.location.pathname !== targetPath) {
       window.history.pushState(null, '', targetPath);
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    if (['eventos', 'informativo', 'blog', 'events'].includes(tab)) {
+      const anchor = tab === 'blog' || tab === 'events' ? (tab === 'events' ? 'eventos' : 'informativo') : tab;
+      setTimeout(() => {
+        const el = document.getElementById(anchor);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 140);
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const handleNavigateCompany = (slug: string | null) => {

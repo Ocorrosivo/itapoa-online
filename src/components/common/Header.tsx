@@ -1,10 +1,10 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * Header — VIP→planos + bloco vertical Turismo/Eventos/Informativo
+ * Header — Turismo como dropdown (Turismo ▾ → Eventos, Informativo)
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useId } from 'react';
 import {
   Sparkles, Settings, LogIn, LogOut, MapPin, Building2,
   ShieldAlert, Bell, Facebook, Instagram, Youtube, ChevronDown, UserCheck, Menu, X
@@ -29,8 +29,7 @@ const MENU_PRIMARY: { label: string; tab: string }[] = [
   { label: 'Empresas', tab: 'empresas' },
 ];
 
-const TURISMO_BLOCO: { label: string; tab: string }[] = [
-  { label: 'Turismo', tab: 'turismo' },
+const TURISMO_DROPDOWN: { label: string; tab: string }[] = [
   { label: 'Eventos', tab: 'eventos' },
   { label: 'Informativo', tab: 'informativo' },
 ];
@@ -50,9 +49,28 @@ export const Header: React.FC<HeaderProps> = ({
   const { user, isAuthenticated, logout, isImpersonating, stopImpersonating, realAdminUser } = useAuth();
   const { cities, selectedCityId, setSelectedCityId, categories } = useCompany();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [turismoOpen, setTurismoOpen] = useState(false);
+  const [turismoMobileOpen, setTurismoMobileOpen] = useState(false);
+  const turismoRef = useRef<HTMLDivElement>(null);
+  const dropdownId = useId();
+  const closeTimeoutRef = useRef<number | null>(null);
+
+  const clearCloseTimeout = () => {
+    if (closeTimeoutRef.current !== null) {
+      window.clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+  };
+
+  const scheduleClose = () => {
+    clearCloseTimeout();
+    closeTimeoutRef.current = window.setTimeout(() => setTurismoOpen(false), 120);
+  };
 
   const handleNav = (tab: string) => {
     setMobileOpen(false);
+    setTurismoOpen(false);
+    setTurismoMobileOpen(false);
     onNavigateTab(tab);
     const anchors: Record<string, string> = { turismo: 'turismo', eventos: 'eventos', informativo: 'informativo' };
     const anchor = anchors[tab];
@@ -66,10 +84,35 @@ export const Header: React.FC<HeaderProps> = ({
 
   const handleVip = () => {
     setMobileOpen(false);
+    setTurismoOpen(false);
     onNavigateTab('planos');
   };
 
   const isActive = (tab: string) => currentTab === tab;
+
+  // Fechar dropdown ao clicar fora ou pressionar Escape
+  useEffect(() => {
+    const onClickOutside = (e: MouseEvent) => {
+      if (turismoRef.current && !turismoRef.current.contains(e.target as Node)) {
+        setTurismoOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setTurismoOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onClickOutside);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onClickOutside);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => clearCloseTimeout();
+  }, []);
 
   return (
     <>
@@ -143,6 +186,7 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setMobileOpen(v => !v)}
               className="lg:hidden p-2 rounded-lg bg-black/20 hover:bg-black/30 text-white transition ml-1"
               aria-label={mobileOpen ? 'Fechar menu' : 'Abrir menu'}
+              aria-expanded={mobileOpen}
             >
               {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -170,19 +214,62 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               ))}
 
-              <div className={`flex flex-col justify-center px-3 py-1 border-x border-slate-800/60 ${isTurismoActive(currentTab) ? 'bg-slate-800' : 'bg-transparent'}`} aria-label="Turismo, Eventos e Informativo">
-                {TURISMO_BLOCO.map(item => (
-                  <button
-                    key={item.tab}
-                    onClick={() => handleNav(item.tab)}
-                    className={`text-left leading-none py-1 transition whitespace-nowrap focus:outline-none focus-visible:ring-1 focus-visible:ring-white/30 rounded px-1 ${
-                      isTurismoActive(currentTab) ? 'text-white' : 'text-slate-300 hover:text-white'
-                    }`}
-                    style={{ fontSize: '10px', letterSpacing: '0.08em' }}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+              {/* Turismo dropdown — link separado da seta, sem botão dentro de link */}
+              <div
+                ref={turismoRef}
+                className={`relative flex items-stretch border-x border-slate-800/60 ${isTurismoActive(currentTab) ? 'bg-slate-800' : 'bg-transparent'}`}
+                onMouseEnter={() => { clearCloseTimeout(); setTurismoOpen(true); }}
+                onMouseLeave={scheduleClose}
+                onFocusCapture={() => { clearCloseTimeout(); setTurismoOpen(true); }}
+              >
+                <button
+                  onClick={() => handleNav('turismo')}
+                  className={`px-3 flex items-center justify-center transition whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:z-10 ${
+                    isTurismoActive(currentTab) ? 'text-white' : 'text-slate-300 hover:text-white'
+                  }`}
+                  aria-current={isTurismoActive(currentTab) ? 'page' : undefined}
+                >
+                  Turismo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTurismoOpen(v => !v)}
+                  aria-expanded={turismoOpen}
+                  aria-controls={dropdownId}
+                  aria-label={turismoOpen ? 'Fechar submenu Turismo' : 'Abrir submenu Turismo'}
+                  className={`px-2 flex items-center justify-center transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:z-10 -ml-1 ${
+                    isTurismoActive(currentTab) ? 'text-white' : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-150 ${turismoOpen ? 'rotate-180' : 'rotate-0'}`} aria-hidden="true" />
+                </button>
+
+                {/* Dropdown overlay — sem gap, sobrepõe conteúdo */}
+                <div
+                  id={dropdownId}
+                  role="menu"
+                  aria-label="Submenu Turismo"
+                  className={`absolute top-full left-0 min-w-[180px] bg-white rounded-b-xl rounded-tr-xl shadow-xl border border-slate-200 overflow-hidden z-50 transition-all duration-150 origin-top ${
+                    turismoOpen ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-1 pointer-events-none'
+                  }`}
+                  onMouseEnter={() => { clearCloseTimeout(); setTurismoOpen(true); }}
+                  onMouseLeave={scheduleClose}
+                >
+                  {TURISMO_DROPDOWN.map(item => (
+                    <button
+                      key={item.tab}
+                      role="menuitem"
+                      onClick={() => handleNav(item.tab)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') setTurismoOpen(false);
+                      }}
+                      className="w-full text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition flex items-center justify-between focus:outline-none focus-visible:bg-slate-100 focus-visible:text-slate-900"
+                    >
+                      <span>{item.label}</span>
+                      <span aria-hidden="true" className="text-slate-400 text-[10px]">›</span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {MENU_TAIL.map(item => (
@@ -265,19 +352,43 @@ export const Header: React.FC<HeaderProps> = ({
                   <span>{item.label}</span>
                 </button>
               ))}
-              <div className="border-b border-slate-800/50 bg-slate-900/40">
-                <div className="px-4 pt-2 pb-1 text-[9px] font-black tracking-widest text-slate-500 uppercase">Turismo / Eventos / Informativo</div>
-                {TURISMO_BLOCO.map(item => (
+              {/* Mobile Turismo: texto navega, seta expande */}
+              <div className="border-b border-slate-800/50">
+                <div className="flex items-stretch">
                   <button
-                    key={item.tab}
-                    onClick={() => handleNav(item.tab)}
-                    className={`text-left pl-8 pr-4 py-2.5 text-xs font-bold uppercase tracking-wider transition flex items-center gap-2 w-full focus:outline-none ${
+                    onClick={() => handleNav('turismo')}
+                    className={`flex-1 text-left px-4 py-3 text-xs font-bold uppercase tracking-wider transition flex items-center gap-2 focus:outline-none focus-visible:bg-slate-800 ${
                       isTurismoActive(currentTab) ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                     }`}
+                    aria-current={isTurismoActive(currentTab) ? 'page' : undefined}
                   >
-                    {item.label}
+                    Turismo
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => setTurismoMobileOpen(v => !v)}
+                    aria-expanded={turismoMobileOpen}
+                    aria-controls={`${dropdownId}-mobile`}
+                    aria-label={turismoMobileOpen ? 'Recolher submenu Turismo' : 'Expandir submenu Turismo'}
+                    className="px-4 flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition focus:outline-none focus-visible:bg-slate-800 min-w-[48px]"
+                  >
+                    <ChevronDown className={`w-4 h-4 transition-transform duration-150 ${turismoMobileOpen ? 'rotate-180' : 'rotate-0'}`} aria-hidden="true" />
+                  </button>
+                </div>
+                {turismoMobileOpen && (
+                  <div id={`${dropdownId}-mobile`} className="bg-slate-900/60 border-t border-slate-800/50">
+                    {TURISMO_DROPDOWN.map(item => (
+                      <button
+                        key={item.tab}
+                        onClick={() => handleNav(item.tab)}
+                        className="w-full text-left pl-8 pr-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-300 hover:bg-slate-800 hover:text-white transition flex items-center gap-2 focus:outline-none focus-visible:bg-slate-800 focus-visible:text-white"
+                      >
+                        <span className="w-1 h-1 rounded-full bg-slate-500" aria-hidden="true" />
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               {MENU_TAIL.map(item => (
                 <button
