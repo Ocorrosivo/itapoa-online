@@ -1,0 +1,41 @@
+name: Limpeza Final Pre-Reset (remover token residual + desabilitar temporarios)
+
+on: workflow_dispatch
+
+jobs:
+  limpeza:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remover HOSTINGER_API_TOKEN residual + garantir JWT novo
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            echo "=== LIMPEZA FINAL (sem valores em logs) ==="
+            # Verificar token ainda presente (mascarado check)
+            if grep -q "HOSTINGER_API_TOKEN" /opt/itapoa/app/.env 2>&1; then
+              echo "Token ainda presente em /opt/itapoa/app/.env - removendo..."
+              # Usar sed sem expor valor
+              sed -i '/^HOSTINGER_API_TOKEN=.*$/d' /opt/itapoa/app/.env 2>&1 | head -5 || true
+              if grep -q "HOSTINGER_API_TOKEN" /opt/itapoa/app/.env 2>&1; then echo "ERRO: token ainda presente apos sed"; exit 1; else echo "Token removido de /opt/itapoa/app/.env OK"; fi
+            else
+              echo "Token ja removido de /opt/itapoa/app/.env - OK"
+            fi
+            echo "--- .env atual (mascarado) ---"
+            sed 's/=.*/=***/' /opt/itapoa/app/.env 2>&1 | head -15 || true
+            echo "--- Easypanel service env (DB_PASSWORD/JWT ja rotacionados, verificar) ---"
+            docker service inspect itapoa_app --format '{{range .Spec.TaskTemplate.ContainerSpec.Env}}{{println .}}{{end}}' 2>&1 | sed 's/=.*/=***/' | grep -E "DB_PASS|JWT|HOSTINGER" | head -10 || true
+            echo "--- Health itapoa.online apos limpeza ---"
+            for i in 1 2 3; do
+              CODE=$(curl -s -o /tmp/h.json -w "%{http_code}" https://itapoa.online/api/health 2>&1 | head -5 || echo "000")
+              echo "Health $i: $CODE $(cat /tmp/h.json 2>&1 | head -c 200)"
+              if [ "$CODE" = "200" ]; then break; fi
+              sleep 5
+            done
+            echo "=== FIM LIMPEZA ==="
+
