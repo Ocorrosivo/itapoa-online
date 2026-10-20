@@ -1,0 +1,48 @@
+name: Confirmacao Rotacao (verificar antiga invalida e nova ativa)
+
+on: workflow_dispatch
+
+jobs:
+  confirm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirmar credenciais antigas invalidadas
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            echo "=== CONFIRMACAO POS-ROTACAO (sem valores) ==="
+            # Hostinger externo: tentar via mariadb client no host (tem .env atualizado so se ALTER OK)
+            if [ -f /opt/itapoa/app/.env ]; then set -a; . /opt/itapoa/app/.env 2>/dev/null || true; set +a; fi
+            echo "Host .env DB_HOST=${DB_HOST:-?} DB_NAME=${DB_NAME:-?}"
+            # Testar conexao atual do host (deve ser a nova se ALTER OK, ou antiga se falhou)
+            if mariadb -h "${DB_HOST:-srv887.hstgr.io}" -P "${DB_PORT:-3306}" -u "${DB_USER:-u619805679_itapoa}" -p"${DB_PASSWORD:-x}" -e "SELECT 1" 2>&1 | head -5 | grep -q "1"; then
+              echo "Host pode conectar com senha atual do .env (nova se ALTER OK)"
+              mariadb -h "${DB_HOST:-srv887.hstgr.io}" -P "${DB_PORT:-3306}" -u "${DB_USER:-u619805679_itapoa}" -p"${DB_PASSWORD:-x}" -N -e "SELECT COUNT(*) FROM companies" 2>&1 | head -5
+            elif mysql -h "${DB_HOST:-srv887.hstgr.io}" -P "${DB_PORT:-3306}" -u "${DB_USER:-u619805679_itapoa}" -p"${DB_PASSWORD:-x}" -e "SELECT 1" 2>&1 | head -5 | grep -q "1"; then
+              echo "Host mysql OK com senha atual"
+            else
+              echo "Host NAO conecta com senha atual do .env (verificar ALTER Hostinger)"
+            fi
+            echo "--- Easypanel interno: verificar service env ja atualizado ---"
+            docker service inspect itapoa_app --format '{{range .Spec.TaskTemplate.ContainerSpec.Env}}{{println .}}{{end}}' 2>&1 | grep -E "DB_PASS|JWT_SECRET" | sed 's/=.*/=***/' | head -10 || true
+            CTR=$(docker ps -q --filter "name=itapoa_app" 2>&1 | head -n1)
+            if [ -n "$CTR" ]; then
+              echo "App CTR $CTR env DB_HOST/DB_NAME"
+              docker inspect "$CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | grep -E "DB_HOST|DB_NAME|JWT" | sed 's/=.*/=***/' | head -10 || true
+            fi
+            echo "--- Health itapoa.online apos rotacao ---"
+            for i in 1 2 3; do
+              CODE=$(curl -s -o /tmp/h.json -w "%{http_code}" https://itapoa.online/api/health 2>&1 | head -5 || echo "000")
+              echo "Health try $i: $CODE $(cat /tmp/h.json 2>&1 | head -c 200)"
+              if [ "$CODE" = "200" ]; then break; fi
+              sleep 5
+            done
+            echo "--- App categorias (prova que DB interno novo esta respondendo) ---"
+            curl -s https://itapoa.online/api/categories 2>&1 | head -c 300 | cat | head -5 || true; echo
+            echo "=== FIM CONFIRMACAO ==="
