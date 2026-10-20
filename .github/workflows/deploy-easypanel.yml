@@ -38,11 +38,15 @@ jobs:
 
       - name: Smoke test (offline database and release header)
         env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '65534'
           DB_NAME: ci_offline
           DB_USER: ci_offline
           DB_PASSWORD: ci_offline
           JWT_SECRET: ci-only-not-a-production-secret-0123456789abcdef
-        run: node scripts/smoke-catalog.mjs --offline
+        run: |
+          node scripts/smoke-catalog.mjs --offline
+          node --import tsx --test tests/unit/checkout.test.ts
 
       - name: Deploy and verify on VPS
         uses: appleboy/ssh-action@v1.2.0

@@ -22,6 +22,7 @@ export class CompanyRepositoryClass extends BaseRepository {
     const term = normalizeSearch(filters.search) || normalizeSearch(filters.q);
     return this.findAll(filters, {
       ...options,
+      publicCompanies: true,
       textSearch: {
         columns: ['name', 'description', 'detailedDescription', 'address', 'features'],
         term

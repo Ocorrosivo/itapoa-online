@@ -101,6 +101,8 @@ const MAX_LIMIT = 200;
 const DEFAULT_LIMIT = 100;
 
 export interface ListOptions {
+  /** Public catalogue only: hide incomplete private checkout shells before pagination. */
+  publicCompanies?: boolean;
   /** Filters forced by the service layer. Never client-controlled. */
   scope?: Record<string, any>;
   textSearch?: { columns: string[]; term: string };
@@ -163,6 +165,9 @@ export class BaseRepository {
   async findAll(filters: Record<string, any> = {}, options: ListOptions = {}) {
     let sql = `SELECT * FROM \`${this.tableName}\` WHERE 1=1`;
     const params: any[] = [];
+    if (this.tableName === 'companies' && options.publicCompanies) {
+      sql += " AND NOT (LEFT(id, 9) = 'checkout_' AND (categoryId IS NULL OR cityId IS NULL))";
+    }
 
     // Server-enforced scope is applied first and cannot be overridden by input.
     for (const [key, value] of Object.entries(options.scope ?? {})) {

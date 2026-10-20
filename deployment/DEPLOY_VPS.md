@@ -27,6 +27,24 @@ Não usar scripts Hostinger/FTP, PM2/Caddy ou workflows em `workflows/disabled` 
 
 ## Dados e recuperação
 
+### Checkout minimalista e credenciais de pagamento
+
+O novo fluxo usa `/planos` → `/checkout` (página própria), com nome, telefone e e-mail. A conta autenticada continua obrigatória para vincular a compra com segurança. Dados comerciais são completados no painel; cadastros `checkout_...` sem categoria/cidade não aparecem no catálogo público.
+
+Configurar no ambiente **do serviço da aplicação** no Easypanel, sem enviar chaves no chat nem versioná-las:
+
+```text
+MERCADOPAGO_PUBLIC_KEY=<public-key-da-aplicacao>
+MERCADOPAGO_ACCESS_TOKEN=<access-token-da-mesma-aplicacao>
+MERCADOPAGO_WEBHOOK_SECRET=<segredo-de-assinatura-do-webhook>
+```
+
+Notificação de pagamento: `https://itapoa.online/api/webhooks/mercadopago`. Public Key e Access Token precisam corresponder à mesma aplicação/ambiente. Em produção, o novo checkout não libera cobranças sem Access Token e configuração de webhook. O endpoint `/api/payments/config` expõe somente Public Key e disponibilidade calculada pela presença da configuração; **não prova validade das credenciais**.
+
+Cartão utiliza Card Payment Brick do SDK oficial, que fornece um token; número e CVV não passam pelo backend da aplicação. Preço é obtido do banco no servidor. Resposta aprovada do gateway não ativa o plano: a confirmação continua dependente de webhook verificado.
+
+Antes de habilitar em produção: testar com credenciais/cartões de teste da aplicação, verificar assinatura e entrega do webhook e confirmar a ativação. Os testes locais de interface usam SDK/API simulados e não substituem esse teste integrado. Não reutilizar credenciais recuperadas de históricos; o responsável optou por configurar as chaves atuais diretamente na VPS.
+
 O deploy troca apenas a imagem e preserva as variáveis e volumes configurados no serviço. `APP_URL=https://itapoa.online` e `API_URL=https://itapoa.online/api`. Segredos permanecem no Easypanel, nunca no Git. Uploads precisam de volume persistente e `UPLOAD_DIR` correspondente.
 
 Não reimportar seeds nem executar migrações no deploy. Mudanças de banco exigem autorização e backup separados.

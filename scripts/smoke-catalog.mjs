@@ -66,7 +66,7 @@ try {
     assert.ok((await response.text()).includes('id="root"'));
   }
   assert.equal((await request('/api/endpoint-inexistente')).response.status, 404);
-  for (const [path, method] of [['/api/companies/create', 'POST'], ['/api/companies/test', 'PUT']]) {
+  for (const [path, method] of [['/api/companies/create', 'POST'], ['/api/companies/test', 'PUT'], ['/api/checkout/company', 'POST'], ['/api/payments/card', 'POST']]) {
     assert.equal((await fetch(base + path, { method, headers: { 'Content-Type': 'application/json' }, body: '{}' })).status, 401);
   }
   console.log(`PASS: ${offline ? 'MySQL offline: 503, server alive' : 'live MySQL catalogue, accent-insensitive search and q, pagination'}; SPA routes; auth guards; JSON 404.`);

@@ -45,7 +45,7 @@ export const PlansPage: React.FC<PlansPageProps> = ({
     if (isAuthenticated) {
       const pending = readPendingPurchase();
       if (pending) {
-        // keep it — SaaSPricing will auto-resume; also handle company-required flow there
+        onNavigateTab('checkout');
       }
     }
   }, [isAuthenticated]);
@@ -53,6 +53,7 @@ export const PlansPage: React.FC<PlansPageProps> = ({
   return (
     <div className="bg-slate-50 text-slate-900 font-sans">
       <SaaSPricing
+        onNavigateTab={onNavigateTab}
         cities={cities}
         categories={categories}
         onListingCreated={() => {

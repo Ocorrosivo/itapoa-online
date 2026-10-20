@@ -24,6 +24,7 @@ import {
 } from '../repositories/baseRepository.js';
 import { CompanyRepository } from '../repositories/companyRepository.js';
 import { companyService } from '../services/companyService.js';
+import { checkoutContact, prepareCheckoutCompany, listOwnedCompanies } from '../services/checkoutService.js';
 import { authService, AuthError } from '../services/authService.js';
 import { analyticsService } from '../services/analyticsService.js';
 import { engagementService, EngagementError } from '../services/engagementService.js';
@@ -290,6 +291,42 @@ apiRouter.put(
 // The backend is the sole payment authority — a client can never mark a
 // subscription as paid.
 // ============================================================
+
+// Public key is intentionally public; never return the access token or webhook secret.
+apiRouter.get('/payments/config', handler(async (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(await paymentService.gatewayConfig());
+}));
+
+apiRouter.get('/account/companies', requireAuth, handler(async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(await listOwnedCompanies(req.user!.id));
+}));
+
+apiRouter.post('/checkout/company', requireAuth, handler(async (req, res) => {
+  const contact = checkoutContact(req.body?.contact ?? {});
+  if (!['plan_bronze', 'plan_gold_vip', 'plan_diamond_extremo'].includes(req.body?.planId)) {
+    return res.status(400).json({ error: 'Plano inválido.' });
+  }
+  if (req.body.planId !== 'plan_bronze') await paymentService.assertGatewayReady();
+  let companyId: string;
+  if (req.body.companyId) {
+    const owned = await listOwnedCompanies(req.user!.id);
+    const match = owned.find((c: any) => c.id === req.body.companyId);
+    if (!match) return res.status(403).json({ error: 'Empresa não pertence à sua conta.' });
+    companyId = match.id;
+  } else {
+    companyId = await prepareCheckoutCompany(req.user!.id, contact);
+  }
+  res.json({ companyId });
+}));
+
+apiRouter.post('/payments/card', requireAuth, requireCompanyAccess, handler(async (req, res) => {
+  const companyId = (req.companyIds && req.companyIds[0]) || String(req.body?.companyId ?? '');
+  const planId = typeof req.body?.planId === 'string' ? req.body.planId : '';
+  if (!planId) return res.status(400).json({ error: 'Plano obrigatório.' });
+  res.json(await paymentService.createCardPayment(req.user!.id, companyId, planId, req.body ?? {}, env.appUrl));
+}));
 
 // Create a real PIX charge. Company access is verified (anti-IDOR); the payer
 // email defaults to the session user.

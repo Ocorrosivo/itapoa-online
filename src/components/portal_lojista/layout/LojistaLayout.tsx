@@ -4,7 +4,9 @@
  * Main Lojista Portal Layout Shell Component
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { api } from '../../../lib/apiClient';
+import { CompanyProfileForm } from '../views/CompanyProfileForm';
 import { LojistaSidebar, LojistaTabType } from './LojistaSidebar';
 import { LojistaTopbar } from './LojistaTopbar';
 import { DigitalHealthModal } from '../common/DigitalHealthModal';
@@ -22,9 +24,16 @@ interface LojistaLayoutProps {
 
 export const LojistaLayout: React.FC<LojistaLayoutProps> = ({ onNavigateCompany }) => {
   const { user } = useAuth();
-  const { companies } = useCompany();
-  
-  const myCompany: Company | null = companies.find(c => c.ownerId === user?.id) || companies[0] || null;
+  const [ownedCompanies, setOwnedCompanies] = useState<Company[]>([]);
+  const [companyError, setCompanyError] = useState('');
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let canceled = false;
+    api.get<Company[]>('/api/account/companies').then(rows => { if (!canceled) setOwnedCompanies(rows); })
+      .catch(() => { if (!canceled) setCompanyError('Não foi possível carregar sua empresa. Recarregue a página.'); });
+    return () => { canceled = true; };
+  }, [user?.id, reload]);
+  const myCompany: Company | null = ownedCompanies[0] || null;
 
   const [currentTab, setCurrentTab] = useState<LojistaTabType>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -55,6 +64,9 @@ export const LojistaLayout: React.FC<LojistaLayoutProps> = ({ onNavigateCompany 
         />
 
         <main className="flex-1 overflow-y-auto">
+          {companyError && <p role="alert" className="p-6 text-red-300">{companyError}</p>}
+          {myCompany && (!myCompany.categoryId || !myCompany.cityId) && currentTab !== 'profile' && <div className="m-6 p-4 rounded-xl border border-amber-500 text-sm">Seu anúncio ainda está em preparação. <button className="underline" onClick={() => setCurrentTab('profile')}>Completar categoria, cidade e dados da empresa</button></div>}
+          {currentTab === 'profile' && myCompany && <CompanyProfileForm company={myCompany} onSaved={() => setReload(n => n + 1)} />}
           {currentTab === 'dashboard' && (
             <LojistaDashboardView company={myCompany} onNavigateTab={setCurrentTab} />
           )}
@@ -68,7 +80,7 @@ export const LojistaLayout: React.FC<LojistaLayoutProps> = ({ onNavigateCompany 
           )}
 
           {/* Module Fallbacks */}
-          {['health', 'profile', 'products', 'coupons', 'blog', 'seo', 'reviews', 'crm', 'orders', 'staff', 'tourism', 'helpdesk'].includes(currentTab) && (
+          {['health', 'products', 'coupons', 'blog', 'seo', 'reviews', 'crm', 'orders', 'staff', 'tourism', 'helpdesk'].includes(currentTab) && (
             <div className="p-8 space-y-4 text-center max-w-lg mx-auto mt-12 bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl">
               <div className="w-16 h-16 rounded-2xl bg-blue-600/20 text-blue-400 flex items-center justify-center mx-auto text-xl font-bold uppercase">
                 {currentTab.slice(0, 2)}

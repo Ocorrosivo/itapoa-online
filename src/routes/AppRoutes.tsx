@@ -14,6 +14,7 @@ import { EventsPage } from '../pages/EventsPage';
 import { BlogPage } from '../pages/BlogPage';
 import { JobsPage } from '../pages/JobsPage';
 import { PlansPage } from '../pages/PlansPage';
+import { CheckoutPage } from '../pages/CheckoutPage';
 import { BairroDetailPage } from '../pages/BairroDetailPage';
 import { PraiaDetailPage } from '../pages/PraiaDetailPage';
 import { InstitutionalPage } from '../pages/institutional/InstitutionalPage';
@@ -58,6 +59,7 @@ const pathToTabMap: Record<string, string> = {
   'ofertas': 'empresas',
   'planos': 'planos',
   'plans': 'planos',
+  'checkout': 'checkout',
   'contato': 'contato',
   'contact': 'contato',
   'sobre': 'sobre',
@@ -372,6 +374,9 @@ export const AppRoutes: React.FC = () => {
             onOpenAuthModal={handleOpenAuthModal}
           />
         );
+
+      case 'checkout':
+        return <CheckoutPage onNavigateTab={handleNavigateTab} />;
 
       case 'projetos-sociais':
         if (campaigns[0]) {

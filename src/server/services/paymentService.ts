@@ -39,6 +39,82 @@ interface CreatedPix {
 }
 
 class PaymentService {
+  async gatewayConfig() {
+    const [rows]: any = await pool.query('SELECT publicKey, accessToken FROM payment_config WHERE id = ? LIMIT 1', ['payment']);
+    const publicKey = process.env.MERCADOPAGO_PUBLIC_KEY?.trim() || rows[0]?.publicKey?.trim() || '';
+    const accessTokenConfigured = Boolean(process.env.MERCADOPAGO_ACCESS_TOKEN?.trim() || rows[0]?.accessToken?.trim());
+    const webhookConfigured = Boolean(this.webhookSecret());
+    const ready = accessTokenConfigured && (process.env.NODE_ENV !== 'production' || webhookConfigured);
+    return { publicKey, pixEnabled: ready, cardEnabled: ready && Boolean(publicKey) };
+  }
+
+  async assertGatewayReady() {
+    if (process.env.NODE_ENV === 'production' && !this.webhookSecret()) {
+      throw new PaymentError(503, 'Pagamentos indisponíveis: configuração de confirmação pendente.');
+    }
+    return this.accessToken();
+  }
+
+  /** Only SDK-tokenized card data is accepted. Price and ownership never come from the browser. */
+  async createCardPayment(userId: string, companyId: string, planId: string, input: Record<string, any>, appUrl: string) {
+    const plan = await this.getPlan(planId);
+    if (plan.price <= 0) throw new PaymentError(400, 'Este plano não requer pagamento.');
+    const token = await this.assertGatewayReady();
+    const requestId = typeof input.requestId === 'string' ? input.requestId : '';
+    const form = input.formData ?? {};
+    const payer = form.payer ?? {};
+    const email = typeof payer.email === 'string' ? payer.email.trim().toLowerCase() : '';
+    const identification = payer.identification ?? {};
+    if (!/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(requestId) || !/^[\w-]{8,255}$/.test(String(form.token ?? '')) ||
+        !/^[\w-]{2,60}$/.test(String(form.payment_method_id ?? '')) ||
+        !Number.isInteger(form.installments) || form.installments < 1 || form.installments > 12 ||
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 ||
+        !['CPF', 'CNPJ'].includes(identification.type) ||
+        !(identification.type === 'CPF' ? /^\d{11}$/ : /^\d{14}$/).test(String(identification.number ?? ''))) {
+      throw new PaymentError(400, 'Confira os dados do pagamento.');
+    }
+    const subscriptionId = `card_${crypto.createHash('sha256').update(`${userId}:${requestId}`).digest('hex')}`;
+    await pool.query(
+      `INSERT IGNORE INTO subscriptions (id, userId, companyId, planId, status, amount, paymentMethod, nextBillingDate)
+       VALUES (?, ?, ?, ?, 'pending', ?, 'credit_card', ?)`,
+      [subscriptionId, userId, companyId, planId, plan.price, new Date(Date.now() + 30 * 86400000)]
+    );
+    const [rows]: any = await pool.query('SELECT userId, companyId, planId, amount FROM subscriptions WHERE id = ?', [subscriptionId]);
+    const sub = rows[0];
+    if (!sub || sub.userId !== userId || sub.companyId !== companyId || sub.planId !== planId || Number(sub.amount) !== plan.price) {
+      throw new PaymentError(409, 'Esta tentativa pertence a outra compra. Inicie uma nova tentativa.');
+    }
+    let response: globalThis.Response;
+    try {
+      response = await fetch('https://api.mercadopago.com/v1/payments', {
+        method: 'POST', signal: AbortSignal.timeout(15000),
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'X-Idempotency-Key': subscriptionId },
+        body: JSON.stringify({
+          token: form.token, payment_method_id: form.payment_method_id,
+          ...(form.issuer_id ? { issuer_id: String(form.issuer_id) } : {}),
+          installments: form.installments, transaction_amount: plan.price,
+          description: `Plano ${plan.name} — Itapoá Online`, external_reference: subscriptionId,
+          notification_url: `${appUrl.replace(/\/$/, '')}/api/webhooks/mercadopago`,
+          payer: { email, identification: { type: identification.type, number: identification.number } }
+        })
+      });
+    } catch {
+      // Unknown outcome: preserve this attempt and wait for its webhook. Never invite a second charge.
+      return { subscriptionId, status: 'unknown' };
+    }
+    const payment: any = await response.json().catch(() => ({}));
+    if (!response.ok || !payment.id) {
+      if (response.status >= 500 || response.ok) return { subscriptionId, status: 'unknown' };
+      throw new PaymentError(502, 'O Mercado Pago não conseguiu processar esta tentativa. Confira a configuração ou tente novamente mais tarde.');
+    }
+    await pool.query(
+      `INSERT INTO payment_logs (id, subscriptionId, amount, status, gateway_reference) VALUES (?, ?, ?, 'pending', ?)
+       ON DUPLICATE KEY UPDATE gateway_reference = VALUES(gateway_reference)`,
+      [`pay_${crypto.randomUUID()}`, subscriptionId, plan.price, String(payment.id)]
+    );
+    // Even an approved gateway response does not activate a plan. Only the verified webhook does.
+    return { paymentId: String(payment.id), subscriptionId, status: String(payment.status) };
+  }
   private async accessToken(): Promise<string> {
     const fromEnv = process.env.MERCADOPAGO_ACCESS_TOKEN?.trim();
     if (fromEnv) return fromEnv;
@@ -73,6 +149,7 @@ class PaymentService {
     planId: string,
     payerEmail: string
   ): Promise<CreatedPix> {
+    await this.assertGatewayReady();
     const plan = await this.getPlan(planId);
     if (plan.price <= 0) {
       throw new PaymentError(400, 'Este plano não requer pagamento.');

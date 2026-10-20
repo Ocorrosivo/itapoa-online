@@ -47,6 +47,7 @@ export class CompanyService {
 
   async getCompanyBySlug(slug: string) {
     const company = await CompanyRepository.findBySlug(slug);
+    if (company?.id?.startsWith('checkout_') && (!company.categoryId || !company.cityId)) return null;
     if (company) {
       await CompanyRepository.incrementViews(slug);
     }
@@ -109,7 +110,9 @@ export class CompanyService {
    * runs; the repository drops any column outside the whitelist.
    */
   async updateCompany(id: string, data: Record<string, any>) {
-    return CompanyRepository.update(id, data);
+    // Self-service profile completion must never grant paid placement or change identity.
+    const { id: _id, planLevel: _plan, isSponsored: _sponsored, ...profile } = data;
+    return CompanyRepository.update(id, profile);
   }
 
   async registerClick(id: string) {
