@@ -81,47 +81,48 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   return (
     <div className="bg-slate-50 text-slate-900 flex flex-col">
-      {/* 1. Litoral Photo Banners Strip — continuous full-width row */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-0 overflow-hidden">
-
-        {litoralBanners.map((b, idx) => (
-          <div
-            key={idx}
-            onClick={() => onSelectPraia && onSelectPraia(b.slug)}
-            className="relative overflow-hidden group cursor-pointer h-36 sm:h-40 lg:h-44"
-          >
-            <img
-              src={b.img}
-              alt={b.title}
-              className="w-full h-full object-cover object-center group-hover:scale-110 transition duration-700 brightness-75"
-              loading="lazy"
-              decoding="async"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent flex items-end p-3 sm:p-4">
-              <span className="text-[12px] sm:text-[13px] font-bold text-white tracking-tight drop-shadow-md">
-                {b.badge}
-              </span>
+      {/* 1. Litoral Photo Banners Strip — aligned with container for symmetrical layout */}
+      <div className="max-w-7xl mx-auto px-4 pt-6 w-full">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
+          {litoralBanners.map((b, idx) => (
+            <div
+              key={idx}
+              onClick={() => onSelectPraia && onSelectPraia(b.slug)}
+              className="relative overflow-hidden rounded-2xl group cursor-pointer h-36 sm:h-40 lg:h-44 shadow-sm border border-slate-200/60 bg-slate-900"
+            >
+              <img
+                src={b.img}
+                alt={b.title}
+                className="w-full h-full object-cover object-center group-hover:scale-110 transition duration-700 brightness-75"
+                loading="lazy"
+                decoding="async"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent flex items-end p-3 sm:p-4">
+                <span className="text-[12px] sm:text-[13px] font-bold text-white tracking-tight drop-shadow-md">
+                  {b.badge}
+                </span>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
 
-        {/* 6th Red Card: ITAPOÁ SC — same row, equal height */}
-        <div
-          onClick={() => onNavigateTab('tourism')}
-          className="relative bg-gradient-to-br from-red-800 to-[#C8102E] flex flex-col justify-center items-center text-center p-4 cursor-pointer group h-36 sm:h-40 lg:h-44"
-        >
-          <span className="text-lg sm:text-xl font-black tracking-widest text-white uppercase block group-hover:scale-105 transition">
-            ITAPOÁ SC
-          </span>
-          <span className="text-[11px] italic text-red-200 block mt-1">"Paraíso Catarinense"</span>
-          <span className="text-[10px] font-extrabold uppercase text-white/90 tracking-wider mt-3 border border-white/40 px-3 py-1 rounded bg-black/20">
-            GUIA OFICIAL
-          </span>
+          {/* 6th Red Card: ITAPOÁ SC — same row, equal height */}
+          <div
+            onClick={() => onNavigateTab('tourism')}
+            className="relative bg-gradient-to-br from-red-800 to-[#C8102E] rounded-2xl flex flex-col justify-center items-center text-center p-4 cursor-pointer group h-36 sm:h-40 lg:h-44 shadow-sm border border-red-700/50"
+          >
+            <span className="text-lg sm:text-xl font-black tracking-widest text-white uppercase block group-hover:scale-105 transition">
+              ITAPOÁ SC
+            </span>
+            <span className="text-[11px] italic text-red-200 block mt-1">"Paraíso Catarinense"</span>
+            <span className="text-[10px] font-extrabold uppercase text-white/90 tracking-wider mt-3 border border-white/40 px-3 py-1 rounded bg-black/20">
+              GUIA OFICIAL
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Main Container */}
-      <div className="max-w-7xl mx-auto px-4 space-y-10 py-8">
+      <div className="w-full max-w-7xl mx-auto px-4 space-y-10 py-8">
 
         {/* Dynamic Carousel of Premium Companies (Bright Theme) */}
         <PremiumCompaniesCarousel

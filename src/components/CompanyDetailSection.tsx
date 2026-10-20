@@ -324,99 +324,101 @@ export default function CompanyDetailSection({
   return (
     <div id="company_detail_container" className="relative w-full min-h-screen bg-slate-50 pb-20">
 
-      <section id="detail_cover" className="relative w-full h-[350px] bg-slate-900 overflow-hidden">
-        <img
-          src={company.coverImage}
-          alt={company.name}
-          className="w-full h-full object-cover opacity-70"
-          referrerPolicy="no-referrer"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/10 to-transparent" />
+      <div className="max-w-7xl mx-auto px-4 md:px-8 pt-6">
+        <section id="detail_cover" className="relative w-full h-[320px] md:h-[380px] bg-slate-900 rounded-3xl overflow-hidden shadow-xl border border-slate-200/20">
+          <img
+            src={company.coverImage}
+            alt={company.name}
+            className="w-full h-full object-cover opacity-75"
+            referrerPolicy="no-referrer"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent" />
 
-        <div className="absolute top-6 left-6 right-6 flex items-center justify-between z-10">
-          <button
-            type="button"
-            onClick={onBack}
-            className="px-4 py-2 bg-slate-950/70 border border-white/10 text-white font-semibold text-xs rounded-full hover:bg-slate-950/90 transition flex items-center gap-1.5 backdrop-blur shadow cursor-pointer"
-          >
-            ← Voltar para o Guia
-          </button>
-
-          <div className="flex items-center gap-2">
+          <div className="absolute top-6 left-6 right-6 flex items-center justify-between z-10">
             <button
               type="button"
-              onClick={handleCopyLink}
-              className="p-2.5 bg-slate-950/70 border border-white/10 text-white rounded-full hover:bg-slate-950/95 transition backdrop-blur shadow cursor-pointer"
-              title="Copiar Link da Empresa"
+              onClick={onBack}
+              className="px-4 py-2 bg-slate-950/70 border border-white/10 text-white font-semibold text-xs rounded-full hover:bg-slate-950/90 transition flex items-center gap-1.5 backdrop-blur shadow cursor-pointer"
             >
-              <Share2 className="w-4 h-4" />
+              ← Voltar para o Guia
             </button>
-            <button
-              type="button"
-              onClick={() => onToggleFavorite(company.id)}
-              className="p-2.5 bg-slate-950/70 border border-white/10 text-white rounded-full hover:bg-slate-950/95 transition backdrop-blur shadow cursor-pointer"
-            >
-              <Heart className={`w-4 h-4 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-white'}`} />
-            </button>
-          </div>
-        </div>
 
-        <div className="absolute bottom-6 left-6 right-6 z-10 flex flex-col md:flex-row md:items-end md:justify-between gap-6">
-          <div className="flex gap-4 items-center">
-            <img
-              src={company.logo}
-              alt={company.name}
-              className="w-16 h-16 md:w-20 md:h-20 rounded-3xl object-cover border-2 border-white shadow-lg bg-white shrink-0"
-              referrerPolicy="no-referrer"
-            />
-            <div className="text-white">
-              <span className="text-xs font-semibold text-teal-400 uppercase tracking-widest flex items-center gap-1">
-                {currentCategory?.name} • {currentCity?.name}
-              </span>
-              <h1 className="text-xl md:text-3xl font-sans font-black tracking-tight mt-1">{company.name}</h1>
-              <div className="flex items-center gap-2 mt-2">
-                <div className="flex items-center gap-1 bg-amber-500 text-slate-950 px-2 py-0.5 rounded text-xs font-bold">
-                  <Star className="w-3.5 h-3.5 fill-slate-950 text-slate-950" /> {safeRating.toFixed(1)}
-                </div>
-                <span className="text-xs text-slate-300">({toNumber(company.reviewCount, 0)} avaliações autorizadas)</span>
-              </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="p-2.5 bg-slate-950/70 border border-white/10 text-white rounded-full hover:bg-slate-950/95 transition backdrop-blur shadow cursor-pointer"
+                title="Copiar Link da Empresa"
+              >
+                <Share2 className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onToggleFavorite(company.id)}
+                className="p-2.5 bg-slate-950/70 border border-white/10 text-white rounded-full hover:bg-slate-950/95 transition backdrop-blur shadow cursor-pointer"
+              >
+                <Heart className={`w-4 h-4 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-white'}`} />
+              </button>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2.5">
-            <button
-              type="button"
-              onClick={handleLeadWhatsAppClick}
-              className="px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-2 shadow-md shadow-emerald-500/10 cursor-pointer active:scale-95 shrink-0"
-            >
-              <svg viewBox="0 0 24 24" className="w-4 h-4 fill-slate-950">
-                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.731-1.456L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.42 9.864-9.864.002-2.637-1.03-5.114-2.906-6.99C16.554 1.874 14.082.84 11.45.84 6.01.84 1.585 5.265 1.581 10.7a9.81 9.81 0 001.448 4.966l-.1.597-1.002 3.655 3.743-.981.577.342z" />
-              </svg>
-              Chamar no WhatsApp
-            </button>
+          <div className="absolute bottom-6 left-6 right-6 z-10 flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+            <div className="flex gap-4 items-center">
+              <img
+                src={company.logo}
+                alt={company.name}
+                className="w-16 h-16 md:w-20 md:h-20 rounded-2xl md:rounded-3xl object-cover border-2 border-white shadow-lg bg-white shrink-0"
+                referrerPolicy="no-referrer"
+              />
+              <div className="text-white">
+                <span className="text-xs font-semibold text-teal-400 uppercase tracking-widest flex items-center gap-1">
+                  {currentCategory?.name} • {currentCity?.name}
+                </span>
+                <h1 className="text-xl md:text-3xl font-sans font-black tracking-tight mt-1">{company.name}</h1>
+                <div className="flex items-center gap-2 mt-2">
+                  <div className="flex items-center gap-1 bg-amber-500 text-slate-950 px-2 py-0.5 rounded text-xs font-bold">
+                    <Star className="w-3.5 h-3.5 fill-slate-950 text-slate-950" /> {safeRating.toFixed(1)}
+                  </div>
+                  <span className="text-xs text-slate-300">({toNumber(company.reviewCount, 0)} avaliações autorizadas)</span>
+                </div>
+              </div>
+            </div>
 
-            <button
-              type="button"
-              onClick={() => window.open(`tel:${company.phone}`, '_self')}
-              className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-2 shadow-md shadow-blue-500/10 cursor-pointer active:scale-95 shrink-0"
-            >
-              <Phone className="w-4 h-4 fill-white" />
-              Ligar Agora
-            </button>
+            <div className="flex flex-wrap gap-2.5">
+              <button
+                type="button"
+                onClick={handleLeadWhatsAppClick}
+                className="px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-2 shadow-md shadow-emerald-500/10 cursor-pointer active:scale-95 shrink-0"
+              >
+                <svg viewBox="0 0 24 24" className="w-4 h-4 fill-slate-950">
+                  <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.731-1.456L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.42 9.864-9.864.002-2.637-1.03-5.114-2.906-6.99C16.554 1.874 14.082.84 11.45.84 6.01.84 1.585 5.265 1.581 10.7a9.81 9.81 0 001.448 4.966l-.1.597-1.002 3.655 3.743-.981.577.342z" />
+                </svg>
+                Chamar no WhatsApp
+              </button>
 
-            <button
-              type="button"
-              onClick={handleCopyLink}
-              className={`px-5 py-3 rounded-xl font-bold text-xs md:text-sm transition flex items-center justify-center gap-2 border shadow-sm cursor-pointer active:scale-95 shrink-0 ${copiedLink ? 'bg-emerald-550 border-emerald-550 text-white' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
-            >
-              <Share2 className="w-4 h-4" />
-              {copiedLink ? '✓ Link Copiado!' : 'Compartilhar Link'}
-            </button>
+              <button
+                type="button"
+                onClick={() => window.open(`tel:${company.phone}`, '_self')}
+                className="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-2 shadow-md shadow-blue-500/10 cursor-pointer active:scale-95 shrink-0"
+              >
+                <Phone className="w-4 h-4 fill-white" />
+                Ligar Agora
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className={`px-5 py-3 rounded-xl font-bold text-xs md:text-sm transition flex items-center justify-center gap-2 border shadow-sm cursor-pointer active:scale-95 shrink-0 ${copiedLink ? 'bg-emerald-550 border-emerald-550 text-white' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'}`}
+              >
+                <Share2 className="w-4 h-4" />
+                {copiedLink ? '✓ Link Copiado!' : 'Compartilhar Link'}
+              </button>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
-      <div className="max-w-7xl mx-auto px-4 md:px-8 mt-10">
+      <div className="max-w-7xl mx-auto px-4 md:px-8 mt-8">
         <div className="flex border-b border-slate-200 gap-4 md:gap-8 mb-8 overflow-x-auto whitespace-nowrap scrollbar-none">
           <button
             onClick={() => setActiveTab('info')}
