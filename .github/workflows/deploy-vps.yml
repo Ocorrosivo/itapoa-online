@@ -63,8 +63,11 @@ jobs:
             echo "[deploy] verify dist contains canonical OG"
             grep -q 'itapoa.online' dist/index.html || (echo "dist/index.html OG not canonical" && cat dist/index.html | head -n 30 && exit 1)
             echo "[deploy] pm2 restart (or start)"
-            pm2 restart itapoa --update-env 2>&1 || pm2 delete itapoa 2>&1 || true
-            pm2 start dist/server.cjs --name itapoa --update-env
+            if pm2 describe itapoa >/dev/null 2>&1; then
+              pm2 restart itapoa --update-env
+            else
+              pm2 start dist/server.cjs --name itapoa --update-env
+            fi
             pm2 save
             echo "[deploy] caddy reload"
             systemctl reload caddy 2>&1 || systemctl restart caddy 2>&1 || echo "[deploy] caddy reload skip (admin off)"
@@ -99,7 +102,6 @@ jobs:
               ASSET=$(grep -o 'assets/index-[^"]*\.js' /tmp/app.json 2>/dev/null | head -n 1 || echo "no asset")
               echo "  https://itapoa.online/ -> $CODE2 $OG $ASSET"
               if echo "$OG" | grep -q "itapoa.online" && echo "$ASSET" | grep -q "assets/index-"; then
-                # verify the JS asset actually serves JS (not SPA fallback)
                 JS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://itapoa.online/$ASSET" || echo "000")
                 JS_CT=$(curl -s -D - "https://itapoa.online/$ASSET" -o /dev/null 2>&1 | grep -i "^content-type" | head -n 1 || echo "")
                 echo "  $ASSET -> $JS_CODE $JS_CT"
