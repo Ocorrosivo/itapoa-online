@@ -1,0 +1,57 @@
+name: Inspecao Dados Dual (comparar DB externo vs interno)
+
+on: workflow_dispatch
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Comparar DB externo Hostinger vs interno Easypanel
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            echo "=== COMPARAR DB EXTERNO vs INTERNO ==="
+            # Interno: via docker exec mariadb
+            CTR=$(docker ps -q --filter "ancestor=mariadb:11" 2>&1 | head -n1)
+            echo "CTR interno: $CTR"
+            if [ -z "$CTR" ]; then echo "sem mariadb"; exit 0; fi
+            # Pegar creds do container
+            ROOT_PASS=$(docker inspect "$CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | grep "MARIADB_ROOT_PASSWORD=" | cut -d= -f2)
+            DB_NAME=$(docker inspect "$CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | grep "MARIADB_DATABASE=" | cut -d= -f2)
+            DB_USER=$(docker inspect "$CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | grep "^MARIADB_USER=" | cut -d= -f2)
+            DB_PASS=$(docker inspect "$CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | grep "^MARIADB_PASSWORD=" | cut -d= -f2)
+            echo "Interno: DB_NAME=$DB_NAME DB_USER=$DB_USER"
+            echo "--- Interno contagens ---"
+            docker exec "$CTR" mariadb -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -N -e "
+              SELECT 'TABLES', COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE()
+              UNION ALL SELECT 'companies', COUNT(*) FROM companies
+              UNION ALL SELECT 'users', COUNT(*) FROM users
+              UNION ALL SELECT 'categories', COUNT(*) FROM categories
+              UNION ALL SELECT 'cities', COUNT(*) FROM cities
+              UNION ALL SELECT 'roles', COUNT(*) FROM roles
+              UNION ALL SELECT 'plans', COUNT(*) FROM plans
+              UNION ALL SELECT 'districts', COUNT(*) FROM districts
+              UNION ALL SELECT 'companies_users', COUNT(*) FROM companies_users
+              UNION ALL SELECT 'products', COUNT(*) FROM products
+              UNION ALL SELECT 'services', COUNT(*) FROM services;
+            " 2>&1 | head -30
+            echo "--- Interno slugs amostra ---"
+            docker exec "$CTR" mariadb -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -N -e "SELECT slug FROM companies ORDER BY slug LIMIT 3;" 2>&1 | head -10
+            echo "--- Interno user mais recente ---"
+            docker exec "$CTR" mariadb -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -N -e "SELECT email, created_at FROM users ORDER BY created_at DESC LIMIT 3;" 2>&1 | head -10
+            echo "--- Externo Hostinger (mesma rede, app pode alcancar?) ---"
+            if [ -f /opt/itapoa/app/.env ]; then set -a; . /opt/itapoa/app/.env 2>/dev/null || true; set +a; fi
+            echo "Externo: ${DB_HOST}/${DB_NAME}"
+            # Tentar via app container (tem mysql client)
+            APP_CTR=$(docker ps -q --filter "name=itapoa_app" 2>&1 | head -n1)
+            if [ -n "$APP_CTR" ]; then
+              echo "App ctr $APP_CTR - tentar mariadb externo via app network"
+              docker exec "$APP_CTR" sh -c "which mariadb || which mysql || echo 'sem client no app'" 2>&1 | head -5
+            fi
+            echo "=== FIM DUAL ==="
