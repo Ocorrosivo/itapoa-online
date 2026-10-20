@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react';
 import { Mail, Key, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { ITAPOA_CITY_CONFIG } from '../../constants/itapoaData';
 
 
 interface ForgotPasswordPageProps {
@@ -18,7 +19,7 @@ export const ForgotPasswordPage: React.FC<ForgotPasswordPageProps> = ({ onNaviga
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  const SUPPORT_EMAIL = 'contato@itapoa.online';
+  const SUPPORT_EMAIL = ITAPOA_CITY_CONFIG.contactEmail;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
