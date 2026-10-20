@@ -1,0 +1,68 @@
+name: Restore Isolado VPS v2 (mariadb client correto)
+
+on: workflow_dispatch
+
+jobs:
+  restore-isolado-v2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore isolado v2 (mariadb client + validacao completa)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            STAMP="$(date +%Y-%m-%d)"
+            NET="itapoa-restore-net2"
+            CTR="itapoa_restore2"
+            DB_NAME="itapoa_restore_test2"
+            DB_USER="restore2"
+            DB_PASS="$(openssl rand -hex 12)"
+            echo "=== RESTORE ISOLADO V2 (mariadb client correto) ==="
+            docker network create "$NET" 2>/dev/null || true
+            docker run -d --name "$CTR" --network "$NET" -e MARIADB_ROOT_PASSWORD="$DB_PASS" -e MARIADB_DATABASE="$DB_NAME" -e MARIADB_USER="$DB_USER" -e MARIADB_PASSWORD="$DB_PASS" mariadb:11 2>&1 | head -5
+            echo "Aguardando MariaDB..."
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              if docker exec "$CTR" mariadb-admin ping -h 127.0.0.1 -u root -p"$DB_PASS" --silent 2>&1 | grep -q alive; then echo "pronto try $i"; break; fi
+              if docker exec "$CTR" mysqladmin ping -h 127.0.0.1 -u root -p"$DB_PASS" --silent 2>&1 | grep -q alive; then echo "pronto try $i (mysqladmin)"; break; fi
+              sleep 3
+            done
+            # Escolher dump limpo
+            if head -n1 "/tmp/itapoa_dump_${STAMP}.sql" 2>&1 | grep -q "mysqldump: \[Warning\]"; then
+              tail -n +2 "/tmp/itapoa_dump_${STAMP}.sql" > "/tmp/itapoa_dump_${STAMP}.cleaned.sql" 2>&1 | head -5
+              DUMP_SRC="/tmp/itapoa_dump_${STAMP}.cleaned.sql"
+            else
+              DUMP_SRC="/tmp/itapoa_dump_${STAMP}.sql"
+            fi
+            echo "Dump $DUMP_SRC ($(du -h "$DUMP_SRC" | cut -f1)) $(grep -c CREATE\ TABLE "$DUMP_SRC" 2>&1 || echo ? ) tabelas"
+            docker cp "$DUMP_SRC" "$CTR:/tmp/restore.sql" 2>&1 | head -5
+            echo "Importando..."
+            docker exec "$CTR" sh -c "mariadb -u $DB_USER -p\"$DB_PASS\" $DB_NAME < /tmp/restore.sql" 2>&1 | head -20
+            docker exec "$CTR" sh -c "mariadb -u $DB_USER -p\"$DB_PASS\" $DB_NAME < /tmp/restore.sql || mysql -u $DB_USER -p\"$DB_PASS\" $DB_NAME < /tmp/restore.sql" 2>&1 | head -20 || true
+            echo "Validacao..."
+            docker exec "$CTR" mariadb -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -N -e "
+              SELECT 'TABLES', COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE()
+              UNION ALL SELECT 'companies', COUNT(*) FROM companies
+              UNION ALL SELECT 'users', COUNT(*) FROM users
+              UNION ALL SELECT 'categories', COUNT(*) FROM categories
+              UNION ALL SELECT 'cities', COUNT(*) FROM cities
+              UNION ALL SELECT 'roles', COUNT(*) FROM roles
+              UNION ALL SELECT 'plans', COUNT(*) FROM plans
+              UNION ALL SELECT 'districts', COUNT(*) FROM districts
+              UNION ALL SELECT 'companies_users', COUNT(*) FROM companies_users;
+            " 2>&1 | head -30
+            echo "--- FK orfaos ---"
+            docker exec "$CTR" mariadb -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -N -e "SELECT COUNT(*) FROM users u LEFT JOIN roles r ON r.id=u.role WHERE r.id IS NULL AND u.role IS NOT NULL;" 2>&1 | head -5
+            echo "--- Slugs ---"
+            docker exec "$CTR" mariadb -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -N -e "SELECT slug FROM companies ORDER BY slug LIMIT 5;" 2>&1 | head -10
+            echo "--- admin ---"
+            docker exec "$CTR" mariadb -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -N -e "SELECT email, role FROM users WHERE email='admin@itapoa.online';" 2>&1 | head -10
+            echo "Limpeza"
+            docker rm -f "$CTR" 2>&1 | head -5 || true
+            docker network rm "$NET" 2>&1 | head -5 || true
+            echo "=== RESTORE V2 OK ==="
+
