@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import { Building2, Mail, Phone, MapPin, Lock, ArrowLeft, UserCheck, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api, ApiError } from '../../lib/apiClient';
+import { readPendingPurchase } from '../../lib/pendingPurchase';
 import { User } from '../../types';
 
 interface RegisterPageProps {
@@ -27,6 +28,8 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateTab }) => 
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const pending = readPendingPurchase();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -42,7 +45,6 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateTab }) => 
 
     setIsSubmitting(true);
     try {
-      // The API hashes the password with bcrypt and returns the session token.
       const data = await api.post<{ success: boolean; token: string; user: User }>(
         '/api/auth/register',
         { name, email, phone, city, password, role: 'advertiser' }
@@ -54,7 +56,12 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateTab }) => 
       }
 
       adoptSession(data.token, data.user);
-      onNavigateTab('painel');
+      // Resume pending purchase (plan preserved without secrets)
+      if (readPendingPurchase()) {
+        onNavigateTab('planos');
+      } else {
+        onNavigateTab('painel');
+      }
     } catch (err) {
       setErrorMsg(err instanceof ApiError ? err.message : 'Erro de conexão ao realizar cadastro.');
     } finally {
@@ -65,10 +72,8 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateTab }) => 
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center px-4 py-16 font-sans relative overflow-hidden">
 
-      {/* Background Aura */}
       <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Top Back Link */}
       <div className="absolute top-6 left-6">
         <button
           onClick={() => onNavigateTab('home')}
@@ -81,7 +86,6 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateTab }) => 
 
       <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6 relative z-10">
 
-        {/* Header */}
         <div className="text-center space-y-2">
           <button
             type="button"
@@ -104,6 +108,11 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateTab }) => 
           <p className="text-xs text-slate-400">
             Crie sua conta para obter seu mini-site, catálogo de ofertas e leads automatizados.
           </p>
+          {pending && (
+            <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs text-left">
+              Seu plano <strong>{pending.planId}</strong> está reservado. Após o cadastro você retornará direto à compra — sem nova seleção e sem cobrança até o pagamento.
+            </div>
+          )}
         </div>
 
         {errorMsg && (

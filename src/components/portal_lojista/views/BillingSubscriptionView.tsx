@@ -240,18 +240,18 @@ export const BillingSubscriptionView: React.FC<BillingSubscriptionViewProps> = (
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              Ao realizar o upgrade hoje, você pagará apenas a <strong>diferença proporcional</strong> referente aos dias restantes do seu ciclo mensal.
+              Selecione o novo plano. O valor é calculado no servidor conforme a regra comercial vigente; não aplicamos descontos nem prazos inventados aqui. A vigência do novo plano segue a regra do backend (30 dias a partir da ativação via webhook).
             </p>
 
             <div className="space-y-3">
               {[
-                { code: 'gold_vip', name: 'Plano Gold VIP', price: 49.9, diff: 49.9 },
-                { code: 'diamond_extremo', name: 'Plano Diamond Extremo', price: 99.9, diff: 99.9 }
-              ].map(p => (
+                { code: 'gold_vip', name: 'Plano Gold VIP', price: 49.9 },
+                { code: 'diamond_extremo', name: 'Plano Diamond Extremo', price: 99.9 }
+              ].filter(p => `plan_${p.code}` !== `plan_${(company?.planLevel || 'bronze')}`).map(p => (
                 <div key={p.code} className="p-4 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-between">
                   <div>
                     <span className="font-bold text-white text-sm block">{p.name}</span>
-                    <span className="text-xs text-emerald-400 font-semibold">Pro-Rata: R$ {p.diff} agora</span>
+                    <span className="text-xs text-emerald-400 font-semibold">R$ {p.price.toFixed(2).replace(".", ",")} / mês — valor validado no servidor</span>
                   </div>
                   <button
                     onClick={() => {

@@ -7,7 +7,9 @@
 import React from 'react';
 import SaaSPricing from '../components/SaaSPricing';
 import { useCompany } from '../context/CompanyContext';
+import { useAuth } from '../context/AuthContext';
 import { useSEO } from '../hooks/useSEO';
+import { readPendingPurchase, clearPendingPurchase } from '../lib/pendingPurchase';
 
 interface PlansPageProps {
   onSelectPlan: (planId: string) => void;
@@ -21,6 +23,7 @@ export const PlansPage: React.FC<PlansPageProps> = ({
   onOpenAuthModal = () => {}
 }) => {
   const { cities, categories, refreshData } = useCompany();
+  const { isAuthenticated } = useAuth();
 
   useSEO({
     title: 'Planos SaaS para Empresas - Anuncie sua Marca em Itapoá',
@@ -29,7 +32,6 @@ export const PlansPage: React.FC<PlansPageProps> = ({
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // If modal is not active or handled, ESC goes back to home
       if (e.key === 'Escape') {
         onNavigateTab('home');
       }
@@ -38,6 +40,16 @@ export const PlansPage: React.FC<PlansPageProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onNavigateTab]);
 
+  // If user returns authenticated with a pending plan, keep intent available for SaaSPricing to resume
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      const pending = readPendingPurchase();
+      if (pending) {
+        // keep it — SaaSPricing will auto-resume; also handle company-required flow there
+      }
+    }
+  }, [isAuthenticated]);
+
   return (
     <div className="bg-slate-50 text-slate-900 font-sans">
       <SaaSPricing
@@ -45,7 +57,8 @@ export const PlansPage: React.FC<PlansPageProps> = ({
         categories={categories}
         onListingCreated={() => {
           refreshData();
-          onSelectPlan('admin');
+          clearPendingPurchase();
+          onSelectPlan('painel');
         }}
       />
     </div>
