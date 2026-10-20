@@ -1,7 +1,7 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * Header — Menu em ordem exata (7 itens) desktop e mobile iguais, SPA sem reload
+ * Header — VIP→planos + bloco vertical Turismo/Eventos/Informativo
  */
 
 import React, { useState } from 'react';
@@ -21,16 +21,25 @@ interface HeaderProps {
   onOpenAIModal: () => void;
 }
 
-// Ordem exata exigida — labels EXATOS (caixa alta/baixa respeitada)
-const MENU: { label: string; tab: string; badge?: string }[] = [
+const MENU_PRIMARY: { label: string; tab: string }[] = [
   { label: 'Início', tab: 'home' },
-  { label: 'PROJETOS SOCIAIS', tab: 'projetos-sociais', badge: 'Em breve' },
+  { label: 'Projetos Sociais', tab: 'projetos-sociais' },
   { label: 'CATEGORIAS', tab: 'categorias' },
   { label: 'BAIRROS', tab: 'bairros' },
   { label: 'Empresas', tab: 'empresas' },
-  { label: 'Turismo / Eventos / Informativo', tab: 'turismo' },
+];
+
+const TURISMO_BLOCO: { label: string; tab: string }[] = [
+  { label: 'Turismo', tab: 'turismo' },
+  { label: 'Eventos', tab: 'eventos' },
+  { label: 'Informativo', tab: 'informativo' },
+];
+
+const MENU_TAIL: { label: string; tab: string }[] = [
   { label: 'EMPREGOS', tab: 'empregos' },
 ];
+
+const isTurismoActive = (currentTab: string) => currentTab === 'turismo';
 
 export const Header: React.FC<HeaderProps> = ({
   currentTab,
@@ -42,13 +51,22 @@ export const Header: React.FC<HeaderProps> = ({
   const { cities, selectedCityId, setSelectedCityId, categories } = useCompany();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const bairros = [
-    'Centro', 'Itapema do Norte', 'Barra do Saí', 'Cambiju', 'Rainha', 'Balneário Brasília', 'Pontal do Norte'
-  ];
-
   const handleNav = (tab: string) => {
     setMobileOpen(false);
     onNavigateTab(tab);
+    const anchors: Record<string, string> = { turismo: 'turismo', eventos: 'eventos', informativo: 'informativo' };
+    const anchor = anchors[tab];
+    if (anchor) {
+      setTimeout(() => {
+        const el = document.getElementById(anchor);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 120);
+    }
+  };
+
+  const handleVip = () => {
+    setMobileOpen(false);
+    onNavigateTab('planos');
   };
 
   const isActive = (tab: string) => currentTab === tab;
@@ -61,7 +79,7 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 animate-bounce" />
               <span>
-                <strong>SESSÃO ASSUMIDA (IMPERSONATION):</strong> Logado como "{user?.name}" (Admin: {realAdminUser?.email})
+                <strong>SESSÃO ASSUMIDA (IMPERSONATION):</strong> Logado como &quot;{user?.name}&quot; (Admin: {realAdminUser?.email})
               </span>
             </div>
             <button
@@ -91,7 +109,7 @@ export const Header: React.FC<HeaderProps> = ({
             />
             <div className="hidden md:flex flex-col">
               <span className="text-sm font-black tracking-wider text-white uppercase leading-none">ITAPOÁ ONLINE</span>
-              <span className="text-[10px] font-semibold text-red-200 tracking-wide mt-0.5">Guia Comercial & Marketplace</span>
+              <span className="text-[10px] font-semibold text-red-200 tracking-wide mt-0.5">Guia Comercial &amp; Marketplace</span>
             </div>
           </div>
 
@@ -134,13 +152,13 @@ export const Header: React.FC<HeaderProps> = ({
 
       <header className="sticky top-0 z-40 bg-[#0A0915] border-b border-slate-800 text-white shadow-xl">
         <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-center justify-between h-12 text-[10px] sm:text-xs font-bold uppercase tracking-wider">
-            <nav className="hidden lg:flex items-center h-full">
-              {MENU.map(item => (
+          <div className="flex items-stretch justify-between min-h-[3.5rem] text-[10px] sm:text-xs font-bold uppercase tracking-wider">
+            <nav className="hidden lg:flex items-stretch" aria-label="Menu principal">
+              {MENU_PRIMARY.map(item => (
                 <button
                   key={item.tab}
                   onClick={() => handleNav(item.tab)}
-                  className={`h-full px-3 flex items-center justify-center transition whitespace-nowrap gap-1.5 ${
+                  className={`px-3 flex items-center justify-center transition whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
                     isActive(item.tab)
                       ? item.tab === 'home'
                         ? 'bg-[#C8102E] text-white font-black'
@@ -149,29 +167,53 @@ export const Header: React.FC<HeaderProps> = ({
                   }`}
                 >
                   {item.label}
-                  {item.badge && (
-                    <span className="text-[7px] font-black leading-none bg-amber-400 text-slate-900 px-1 py-0.5 rounded uppercase tracking-wider">
-                      {item.badge}
-                    </span>
-                  )}
+                </button>
+              ))}
+
+              <div className={`flex flex-col justify-center px-3 py-1 border-x border-slate-800/60 ${isTurismoActive(currentTab) ? 'bg-slate-800' : 'bg-transparent'}`} aria-label="Turismo, Eventos e Informativo">
+                {TURISMO_BLOCO.map(item => (
+                  <button
+                    key={item.tab}
+                    onClick={() => handleNav(item.tab)}
+                    className={`text-left leading-none py-1 transition whitespace-nowrap focus:outline-none focus-visible:ring-1 focus-visible:ring-white/30 rounded px-1 ${
+                      isTurismoActive(currentTab) ? 'text-white' : 'text-slate-300 hover:text-white'
+                    }`}
+                    style={{ fontSize: '10px', letterSpacing: '0.08em' }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              {MENU_TAIL.map(item => (
+                <button
+                  key={item.tab}
+                  onClick={() => handleNav(item.tab)}
+                  className={`px-3 flex items-center justify-center transition whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
+                    isActive(item.tab)
+                      ? 'bg-slate-800 text-white'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  {item.label}
                 </button>
               ))}
 
               <button
-                onClick={onOpenAuthModal}
-                className="px-3 py-3 text-cyan-400 hover:text-cyan-300 hover:bg-slate-800 transition flex items-center gap-1 font-bold whitespace-nowrap"
+                onClick={handleVip}
+                className="px-4 flex items-center justify-center text-cyan-400 hover:text-cyan-300 hover:bg-slate-800 transition whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
+                aria-label="Ver planos VIP"
               >
                 <span>VIP 💎</span>
               </button>
             </nav>
 
-            {/* Mobile hint when collapsed */}
             <div className="lg:hidden flex items-center text-slate-400 text-[10px] font-semibold tracking-wider">
               <span className="hidden sm:inline">Menu — toque no ícone ao topo</span>
               <span className="sm:hidden">ITAPOÁ ONLINE</span>
             </div>
 
-            <div className="flex items-center gap-3 h-full">
+            <div className="flex items-center gap-3">
               <div className="hidden lg:flex items-center gap-3 text-slate-400 border-r border-slate-800 pr-4">
                 <Facebook className="w-3.5 h-3.5 hover:text-blue-400 cursor-pointer transition" />
                 <Instagram className="w-3.5 h-3.5 hover:text-pink-400 cursor-pointer transition" />
@@ -184,7 +226,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={onOpenAIModal}
                 title="IA do Guia Comercial"
-                className="p-2 text-slate-300 hover:text-amber-400 transition"
+                className="p-2 text-slate-300 hover:text-amber-400 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded"
               >
                 <Sparkles className="w-4 h-4 animate-pulse" />
               </button>
@@ -193,7 +235,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <button
                   onClick={() => handleNav('admin')}
                   title="Painel Administrativo Master"
-                  className="p-2 text-purple-400 hover:text-purple-300 transition"
+                  className="p-2 text-purple-400 hover:text-purple-300 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded"
                 >
                   <Settings className="w-4 h-4" />
                 </button>
@@ -201,7 +243,7 @@ export const Header: React.FC<HeaderProps> = ({
 
               <button
                 onClick={onOpenAuthModal}
-                className="hidden sm:inline-flex px-4 py-1.5 bg-[#C8102E] hover:bg-red-700 text-white font-extrabold text-[10px] rounded transition shadow-md tracking-wider ml-1"
+                className="hidden sm:inline-flex px-4 py-1.5 bg-[#C8102E] hover:bg-red-700 text-white font-extrabold text-[10px] rounded transition shadow-md tracking-wider ml-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
               >
                 ANUNCIANTE
               </button>
@@ -209,31 +251,50 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Mobile drawer — mesma ordem e labels exatos */}
         {mobileOpen && (
           <div className="lg:hidden border-t border-slate-800 bg-[#0A0915]">
-            <nav className="flex flex-col py-2">
-              {MENU.map(item => (
+            <nav className="flex flex-col py-2" aria-label="Menu mobile">
+              {MENU_PRIMARY.map(item => (
                 <button
                   key={item.tab}
                   onClick={() => handleNav(item.tab)}
-                  className={`text-left px-4 py-3 text-xs font-bold uppercase tracking-wider transition border-b border-slate-800/50 last:border-0 flex items-center gap-2 ${
+                  className={`text-left px-4 py-3 text-xs font-bold uppercase tracking-wider transition border-b border-slate-800/50 flex items-center gap-2 focus:outline-none focus-visible:bg-slate-800 ${
                     isActive(item.tab) ? 'bg-[#C8102E] text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                   }`}
                 >
                   <span>{item.label}</span>
-                  {item.badge && (
-                    <span className="text-[7px] font-black bg-amber-400 text-slate-900 px-1.5 py-0.5 rounded uppercase tracking-wider">
-                      {item.badge}
-                    </span>
-                  )}
+                </button>
+              ))}
+              <div className="border-b border-slate-800/50 bg-slate-900/40">
+                <div className="px-4 pt-2 pb-1 text-[9px] font-black tracking-widest text-slate-500 uppercase">Turismo / Eventos / Informativo</div>
+                {TURISMO_BLOCO.map(item => (
+                  <button
+                    key={item.tab}
+                    onClick={() => handleNav(item.tab)}
+                    className={`text-left pl-8 pr-4 py-2.5 text-xs font-bold uppercase tracking-wider transition flex items-center gap-2 w-full focus:outline-none ${
+                      isTurismoActive(currentTab) ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              {MENU_TAIL.map(item => (
+                <button
+                  key={item.tab}
+                  onClick={() => handleNav(item.tab)}
+                  className={`text-left px-4 py-3 text-xs font-bold uppercase tracking-wider transition border-b border-slate-800/50 flex items-center gap-2 focus:outline-none ${
+                    isActive(item.tab) ? 'bg-[#C8102E] text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <span>{item.label}</span>
                 </button>
               ))}
               <button
-                onClick={() => { setMobileOpen(false); onOpenAuthModal(); }}
-                className="text-left px-4 py-3 text-xs font-bold uppercase tracking-wider text-cyan-400 hover:bg-slate-800 hover:text-cyan-300 transition"
+                onClick={handleVip}
+                className="text-left px-4 py-3 text-xs font-bold uppercase tracking-wider text-cyan-400 hover:bg-slate-800 hover:text-cyan-300 transition focus:outline-none"
               >
-                VIP 💎
+                VIP 💎 — Ver Planos
               </button>
             </nav>
           </div>

@@ -81,18 +81,21 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   return (
     <div className="bg-slate-50 text-slate-900 flex flex-col">
-      {/* 1. Litoral Photo Banners Strip */}
-      <div className="grid grid-cols-2 md:grid-cols-6 h-32 md:h-40">
+      {/* 1. Litoral Photo Banners Strip — responsive without overflow or cropping */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-0 overflow-hidden">
+
         {litoralBanners.map((b, idx) => (
           <div
             key={idx}
             onClick={() => onSelectPraia && onSelectPraia(b.slug)}
-            className="relative overflow-hidden group cursor-pointer"
+            className="relative overflow-hidden group cursor-pointer aspect-[16/10] sm:aspect-[4/3] lg:aspect-[3/4] lg:h-40"
           >
             <img
               src={b.img}
               alt={b.title}
-              className="w-full h-full object-cover group-hover:scale-110 transition duration-700 brightness-75"
+              className="w-full h-full object-cover object-center group-hover:scale-110 transition duration-700 brightness-75"
+              loading="lazy"
+              decoding="async"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent flex items-end p-4">
               <span className="text-[13px] font-bold text-white tracking-tight drop-shadow-md">
@@ -308,7 +311,9 @@ export const HomePage: React.FC<HomePageProps> = ({
                     <img
                       src={(comp as any).coverImage || comp.logo}
                       alt={comp.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                      loading="lazy"
+                      decoding="async"
+                      className="w-full h-full object-cover object-center group-hover:scale-105 transition duration-500"
                     />
                     <div className="absolute top-4 left-4">
                       <span className="bg-[#C8102E] text-white text-[8px] font-black uppercase px-2 py-1 rounded shadow-md">

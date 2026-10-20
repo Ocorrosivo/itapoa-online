@@ -324,18 +324,20 @@ export const AppRoutes: React.FC = () => {
       case 'turismo':
         return (
           <div className="space-y-0">
-            <TourismPage
-              onNavigateCompany={handleNavigateCompany}
-              onNavigateTab={handleNavigateTab}
-              onOpenAuthModal={handleOpenAuthModal}
-            />
-            <div id="eventos" className="border-t border-slate-200">
+            <div id="turismo">
+              <TourismPage
+                onNavigateCompany={handleNavigateCompany}
+                onNavigateTab={handleNavigateTab}
+                onOpenAuthModal={handleOpenAuthModal}
+              />
+            </div>
+            <div id="eventos" className="border-t border-slate-200 scroll-mt-16">
               <EventsPage
                 onNavigateTab={handleNavigateTab}
                 onOpenAuthModal={handleOpenAuthModal}
               />
             </div>
-            <div id="informativo" className="border-t border-slate-200">
+            <div id="informativo" className="border-t border-slate-200 scroll-mt-16">
               <BlogPage />
             </div>
           </div>
@@ -364,7 +366,6 @@ export const AppRoutes: React.FC = () => {
         }
         return (
           <div className="max-w-3xl mx-auto px-4 py-16 text-center">
-            <span className="inline-block text-[11px] font-black uppercase tracking-widest bg-amber-400 text-slate-900 px-3 py-1 rounded-full mb-4">Em breve</span>
             <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">Projetos Sociais</h1>
             <p className="text-sm text-slate-500 mt-3 leading-relaxed">
               Estamos preparando novidades para esta seção. Volte em breve para conhecer os projetos sociais de Itapoá.

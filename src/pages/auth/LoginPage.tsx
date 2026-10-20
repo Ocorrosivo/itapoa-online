@@ -7,6 +7,7 @@
 import React, { useState } from 'react';
 import { Mail, Lock, LogIn, ArrowLeft, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { readPendingPurchase } from '../../lib/pendingPurchase';
 
 interface LoginPageProps {
   onNavigateTab: (tab: string) => void;
@@ -18,6 +19,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateTab }) => {
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const pending = readPendingPurchase();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,14 +27,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateTab }) => {
     setIsSubmitting(true);
 
     try {
-      // The password goes to the API, which verifies it with bcrypt. The role
-      // is whatever the server returns; the client never assigns one.
       const authenticated = await login(email, password);
       if (!authenticated) {
         setErrorMsg('Credenciais inválidas. Verifique seu e-mail e senha.');
         return;
       }
 
+      // Resume pending purchase if present — do not require new selection
+      if (readPendingPurchase()) {
+        onNavigateTab('planos');
+        return;
+      }
       const role = authenticated.role;
       onNavigateTab(role === 'admin_master' || role === 'admin' ? 'admin' : 'painel');
     } catch {
@@ -45,10 +50,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateTab }) => {
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center px-4 py-16 font-sans relative overflow-hidden">
 
-      {/* Background Subtle Gradient Blobs */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-[#C8102E]/20 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Top Back Link */}
       <div className="absolute top-6 left-6">
         <button
           onClick={() => onNavigateTab('home')}
@@ -61,7 +64,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateTab }) => {
 
       <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6 relative z-10">
 
-        {/* Brand Header */}
         <div className="text-center space-y-3">
           <button
             type="button"
@@ -84,6 +86,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateTab }) => {
           <p className="text-xs text-slate-400">
             Entre com seus dados para gerenciar o mini-site da sua empresa ou administração.
           </p>
+          {pending && (
+            <div className="p-3 rounded-xl bg-cyan-950/50 border border-cyan-800 text-cyan-200 text-xs text-left">
+              Você tem um plano reservado (<strong>{pending.planId}</strong>). Após entrar, voltará direto à compra sem nova seleção.
+            </div>
+          )}
         </div>
 
         {errorMsg && (
@@ -146,7 +153,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateTab }) => {
           </button>
         </form>
 
-        {/* Footer Navigation Links */}
         <div className="pt-4 border-t border-slate-800 text-center text-xs text-slate-400 space-y-2">
           <p>
             Ainda não possui conta de parceiro?{' '}
