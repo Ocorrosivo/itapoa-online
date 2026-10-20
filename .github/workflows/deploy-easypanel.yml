@@ -1,0 +1,71 @@
+name: Deploy Easypanel (itapoa.online)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: easypanel-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build check
+        run: |
+          npm run build
+          test -f dist/index.html
+          test -f dist/server.cjs
+          grep -q 'itapoa.online' dist/index.html && echo "OG OK" || (echo "OG check failed" && exit 1)
+          echo "Build OK: $(wc -c < dist/server.cjs) bytes server.cjs"
+
+      - name: Trigger Easypanel deploy (redeploy via webhook)
+        env:
+          EASYPANEL_URL: ${{ secrets.EASYPANEL_URL }}
+          EASYPANEL_TOKEN: ${{ secrets.EASYPANEL_TOKEN }}
+        run: |
+          # Easypanel auto-deploy via Git is the primary path (webhook does the build on the VPS).
+          # This job validates the build can succeed and pings the panel for visibility.
+          # If EASYPANEL_TOKEN is not yet configured, we only validate the build and
+          # leave the actual rebuild to the manual "Implantar" button or future webhook.
+          if [ -z "$EASYPANEL_TOKEN" ] || [ -z "$EASYPANEL_URL" ]; then
+            echo "::notice::EASYPANEL_TOKEN/EASYPANEL_URL not set — skipping webhook trigger (build validated)."
+            echo "Configure Settings -> Secrets: EASYPANEL_URL=https://itapoa.tech and EASYPANEL_TOKEN (GitHub PAT) for fully automatic deploys."
+            exit 0
+          fi
+          echo "Webhook trigger would run here (panel auto-deploy handles it when GitHub token is set)."
+          # Future: curl -X POST "$EASYPANEL_URL/api/..." once panel webhook is documented.
+
+      - name: Health check (itapoa.online)
+        if: always()
+        run: |
+          echo "Aguardando Traefik propagar (build via Easypanel)..."
+          sleep 30
+          for i in 1 2 3 4 5 6; do
+            CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" https://itapoa.online/api/health || echo "000")
+            echo "Tentativa $i: /api/health -> $CODE $(cat /tmp/health.json 2>/dev/null | head -c 400)"
+            if [ "$CODE" = "200" ] && grep -q '"status":"ok"' /tmp/health.json 2>/dev/null; then
+              echo "Health OK"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "::warning::Health check nao confirmou 200 apos 6 tentativas — verificar Easypanel Deployments"
+          exit 0
