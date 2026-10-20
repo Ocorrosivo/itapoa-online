@@ -81,14 +81,14 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   return (
     <div className="bg-slate-50 text-slate-900 flex flex-col">
-      {/* 1. Litoral Photo Banners Strip — responsive without overflow or cropping */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-0 overflow-hidden">
+      {/* 1. Litoral Photo Banners Strip — continuous full-width row */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-0 overflow-hidden">
 
         {litoralBanners.map((b, idx) => (
           <div
             key={idx}
             onClick={() => onSelectPraia && onSelectPraia(b.slug)}
-            className="relative overflow-hidden group cursor-pointer aspect-[16/10] sm:aspect-[4/3] lg:aspect-[3/4] lg:h-40"
+            className="relative overflow-hidden group cursor-pointer h-36 sm:h-40 lg:h-44"
           >
             <img
               src={b.img}
@@ -97,20 +97,20 @@ export const HomePage: React.FC<HomePageProps> = ({
               loading="lazy"
               decoding="async"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent flex items-end p-4">
-              <span className="text-[13px] font-bold text-white tracking-tight drop-shadow-md">
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent flex items-end p-3 sm:p-4">
+              <span className="text-[12px] sm:text-[13px] font-bold text-white tracking-tight drop-shadow-md">
                 {b.badge}
               </span>
             </div>
           </div>
         ))}
 
-        {/* 6th Red Card: ITAPOÁ SC */}
-        <div 
+        {/* 6th Red Card: ITAPOÁ SC — same row, equal height */}
+        <div
           onClick={() => onNavigateTab('tourism')}
-          className="relative bg-gradient-to-br from-red-800 to-[#C8102E] flex flex-col justify-center items-center text-center p-4 cursor-pointer group"
+          className="relative bg-gradient-to-br from-red-800 to-[#C8102E] flex flex-col justify-center items-center text-center p-4 cursor-pointer group h-36 sm:h-40 lg:h-44"
         >
-          <span className="text-xl font-black tracking-widest text-white uppercase block group-hover:scale-105 transition">
+          <span className="text-lg sm:text-xl font-black tracking-widest text-white uppercase block group-hover:scale-105 transition">
             ITAPOÁ SC
           </span>
           <span className="text-[11px] italic text-red-200 block mt-1">"Paraíso Catarinense"</span>
@@ -121,8 +121,8 @@ export const HomePage: React.FC<HomePageProps> = ({
       </div>
 
       {/* Main Container */}
-      <div className="max-w-7xl mx-auto px-4 space-y-12 py-8">
-        
+      <div className="max-w-7xl mx-auto px-4 space-y-10 py-8">
+
         {/* Dynamic Carousel of Premium Companies (Bright Theme) */}
         <PremiumCompaniesCarousel
           companies={companies}
@@ -131,7 +131,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           onNavigateTab={onNavigateTab}
         />
 
-        <div className="text-center space-y-6 pt-16">
+        <div className="text-center space-y-6 pt-6">
           <div className="space-y-2">
             <span className="text-[10px] font-black tracking-widest text-[#C8102E] uppercase">
               ACHE TUDO O QUE PRECISA

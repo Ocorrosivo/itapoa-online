@@ -72,7 +72,7 @@ export const PremiumCompaniesCarousel: React.FC<PremiumCompaniesCarouselProps> =
   const visibleCompanies = getVisibleCards();
 
   return (
-    <section className="py-10 bg-white border border-slate-200 rounded-3xl p-6 md:p-10 shadow-sm relative overflow-hidden my-8">
+    <section className="bg-white border border-slate-200 rounded-3xl p-6 md:p-10 shadow-sm relative overflow-hidden my-8">
       
       {/* Header & Controls */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-100 pb-6 mb-8">
