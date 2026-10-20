@@ -50,12 +50,17 @@ jobs:
 
       - name: Deploy and verify on VPS
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          MP_PUBLIC_KEY: ${{ secrets.MERCADOPAGO_PUBLIC_KEY }}
+          MP_ACCESS_TOKEN: ${{ secrets.MERCADOPAGO_ACCESS_TOKEN }}
+          MP_WEBHOOK_SECRET: ${{ secrets.MERCADOPAGO_WEBHOOK_SECRET }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
           port: ${{ secrets.VPS_PORT }}
           command_timeout: 15m
+          envs: MP_PUBLIC_KEY,MP_ACCESS_TOKEN,MP_WEBHOOK_SECRET
           script: |
             set -eu
             EXPECTED_SHA='${{ github.sha }}'
@@ -74,6 +79,25 @@ jobs:
             echo "[deploy] Building $ACTUAL_SHA"
             docker build --pull --build-arg RELEASE_SHA="$EXPECTED_SHA" -t "$IMAGE" "$BUILD_DIR"
 
+            # Secrets are delivered through encrypted GitHub secrets, never committed or printed.
+            set --
+            if [ -n "${MP_PUBLIC_KEY:-}${MP_ACCESS_TOKEN:-}${MP_WEBHOOK_SECRET:-}" ]; then
+              test -n "${MP_PUBLIC_KEY:-}" && test -n "${MP_ACCESS_TOKEN:-}" && test -n "${MP_WEBHOOK_SECRET:-}" || { echo 'Incomplete payment configuration; no settings changed'; exit 1; }
+              current_container=$(docker ps --filter "label=com.docker.swarm.service.name=$SERVICE" --format '{{.ID}}' | head -n 1)
+              test -n "$current_container"
+              # Read-only authentication check before changing the service. No payments are created.
+              docker exec -i -e MP_ACCESS_TOKEN "$current_container" node - <<'NODE'
+            fetch('https://api.mercadopago.com/users/me', {
+              headers: { Authorization: 'Bearer ' + process.env.MP_ACCESS_TOKEN },
+              signal: AbortSignal.timeout(15000)
+            }).then(response => {
+              if (!response.ok) throw new Error('Mercado Pago authentication failed (HTTP ' + response.status + ')');
+              console.log('Mercado Pago read-only authentication: OK');
+            }).catch(error => { console.error(error.message); process.exitCode = 1; });
+            NODE
+              set -- --env-add "MERCADOPAGO_PUBLIC_KEY=$MP_PUBLIC_KEY" --env-add "MERCADOPAGO_ACCESS_TOKEN=$MP_ACCESS_TOKEN" --env-add "MERCADOPAGO_WEBHOOK_SECRET=$MP_WEBHOOK_SECRET" --env-add 'APP_URL=https://itapoa.online' --env-add 'API_URL=https://itapoa.online/api'
+            fi
+
             PREVIOUS_IMAGE=$(docker service inspect "$SERVICE" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')
             rollback() {
               result=$?
@@ -87,7 +111,7 @@ jobs:
             trap rollback EXIT
 
             echo "[deploy] Updating $SERVICE"
-            docker service update --image "$IMAGE" --force "$SERVICE"
+            docker service update --image "$IMAGE" "$@" --force "$SERVICE"
 
             echo "[deploy] Waiting for exact image task to run"
             converged=0
@@ -141,6 +165,20 @@ jobs:
               sleep 5
             done
             test "$healthy" = 1 || { echo "Canonical health failed for $EXPECTED_SHA"; exit 1; }
+            if [ "$#" -gt 0 ]; then
+              docker exec -i -e MP_PUBLIC_KEY "$container" node - <<'NODE'
+            fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/api/payments/config', {
+              signal: AbortSignal.timeout(10000)
+            }).then(async response => {
+              if (!response.ok) throw new Error('Payment configuration check failed');
+              const config = await response.json();
+              if (!config.pixEnabled || !config.cardEnabled || config.publicKey !== process.env.MP_PUBLIC_KEY) {
+                throw new Error('Payment configuration incomplete');
+              }
+              console.log('Payment configuration: card and Pix enabled');
+            }).catch(error => { console.error(error.message); process.exitCode = 1; });
+            NODE
+            fi
             curl --fail --silent --show-error --max-time 15 -o "$BUILD_DIR/public-index.html" "https://itapoa.online/?release=$EXPECTED_SHA"
             grep -Fq "$asset" "$BUILD_DIR/public-index.html"
             echo "DEPLOY_VERIFIED commit=$ACTUAL_SHA image=$IMAGE asset=$asset"
