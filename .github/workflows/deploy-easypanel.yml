@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-and-push:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -36,36 +36,95 @@ jobs:
           grep -q 'itapoa.online' dist/index.html && echo "OG OK" || (echo "OG check failed" && exit 1)
           echo "Build OK: $(wc -c < dist/server.cjs) bytes server.cjs"
 
-      - name: Trigger Easypanel deploy (redeploy via webhook)
-        env:
-          EASYPANEL_URL: ${{ secrets.EASYPANEL_URL }}
-          EASYPANEL_TOKEN: ${{ secrets.EASYPANEL_TOKEN }}
-        run: |
-          # Easypanel auto-deploy via Git is the primary path (webhook does the build on the VPS).
-          # This job validates the build can succeed and pings the panel for visibility.
-          # If EASYPANEL_TOKEN is not yet configured, we only validate the build and
-          # leave the actual rebuild to the manual "Implantar" button or future webhook.
-          if [ -z "$EASYPANEL_TOKEN" ] || [ -z "$EASYPANEL_URL" ]; then
-            echo "::notice::EASYPANEL_TOKEN/EASYPANEL_URL not set — skipping webhook trigger (build validated)."
-            echo "Configure Settings -> Secrets: EASYPANEL_URL=https://itapoa.tech and EASYPANEL_TOKEN (GitHub PAT) for fully automatic deploys."
-            exit 0
-          fi
-          echo "Webhook trigger would run here (panel auto-deploy handles it when GitHub token is set)."
-          # Future: curl -X POST "$EASYPANEL_URL/api/..." once panel webhook is documented.
+      - name: Deploy to VPS via SSH (pull + build + restart via Docker/Easypanel)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            echo "[deploy] Easypanel app: itapoa/itapoa-app (Git source Ocorrosivo/itapoa-online main)"
+            echo "[deploy] Trigger: git fetch + rebuild via Easypanel Docker"
+            # Easypanel builds from GitHub via Dockerfile — trigger a rebuild
+            # Approach: use the Easypanel API inside the VPS, or force docker rebuild
+            # Fallback: rebuild locally from the git source if Easypanel git token is not yet configured
+            APP_DIR="/opt/itapoa/app"
+            if [ -d "$APP_DIR/.git" ]; then
+              echo "[deploy] Legacy path $APP_DIR exists — sync git"
+              cd "$APP_DIR"
+              git fetch origin main
+              git reset --hard origin/main
+              echo "[deploy] New HEAD: $(git rev-parse --short HEAD) $(git log -1 --oneline)"
+            fi
+            # Primary path: Easypanel — redeploy via docker stack
+            # The Easypanel app pulls from GitHub on each deploy. Trigger it:
+            # Use the Easypanel internal: force rebuild by re-creating the service image
+            # Easypanel stores project in /etc/easypanel — we trigger deploy via its API over the swarm network
+            echo "[deploy] Trigger Easypanel deploy via internal API"
+            DEPLOYED=0
+            # Try Easypanel RPC: POST /api/rpc/services/app/deploy
+            # Auth via the panel's own session is not available here; instead rebuild the image directly
+            echo "[deploy] Rebuilding image from latest GitHub commit"
+            TMP_BUILD="/tmp/itapoa-build-$$"
+            mkdir -p "$TMP_BUILD"
+            cd "$TMP_BUILD"
+            git clone --depth 1 --branch main https://github.com/Ocorrosivo/itapoa-online.git . 2>&1 | tail -5
+            echo "[deploy] Cloned HEAD: $(git rev-parse --short HEAD)"
+            docker build -t easypanel/itapoa/itapoa-app:latest . 2>&1 | tail -20
+            echo "[deploy] Updating service itapoa_itapoa-app"
+            docker service update --image easypanel/itapoa/itapoa-app:latest --force itapoa_itapoa-app 2>&1 | tail -10
+            echo "[deploy] Waiting for service to converge"
+            for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+              STATE=$(docker service ps itapoa_itapoa-app --format "{{.CurrentState}}" 2>&1 | head -n 1)
+              echo "  [$i] $STATE"
+              if echo "$STATE" | grep -qi "Running.*ago"; then
+                echo "[deploy] Service running"
+                DEPLOYED=1
+                break
+              fi
+              if echo "$STATE" | grep -qi "Failed\|Error"; then
+                echo "[deploy] Service failed: $STATE"
+                docker service ps itapoa_itapoa-app --no-trunc 2>&1 | tail -20
+                exit 1
+              fi
+              sleep 10
+            done
+            if [ "$DEPLOYED" != "1" ]; then
+              echo "[deploy] Service did not converge in 120s"
+              docker service ps itapoa_itapoa-app --no-trunc 2>&1 | tail -20
+              exit 1
+            fi
+            echo "[deploy] Checking health"
+            for i in 1 2 3 4 5 6; do
+              sleep 5
+              CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" http://127.0.0.1:3000/api/health 2>&1 || echo "000")
+              echo "  [$i] :3000/api/health -> $CODE $(cat /tmp/health.json 2>/dev/null | head -c 200)"
+              if [ "$CODE" = "200" ] && grep -q '"status":"ok"' /tmp/health.json 2>/dev/null; then
+                echo "[deploy] Health OK on :3000"
+                break
+              fi
+              if [ "$i" = "6" ]; then
+                echo "[deploy] Health failed after 6 tries"
+                docker service logs itapoa_itapoa-app --tail 80 2>&1 | tail -40
+                exit 1
+              fi
+            done
+            echo "[deploy] Done — new image deployed via Traefik -> itapoa.online"
 
-      - name: Health check (itapoa.online)
-        if: always()
+      - name: Health check (itapoa.online — canônico, falha se não publicar)
         run: |
-          echo "Aguardando Traefik propagar (build via Easypanel)..."
-          sleep 30
+          echo "Aguardando Traefik + app..."
+          sleep 10
           for i in 1 2 3 4 5 6; do
             CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" https://itapoa.online/api/health || echo "000")
             echo "Tentativa $i: /api/health -> $CODE $(cat /tmp/health.json 2>/dev/null | head -c 400)"
             if [ "$CODE" = "200" ] && grep -q '"status":"ok"' /tmp/health.json 2>/dev/null; then
-              echo "Health OK"
+              echo "Health OK (itapoa.online canônico)"
               exit 0
             fi
-            sleep 20
+            sleep 15
           done
-          echo "::warning::Health check nao confirmou 200 apos 6 tentativas — verificar Easypanel Deployments"
-          exit 0
+          echo "::error::Health check falhou apos 6 tentativas — Traefik ou app nao publicou a nova versao"
+          exit 1
