@@ -314,6 +314,12 @@ export const HomePage: React.FC<HomePageProps> = ({
                       loading="lazy"
                       decoding="async"
                       className="w-full h-full object-cover object-center group-hover:scale-105 transition duration-500"
+                      onError={(e) => {
+                        const fallback = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=600&q=80';
+                        if ((e.target as HTMLImageElement).src !== fallback) {
+                          (e.target as HTMLImageElement).src = fallback;
+                        }
+                      }}
                     />
                     <div className="absolute top-4 left-4">
                       <span className="bg-[#C8102E] text-white text-[8px] font-black uppercase px-2 py-1 rounded shadow-md">

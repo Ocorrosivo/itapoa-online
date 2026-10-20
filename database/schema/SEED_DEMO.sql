@@ -147,8 +147,8 @@ INSERT INTO companies (id, name, slug, logo, coverImage, categoryId, cityId, des
 
 -- 9 - Mercado Central (Comércio) — cobre "Mercado"
 ('comp_mercado_central', 'Mercado Central Itapoá', 'mercado-central-itapoa',
- 'https://images.unsplash.com/photo-1578911373434-0cb395d2c4d3?auto=format&fit=crop&w=400&q=80',
- 'https://images.unsplash.com/photo-1578911373434-0cb395d2c4d3?auto=format&fit=crop&w=800&q=80',
+ 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80',
+ 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=800&q=80',
  'cat_comercio', 'city_itapoa',
  'Mercado completo no coração de Itapema do Norte. Açougue, padaria e hortifruti todos os dias.',
  'Entrega em domicílio, açougue com cortes nobres, padaria própria e estacionamento.',
@@ -227,9 +227,9 @@ ON DUPLICATE KEY UPDATE
 -- PRODUCTS (exemplos para busca por produto)
 -- ------------------------------------------------------------
 INSERT INTO products (id, company_id, name, description, price, image) VALUES
-  ('prod_1', 'comp_mercado_central', 'Picanha Angus 1kg', 'Corte nobre Angus, peça embalada a vácuo', 89.90, 'https://images.unsplash.com/photo-1608039824140-e0bbfdc64a65?auto=format&fit=crop&w=400&q=80'),
+  ('prod_1', 'comp_mercado_central', 'Picanha Angus 1kg', 'Corte nobre Angus, peça embalada a vácuo', 89.90, 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=400&q=80'),
   ('prod_2', 'comp_burger_itapema', 'Combo X-Tudo + Fritas', 'Hambúrguer artesanal 180g + fritas + refri lata', 32.90, 'https://images.unsplash.com/photo-1568909344668-6f14a07b56a0?auto=format&fit=crop&w=400&q=80'),
-  ('prod_3', 'comp_agrotudo', 'Ração Premium 15kg', 'Ração cães adultos sabor carne', 129.90, 'https://images.unsplash.com/photo-1589924691997-e2b93680c734?auto=format&fit=crop&w=400&q=80')
+  ('prod_3', 'comp_agrotudo', 'Ração Premium 15kg', 'Ração cães adultos sabor carne', 129.90, 'https://images.unsplash.com/photo-1518717758536-85ae29035b6d?auto=format&fit=crop&w=400&q=80')
 ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), price = VALUES(price);
 
 -- ------------------------------------------------------------

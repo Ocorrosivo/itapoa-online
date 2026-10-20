@@ -131,13 +131,27 @@ export const PremiumCompaniesCarousel: React.FC<PremiumCompaniesCarouselProps> =
                     src={coverImg}
                     alt={comp.name}
                     className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                    loading="lazy"
+                    decoding="async"
+                    onError={(e) => {
+                      const fallback = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=600&q=80';
+                      if ((e.target as HTMLImageElement).src !== fallback) {
+                        (e.target as HTMLImageElement).src = fallback;
+                      }
+                    }}
                   />
                   <div className="absolute top-3 left-3 bg-[#C8102E] text-white text-[9px] font-black uppercase px-2.5 py-1 rounded-full shadow-md flex items-center gap-1">
                     <span>📍 PARCEIRO VIP PREMIUM</span>
                   </div>
                   {comp.logo && (
                     <div className="absolute bottom-3 right-3 w-12 h-12 bg-white border border-slate-200 rounded-2xl p-1 shadow-md">
-                      <img src={comp.logo} alt={comp.name} className="w-full h-full object-contain rounded-xl" />
+                      <img
+                        src={comp.logo}
+                        alt={comp.name}
+                        className="w-full h-full object-contain rounded-xl"
+                        loading="lazy"
+                        onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')}
+                      />
                     </div>
                   )}
                 </div>
