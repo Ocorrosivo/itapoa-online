@@ -1,0 +1,51 @@
+name: Snapshot Final Pre-Reset (janela curta)
+
+on: workflow_dispatch
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Captura final consistente (janela curta, sem gravar)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            STAMP="$(date +%Y-%m-%d)"
+            echo "=== SNAPSHOT FINAL itapoa_db (interno, ativo) ==="
+            CTR=$(docker ps -q --filter "ancestor=mariadb:11" 2>&1 | head -n1)
+            DB_NAME=$(docker inspect "$CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | grep "MARIADB_DATABASE=" | cut -d= -f2)
+            DB_USER=$(docker inspect "$CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | grep "^MARIADB_USER=" | cut -d= -f2)
+            DB_PASS=$(docker inspect "$CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | grep "^MARIADB_PASSWORD=" | cut -d= -f2)
+            ROOT_PASS=$(docker inspect "$CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | grep "MARIADB_ROOT_PASSWORD=" | cut -d= -f2)
+            echo "DB $DB_NAME/$DB_USER"
+            echo "Contagens atuais (pos-2026-10-20 02:52)"
+            docker exec "$CTR" mariadb -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -N -e "
+              SELECT 'TABLES', COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE()
+              UNION ALL SELECT 'companies', COUNT(*) FROM companies
+              UNION ALL SELECT 'users', COUNT(*) FROM users
+              UNION ALL SELECT 'categories', COUNT(*) FROM categories
+              UNION ALL SELECT 'cities', COUNT(*) FROM cities
+              UNION ALL SELECT 'roles', COUNT(*) FROM roles
+              UNION ALL SELECT 'plans', COUNT(*) FROM plans
+              UNION ALL SELECT 'districts', COUNT(*) FROM districts
+              UNION ALL SELECT 'companies_users', COUNT(*) FROM companies_users
+              UNION ALL SELECT 'products', COUNT(*) FROM products
+              UNION ALL SELECT 'services', COUNT(*) FROM services
+              UNION ALL SELECT 'subscriptions', COUNT(*) FROM subscriptions
+              UNION ALL SELECT 'payment_logs', COUNT(*) FROM payment_logs
+              UNION ALL SELECT 'audit_logs', COUNT(*) FROM audit_logs;
+            " 2>&1 | head -30
+            echo "--- Dump consistente (single-transaction, sem gravar apos captura) ---"
+            docker exec "$CTR" sh -c "mariadb-dump --single-transaction -u $DB_USER -p\"$DB_PASS\" $DB_NAME > /tmp/itapoa_snapshot_${STAMP}.sql" 2>&1 | head -5 || docker exec "$CTR" sh -c "mysqldump --single-transaction -u $DB_USER -p\"$DB_PASS\" $DB_NAME > /tmp/itapoa_snapshot_${STAMP}.sql" 2>&1 | head -5
+            docker exec "$CTR" sh -c "ls -lh /tmp/itapoa_snapshot_${STAMP}.sql && grep -c 'CREATE TABLE' /tmp/itapoa_snapshot_${STAMP}.sql && grep -c 'INSERT INTO' /tmp/itapoa_snapshot_${STAMP}.sql 2>&1 | head -10" 2>&1 | head -10
+            echo "Snapshot em /tmp/itapoa_snapshot_${STAMP}.sql no host VPS"
+            docker cp "$CTR:/tmp/itapoa_snapshot_${STAMP}.sql" "/tmp/itapoa_snapshot_${STAMP}.sql" 2>&1 | head -5 || true
+            ls -lh "/tmp/itapoa_snapshot_${STAMP}.sql" 2>&1 | head -5 || true
+            sha256sum "/tmp/itapoa_snapshot_${STAMP}.sql" 2>&1 | head -5 || true
+            echo "Nao deixar site recebendo gravacoes apos captura sem informar diferenca"
