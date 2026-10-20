@@ -61,7 +61,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onNavigateTab })
     <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center p-4 font-sans relative overflow-hidden">
       
       {/* Red Glowing Security Aura */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[450px] h-[450px] bg-red-600/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[min(450px,92vw)] h-[min(450px,92vw)] bg-red-600/15 rounded-full blur-3xl pointer-events-none" />
 
       {/* Top Back Link */}
       <div className="absolute top-6 left-6">

@@ -5,6 +5,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { Menu, X } from 'lucide-react';
 import { api } from '../../../lib/apiClient';
 import { CompanyProfileForm } from '../views/CompanyProfileForm';
 import { LojistaSidebar, LojistaTabType } from './LojistaSidebar';
@@ -23,7 +24,7 @@ interface LojistaLayoutProps {
 }
 
 export const LojistaLayout: React.FC<LojistaLayoutProps> = ({ onNavigateCompany }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [ownedCompanies, setOwnedCompanies] = useState<Company[]>([]);
   const [companyError, setCompanyError] = useState('');
   const [reload, setReload] = useState(0);
@@ -37,25 +38,72 @@ export const LojistaLayout: React.FC<LojistaLayoutProps> = ({ onNavigateCompany 
 
   const [currentTab, setCurrentTab] = useState<LojistaTabType>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // Modals
   const [isHealthModalOpen, setIsHealthModalOpen] = useState(false);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans antialiased">
-      
-      {/* Collapsible Sidebar */}
-      <LojistaSidebar
-        currentTab={currentTab}
-        onSelectTab={setCurrentTab}
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-        company={myCompany}
-      />
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans antialiased overflow-x-hidden">
+      <div className="hidden md:flex shrink-0">
+        <LojistaSidebar
+          currentTab={currentTab}
+          onSelectTab={tab => { setMobileNavOpen(false); setCurrentTab(tab); }}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          company={myCompany}
+        />
+      </div>
+
+      {mobileNavOpen && (
+        <>
+          <button
+            type="button"
+            aria-label="Fechar navegação"
+            onClick={() => setMobileNavOpen(false)}
+            className="fixed inset-0 z-30 bg-slate-950/60 backdrop-blur-sm md:hidden"
+          />
+          <div className="fixed inset-y-0 left-0 z-40 w-72 max-w-[82vw] md:hidden shadow-2xl">
+            <div className="h-full flex flex-col bg-slate-900">
+              <div className="flex items-center justify-between px-3 py-3 border-b border-slate-800">
+                <span className="text-[11px] font-extrabold tracking-widest text-slate-300 uppercase">Menu</span>
+                <button
+                  type="button"
+                  onClick={() => setMobileNavOpen(false)}
+                  aria-label="Fechar menu"
+                  className="p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <LojistaSidebar
+                  currentTab={currentTab}
+                  onSelectTab={tab => { setMobileNavOpen(false); setCurrentTab(tab); }}
+                  isCollapsed={false}
+                  onToggleCollapse={() => setMobileNavOpen(false)}
+                  company={myCompany}
+                />
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
+        <div className="md:hidden sticky top-0 z-20 flex items-center gap-3 px-3 py-3 bg-slate-900/95 backdrop-blur border-b border-slate-800">
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen(true)}
+            aria-label="Abrir menu"
+            className="p-2.5 rounded-xl bg-slate-800 text-slate-200 hover:text-white border border-slate-700"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <span className="text-xs font-extrabold tracking-widest text-white uppercase truncate">{myCompany?.name || 'Painel Empresário'}</span>
+        </div>
         <LojistaTopbar
           company={myCompany}
           onOpenHealthModal={() => setIsHealthModalOpen(true)}
@@ -81,12 +129,12 @@ export const LojistaLayout: React.FC<LojistaLayoutProps> = ({ onNavigateCompany 
 
           {/* Module Fallbacks */}
           {['health', 'products', 'coupons', 'blog', 'seo', 'reviews', 'crm', 'orders', 'staff', 'tourism', 'helpdesk'].includes(currentTab) && (
-            <div className="p-8 space-y-4 text-center max-w-lg mx-auto mt-12 bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl">
+            <div className="p-6 md:p-8 space-y-4 text-center max-w-lg mx-auto mt-8 md:mt-12 bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden">
               <div className="w-16 h-16 rounded-2xl bg-blue-600/20 text-blue-400 flex items-center justify-center mx-auto text-xl font-bold uppercase">
                 {currentTab.slice(0, 2)}
               </div>
-              <h2 className="text-xl font-bold text-white capitalize">Módulo: {currentTab}</h2>
-              <p className="text-xs text-slate-400">
+              <h2 className="text-xl font-bold text-white capitalize break-words">Módulo: {currentTab}</h2>
+              <p className="text-xs text-slate-400 break-words">
                 Este módulo do Portal do Lojista está conectado ao MySQL com controle de permissões RBAC + ACL ativadas.
               </p>
               <button
