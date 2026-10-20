@@ -5,7 +5,7 @@
 - **Backend:** Express 4 em `server.ts` + `src/server/routes/api.ts`. Middleware de auth anti-IDOR via `companies_users`. Serviços em `src/server/services/`, repositórios com whitelist em `src/server/repositories/baseRepository.ts`.
 - **Banco:** MySQL/MariaDB exclusivo — fonte única `database/schema/MYSQL_SCHEMA.sql` (InnoDB, 37 tabelas) + `database/schema/SEED.sql` (roles/admin/plans) + `database/schema/SEED_DEMO.sql` (cidades/bairros/categorias/16 empresas). Supabase em `.env` é legado.
 - **Build:** `npm run lint` (`tsc --noEmit`), `npm run build` (`vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/server.cjs`), `npm start` (`node dist/server.cjs`). Startup Hostinger: `dist/server.cjs`.
-- **Deploy:** Hostinger Node.js — `HOSTINGER_DEPLOY.md` (import SQL na ordem + env vars no painel).
+- **Deploy:** VPS Docker/Easypanel, exclusivamente https://itapoa.online. Seguir `AGENTS.md` e `deployment/DEPLOY_VPS.md`. Push autorizado na `main` dispara Actions; não usar Hostinger/FTP/PM2/Caddy nem reimportar SQL.
 
 ## Equipe de agentes (`.claude/agents/`)
 | Agente | Arquivo | Quando usar |

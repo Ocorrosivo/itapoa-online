@@ -5,8 +5,9 @@ import { once } from 'node:events';
 const offline = process.argv.includes('--offline');
 const port = offline ? 43819 : 43818;
 const base = `http://127.0.0.1:${port}`;
+const releaseSha = '1234567890abcdef1234567890abcdef12345678';
 const child = spawn(process.execPath, ['dist/server.cjs'], {
-  env: { ...process.env, NODE_ENV: 'production', PORT: String(port),
+  env: { ...process.env, NODE_ENV: 'production', PORT: String(port), RELEASE_SHA: releaseSha,
     ...(offline ? { DB_HOST: '127.0.0.1', DB_PORT: '65534' } : {}) },
   stdio: ['ignore', 'pipe', 'pipe']
 });
@@ -28,6 +29,8 @@ try {
   assert.ok(ready, 'Server must start even when MySQL is unavailable');
   const health = await request('/api/health');
   assert.equal(health.response.status, offline ? 503 : 200);
+  assert.equal(health.response.headers.get('x-release-sha'), releaseSha);
+  assert.equal(health.response.headers.get('cache-control'), 'no-store');
   assert.deepEqual(health.body, offline
     ? { status: 'degraded', database: 'disconnected' }
     : { status: 'ok', database: 'connected' });

@@ -76,6 +76,11 @@ const handler =
  * name, SQL or a stack trace.
  */
 apiRouter.get('/health', async (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const release = process.env.RELEASE_SHA;
+  if (release && /^[a-f0-9]{40}$/.test(release)) {
+    res.setHeader('X-Release-Sha', release);
+  }
   const connected = await checkConnection();
   res.status(connected ? 200 : 503).json({
     status: connected ? 'ok' : 'degraded',

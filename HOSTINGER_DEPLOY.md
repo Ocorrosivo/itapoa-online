@@ -1,5 +1,7 @@
 # Guia de Implantação
 
+> DOCUMENTO LEGADO: os detalhes de PM2/Caddy e workflows abaixo estão desatualizados. Para a publicação atual, seguir exclusivamente `deployment/DEPLOY_VPS.md`: VPS Docker/Easypanel, domínio itapoa.online, workflow deploy-easypanel.yml. Não executar os procedimentos antigos de recuperação/publicação deste documento.
+
 Produção pública: **https://itapoa.online** (site, checkout e API).
 Easypanel: **https://itapoa.tech** (painel de infraestrutura — não hospeda a aplicação).
 
