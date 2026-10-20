@@ -33,98 +33,83 @@ jobs:
           npm run build
           test -f dist/index.html
           test -f dist/server.cjs
-          grep -q 'itapoa.online' dist/index.html && echo "OG OK" || (echo "OG check failed" && exit 1)
+          grep -q 'itapoa.online' dist/index.html
           echo "Build OK: $(wc -c < dist/server.cjs) bytes server.cjs"
 
-      - name: Deploy to VPS via SSH (pull + build + restart via Docker/Easypanel)
+      - name: Deploy and verify on VPS
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
           port: ${{ secrets.VPS_PORT }}
+          command_timeout: 15m
           script: |
-            set -e
-            echo "[deploy] Easypanel app: itapoa/itapoa-app (Git source Ocorrosivo/itapoa-online main)"
-            echo "[deploy] Trigger: git fetch + rebuild via Easypanel Docker"
-            # Easypanel builds from GitHub via Dockerfile — trigger a rebuild
-            # Approach: use the Easypanel API inside the VPS, or force docker rebuild
-            # Fallback: rebuild locally from the git source if Easypanel git token is not yet configured
-            APP_DIR="/opt/itapoa/app"
-            if [ -d "$APP_DIR/.git" ]; then
-              echo "[deploy] Legacy path $APP_DIR exists — sync git"
-              cd "$APP_DIR"
-              git fetch origin main
-              git reset --hard origin/main
-              echo "[deploy] New HEAD: $(git rev-parse --short HEAD) $(git log -1 --oneline)"
-            fi
-            # Primary path: Easypanel — redeploy via docker stack
-            # The Easypanel app pulls from GitHub on each deploy. Trigger it:
-            # Use the Easypanel internal: force rebuild by re-creating the service image
-            # Easypanel stores project in /etc/easypanel — we trigger deploy via its API over the swarm network
-            echo "[deploy] Trigger Easypanel deploy via internal API"
-            DEPLOYED=0
-            # Try Easypanel RPC: POST /api/rpc/services/app/deploy
-            # Auth via the panel's own session is not available here; instead rebuild the image directly
-            echo "[deploy] Rebuilding image from latest GitHub commit"
-            TMP_BUILD="/tmp/itapoa-build-$$"
-            mkdir -p "$TMP_BUILD"
-            cd "$TMP_BUILD"
-            git clone --depth 1 --branch main https://github.com/Ocorrosivo/itapoa-online.git . 2>&1 | tail -5
-            echo "[deploy] Cloned HEAD: $(git rev-parse --short HEAD)"
-            docker build -t easypanel/itapoa/itapoa-app:latest . 2>&1 | tail -20
-            echo "[deploy] Updating service itapoa_itapoa-app"
-            docker service update --image easypanel/itapoa/itapoa-app:latest --force itapoa_itapoa-app 2>&1 | tail -10
-            echo "[deploy] Waiting for service to converge"
-            for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
-              STATE=$(docker service ps itapoa_itapoa-app --format "{{.CurrentState}}" 2>&1 | head -n 1)
-              echo "  [$i] $STATE"
-              if echo "$STATE" | grep -qi "Running.*ago"; then
-                echo "[deploy] Service running"
-                DEPLOYED=1
-                break
-              fi
-              if echo "$STATE" | grep -qi "Failed\|Error"; then
-                echo "[deploy] Service failed: $STATE"
-                docker service ps itapoa_itapoa-app --no-trunc 2>&1 | tail -20
-                exit 1
-              fi
-              sleep 10
-            done
-            if [ "$DEPLOYED" != "1" ]; then
-              echo "[deploy] Service did not converge in 120s"
-              docker service ps itapoa_itapoa-app --no-trunc 2>&1 | tail -20
-              exit 1
-            fi
-            echo "[deploy] Checking health"
-            for i in 1 2 3 4 5 6; do
-              sleep 5
-              CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" http://127.0.0.1:3000/api/health 2>&1 || echo "000")
-              echo "  [$i] :3000/api/health -> $CODE $(cat /tmp/health.json 2>/dev/null | head -c 200)"
-              if [ "$CODE" = "200" ] && grep -q '"status":"ok"' /tmp/health.json 2>/dev/null; then
-                echo "[deploy] Health OK on :3000"
-                break
-              fi
-              if [ "$i" = "6" ]; then
-                echo "[deploy] Health failed after 6 tries"
-                docker service logs itapoa_itapoa-app --tail 80 2>&1 | tail -40
-                exit 1
-              fi
-            done
-            echo "[deploy] Done — new image deployed via Traefik -> itapoa.online"
+            set -eu
+            EXPECTED_SHA='${{ github.sha }}'
+            REPO_URL='https://github.com/Ocorrosivo/itapoa-online.git'
+            BUILD_DIR="/tmp/itapoa-deploy-$EXPECTED_SHA"
+            IMAGE="easypanel/itapoa/itapoa-app:$EXPECTED_SHA"
+            SERVICE="itapoa_itapoa-app"
 
-      - name: Health check (itapoa.online — canônico, falha se não publicar)
-        run: |
-          echo "Aguardando Traefik + app..."
-          sleep 10
-          for i in 1 2 3 4 5 6; do
-            CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" https://itapoa.online/api/health || echo "000")
-            echo "Tentativa $i: /api/health -> $CODE $(cat /tmp/health.json 2>/dev/null | head -c 400)"
-            if [ "$CODE" = "200" ] && grep -q '"status":"ok"' /tmp/health.json 2>/dev/null; then
-              echo "Health OK (itapoa.online canônico)"
-              exit 0
-            fi
-            sleep 15
-          done
-          echo "::error::Health check falhou apos 6 tentativas — Traefik ou app nao publicou a nova versao"
-          exit 1
+            echo "[deploy] Expected commit: $EXPECTED_SHA"
+            rm -rf "$BUILD_DIR"
+            mkdir -p "$BUILD_DIR"
+            git clone --quiet --depth 1 --branch main "$REPO_URL" "$BUILD_DIR"
+            ACTUAL_SHA=$(git -C "$BUILD_DIR" rev-parse HEAD)
+            test "$ACTUAL_SHA" = "$EXPECTED_SHA" || { echo "Commit mismatch: $ACTUAL_SHA != $EXPECTED_SHA"; exit 1; }
+            echo "[deploy] Building $ACTUAL_SHA"
+            docker build --pull -t "$IMAGE" "$BUILD_DIR"
+
+            echo "[deploy] Updating $SERVICE"
+            docker service update --image "$IMAGE" --force "$SERVICE"
+
+            echo "[deploy] Waiting for exact image task to run"
+            converged=0
+            for attempt in $(seq 1 36); do
+              task=$(docker service ps "$SERVICE" --no-trunc --format '{{.CurrentState}} {{.Image}}' | head -n 1)
+              echo "[$attempt] $task"
+              case "$task" in
+                "Running"*"$IMAGE"*) converged=1; break ;;
+                "Failed"*|"Rejected"*|"Shutdown"*)
+                  docker service ps "$SERVICE" --no-trunc | head -n 20
+                  exit 1
+                  ;;
+              esac
+              sleep 5
+            done
+            test "$converged" = 1 || { docker service ps "$SERVICE" --no-trunc | head -n 20; exit 1; }
+
+            echo "[deploy] Waiting for local application health"
+            healthy=0
+            for attempt in $(seq 1 24); do
+              body=$(curl --silent --show-error --max-time 5 http://127.0.0.1:3000/api/health || true)
+              echo "[$attempt] $body"
+              if echo "$body" | grep -q '"status":"ok"' && echo "$body" | grep -q '"database":"connected"'; then
+                healthy=1
+                break
+              fi
+              sleep 5
+            done
+            test "$healthy" = 1 || { docker service logs "$SERVICE" --tail 100; exit 1; }
+
+            echo "[deploy] Verifying expected frontend assets from running container"
+            container=$(docker ps --filter "label=com.docker.swarm.service.name=$SERVICE" --format '{{.ID}}' | head -n 1)
+            test -n "$container"
+            asset=$(docker exec "$container" sh -lc "grep -o 'assets/index-[^\"]*\\.js' /app/dist/index.html | head -n 1")
+            test -n "$asset"
+            echo "[deploy] Commit=$ACTUAL_SHA asset=$asset image=$IMAGE"
+
+            echo "[deploy] Waiting for canonical HTTPS health"
+            healthy=0
+            for attempt in $(seq 1 18); do
+              body=$(curl --silent --show-error --max-time 10 https://itapoa.online/api/health || true)
+              echo "[$attempt] $body"
+              if echo "$body" | grep -q '"status":"ok"' && echo "$body" | grep -q '"database":"connected"'; then
+                healthy=1
+                break
+              fi
+              sleep 5
+            done
+            test "$healthy" = 1 || { echo "Canonical health failed for $EXPECTED_SHA"; exit 1; }
+            echo "DEPLOY_VERIFIED commit=$ACTUAL_SHA image=$IMAGE asset=$asset"
