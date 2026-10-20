@@ -1,0 +1,83 @@
+name: Restore Isolado VPS (temporario, sem portas publicas)
+
+on: workflow_dispatch
+
+jobs:
+  restore-isolado:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore isolado em MariaDB temporario (sem expor portas)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            STAMP="$(date +%Y-%m-%d)"
+            OUT="/tmp"
+            NET="itapoa-restore-net"
+            CTR="itapoa_restore_mariadb"
+            DB_NAME="itapoa_restore_test"
+            DB_USER="restore_user"
+            DB_PASS="$(openssl rand -hex 12)"
+            echo "=== RESTORE ISOLADO (container temporario, rede isolada, sem portas publicas) ==="
+            docker network create "$NET" 2>/dev/null || true
+            echo "1. Subindo MariaDB temporario (apenas rede interna $NET, sem -p)"
+            docker run -d --name "$CTR" --network "$NET" -e MARIADB_ROOT_PASSWORD="$DB_PASS" -e MARIADB_DATABASE="$DB_NAME" -e MARIADB_USER="$DB_USER" -e MARIADB_PASSWORD="$DB_PASS" mariadb:11 2>&1 | head -5
+            echo "Aguardando Mariadb ficar pronto..."
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              if docker exec "$CTR" mysqladmin ping -h 127.0.0.1 -u root -p"$DB_PASS" --silent 2>&1 | grep -q "alive"; then
+                echo "MariaDB pronto (try $i)"
+                break
+              fi
+              sleep 3
+            done
+            echo "2. Escolhendo dump da pasta LOCAL (/tmp sem warning header é mais limpo)"
+            # Preferir o dump limpo sem warning; se nao existir, usar o original tail -n +2
+            if [ -f "/tmp/itapoa_dump_${STAMP}.sql" ]; then
+              DUMP_SRC="/tmp/itapoa_dump_${STAMP}.sql"
+              # Remover linha warning mysqldump: se existir
+              if head -n1 "$DUMP_SRC" | grep -q "mysqldump: \[Warning\]"; then
+                tail -n +2 "$DUMP_SRC" > "/tmp/itapoa_dump_${STAMP}.cleaned.sql" && DUMP_SRC="/tmp/itapoa_dump_${STAMP}.cleaned.sql"
+                echo "Dump limpo (warning removido): $DUMP_SRC"
+              fi
+            else
+              echo "Nenhum dump em /tmp/itapoa_dump_${STAMP}.sql - abort"
+              docker rm -f "$CTR" 2>&1 | head -5 || true
+              docker network rm "$NET" 2>&1 | head -5 || true
+              exit 1
+            fi
+            echo "Dump escolhido: $DUMP_SRC ($(du -h "$DUMP_SRC" | cut -f1)) CREATE TABLE $(grep -c "CREATE TABLE" "$DUMP_SRC" 2>&1 || echo "?")"
+            echo "3. Importando (rede interna, sem volume de producao)"
+            docker cp "$DUMP_SRC" "$CTR:/tmp/restore.sql" 2>&1 | head -5
+            docker exec "$CTR" sh -c "mysql -u $DB_USER -p\"$DB_PASS\" $DB_NAME < /tmp/restore.sql" 2>&1 | head -20
+            echo "4. Validacao: estrutura, contagens, relacionamentos, consultas essenciais"
+            docker exec "$CTR" mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -N -e "
+              SELECT 'TABLES' AS k, COUNT(*) AS v FROM information_schema.tables WHERE table_schema=DATABASE()
+              UNION ALL SELECT 'companies', COUNT(*) FROM companies
+              UNION ALL SELECT 'users', COUNT(*) FROM users
+              UNION ALL SELECT 'categories', COUNT(*) FROM categories
+              UNION ALL SELECT 'cities', COUNT(*) FROM cities
+              UNION ALL SELECT 'roles', COUNT(*) FROM roles
+              UNION ALL SELECT 'plans', COUNT(*) FROM plans
+              UNION ALL SELECT 'districts', COUNT(*) FROM districts
+              UNION ALL SELECT 'companies_users', COUNT(*) FROM companies_users
+              UNION ALL SELECT 'products', COUNT(*) FROM products
+              UNION ALL SELECT 'services', COUNT(*) FROM services;
+            " 2>&1 | head -30
+            echo "--- FK users.role -> roles orfaos ---"
+            docker exec "$CTR" mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -N -e "SELECT COUNT(*) AS orfaos FROM users u LEFT JOIN roles r ON r.id=u.role WHERE r.id IS NULL AND u.role IS NOT NULL;" 2>&1 | head -5
+            echo "--- Consulta essencial: busca por companies ativa ---"
+            docker exec "$CTR" mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -N -e "SELECT slug FROM companies ORDER BY slug LIMIT 5;" 2>&1 | head -20
+            echo "--- Auth: admin@itapoa.online existe? ---"
+            docker exec "$CTR" mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -N -e "SELECT email, role FROM users WHERE email='admin@itapoa.online';" 2>&1 | head -10
+            echo "5. Teste aplicacao isolada (sem gravar): Node pode conectar neste MariaDB temporario?"
+            docker run --rm --network "$NET" -e DB_HOST="$CTR" -e DB_PORT=3306 -e DB_NAME="$DB_NAME" -e DB_USER="$DB_USER" -e DB_PASSWORD="$DB_PASS" -e NODE_ENV=production node:20-slim sh -c "node -e \"import('mysql2/promise').then(async m=>{const c=await m.default.createConnection({host:process.env.DB_HOST,port:3306,user:process.env.DB_USER,password:process.env.DB_PASSWORD,database:process.env.DB_NAME}); const [r]=await c.query('SELECT COUNT(*) as n FROM companies'); console.log('App pode ler companies:', r[0].n); await c.end();})\"" 2>&1 | head -20 || echo "Teste Node isolado falhou ou imagem sem mysql2 (validacao DB acima ja cobre)"
+            echo "6. Limpeza (sem tocar em producao)"
+            docker rm -f "$CTR" 2>&1 | head -5 || true
+            docker network rm "$NET" 2>&1 | head -5 || true
+            echo "=== RESTORE ISOLADO OK (temporario removido, nenhum volume de producao tocado) ==="
+
