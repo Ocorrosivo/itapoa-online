@@ -62,26 +62,30 @@ jobs:
             npm run build
             echo "[deploy] verify dist contains canonical OG"
             grep -q 'itapoa.online' dist/index.html || (echo "dist/index.html OG not canonical" && cat dist/index.html | head -n 30 && exit 1)
-            echo "[deploy] pm2 reload"
+            echo "[deploy] pm2 heal (kill stale EADDRINUSE blocker, then reload)"
+            # If a previous deploy left pm2 in errored/EADDRINUSE loop, delete it first
             if pm2 describe itapoa >/dev/null 2>&1; then
-              pm2 reload itapoa --update-env || pm2 restart itapoa --update-env
-            else
-              pm2 start dist/server.cjs --name itapoa --update-env
+              pm2 delete itapoa 2>&1 || true
+              sleep 2
             fi
+            # Also kill any stray node holding 3000 (leftover from errored fork)
+            fuser -k 3000/tcp 2>/dev/null || ss -lptn 'sport = :3000' 2>/dev/null | head || true
+            sleep 1
+            pm2 start dist/server.cjs --name itapoa --update-env
             pm2 save
             echo "[deploy] caddy reload (best effort)"
             systemctl reload caddy 2>&1 || systemctl restart caddy 2>&1 || caddy reload --config /etc/caddy/Caddyfile 2>&1 || echo "[deploy] caddy reload skip"
             echo "[deploy] wait for app"
-            for i in 1 2 3 4 5 6; do
+            for i in 1 2 3 4 5 6 7 8; do
               if curl -fsS http://127.0.0.1:3000/api/health 2>&1 | grep -q '"status":"ok"'; then
                 echo "[deploy] health local OK (try $i)"
                 break
               fi
               echo "[deploy] health local try $i failed, wait 3s — pm2 list:"
-              pm2 list 2>&1 | tail -n 10 || true
+              pm2 list 2>&1 | tail -n 12 || true
               sleep 3
-              if [ "$i" = "6" ]; then
-                echo "[deploy] health local failed after 6 tries — dump pm2 logs"
+              if [ "$i" = "8" ]; then
+                echo "[deploy] health local failed after 8 tries — dump pm2 logs"
                 pm2 logs itapoa --lines 80 --nostream 2>&1 | tail -n 80 || true
                 exit 1
               fi
