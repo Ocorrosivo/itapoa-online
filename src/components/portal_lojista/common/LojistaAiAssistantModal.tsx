@@ -71,7 +71,7 @@ export const LojistaAiAssistantModal: React.FC<LojistaAiAssistantModalProps> = (
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col h-[580px]"
+          className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col h-[min(580px,calc(100dvh-2rem))] min-h-0"
         >
           {/* Header */}
           <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
@@ -90,18 +90,18 @@ export const LojistaAiAssistantModal: React.FC<LojistaAiAssistantModalProps> = (
           </div>
 
           {/* Messages */}
-          <div className="flex-1 p-6 overflow-y-auto space-y-4">
+          <div className="flex-1 p-6 overflow-y-auto space-y-4 min-h-0">
             {messages.map((m, idx) => (
-              <div key={idx} className={`flex gap-3 ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div key={idx} className={`flex gap-3 min-w-0 ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                 {m.sender === 'ai' && (
                   <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white shrink-0 mt-1">
                     <Bot className="w-4 h-4" />
                   </div>
                 )}
-                <div className={`relative max-w-[80%] rounded-2xl p-4 text-sm ${
+                <div className={`relative max-w-[80%] rounded-2xl p-4 text-sm min-w-0 overflow-hidden break-words ${
                   m.sender === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-800 text-slate-200 border border-slate-700/50 rounded-bl-none'
                 }`}>
-                  <p className="whitespace-pre-line leading-relaxed">{m.text}</p>
+                  <p className="whitespace-pre-line leading-relaxed break-words">{m.text}</p>
                   {m.sender === 'ai' && idx > 0 && (
                     <button
                       onClick={() => handleCopy(m.text, idx)}

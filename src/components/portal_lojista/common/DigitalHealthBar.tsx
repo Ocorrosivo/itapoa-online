@@ -43,16 +43,16 @@ export const DigitalHealthBar: React.FC<DigitalHealthBarProps> = ({ company, onO
   return (
     <div
       onClick={onOpenModal}
-      className="bg-slate-900/90 border border-slate-800 hover:border-slate-700 rounded-2xl p-3 cursor-pointer transition shadow-md flex items-center gap-3 group"
+      className="bg-slate-900/90 border border-slate-800 hover:border-slate-700 rounded-2xl p-3 cursor-pointer transition shadow-md flex items-center gap-3 group min-w-0 w-full max-w-full"
     >
       <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs ${statusColor} shrink-0`}>
         <Activity className="w-4 h-4" />
       </div>
 
-      <div className="flex-1 min-w-[140px]">
-        <div className="flex items-center justify-between text-xs mb-1">
-          <span className="font-bold text-slate-300 group-hover:text-white transition">Saúde Digital</span>
-          <span className="font-black text-white">{finalScore}/100</span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between text-xs mb-1 gap-2">
+          <span className="font-bold text-slate-300 group-hover:text-white transition truncate">Saúde Digital</span>
+          <span className="font-black text-white shrink-0">{finalScore}/100</span>
         </div>
         <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
           <div

@@ -60,7 +60,7 @@ export const AdminBiAiModal: React.FC<AdminBiAiModalProps> = ({ isOpen, onClose 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col h-[600px]"
+          className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col h-[min(600px,calc(100dvh-2rem))] min-h-0"
         >
           <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
             <div className="flex items-center gap-3">
@@ -79,18 +79,18 @@ export const AdminBiAiModal: React.FC<AdminBiAiModalProps> = ({ isOpen, onClose 
             </button>
           </div>
 
-          <div className="flex-1 p-6 overflow-y-auto space-y-4">
+          <div className="flex-1 p-6 overflow-y-auto space-y-4 min-h-0">
             {messages.map((m, idx) => (
-              <div key={idx} className={`flex gap-3 ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div key={idx} className={`flex gap-3 min-w-0 ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                 {m.sender === 'ai' && (
                   <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-white shrink-0 mt-1">
                     <Bot className="w-4 h-4" />
                   </div>
                 )}
-                <div className={`max-w-[80%] rounded-2xl p-4 text-sm ${
+                <div className={`max-w-[80%] rounded-2xl p-4 text-sm min-w-0 overflow-hidden break-words ${
                   m.sender === 'user' ? 'bg-purple-600 text-white rounded-br-none' : 'bg-slate-800 text-slate-200 border border-slate-700/50 rounded-bl-none'
                 }`}>
-                  <p className="whitespace-pre-line">{m.text}</p>
+                  <p className="whitespace-pre-line break-words">{m.text}</p>
                 </div>
                 {m.sender === 'user' && (
                   <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 shrink-0 mt-1">
