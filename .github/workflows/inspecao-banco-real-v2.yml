@@ -1,0 +1,56 @@
+name: Inspecao Banco Real v2 (sem docker exec mysql)
+
+on: workflow_dispatch
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspecao banco real v2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            echo "=== INSPECAO BANCO REAL v2 (qual DB atende itapoa.online) ==="
+            echo "--- PM2 .env (pode estar stale) ---"
+            if [ -f /opt/itapoa/app/.env ]; then sed 's/=.*/=***/' /opt/itapoa/app/.env 2>&1 | head -20; fi
+            echo "--- Docker: qual app esta UP e com Traefik ---"
+            docker ps --format "table {{.Names}} {{.Image}} {{.Status}} {{.Ports}}" 2>&1 | head -30
+            echo "--- Docker SERVICE inspect: env DB_HOST do app (mascarado) ---"
+            # Pegar env do service stack (swarm) se houver
+            for svc in $(docker service ls --format "{{.Name}}" 2>&1 | head -10); do
+              echo "SERVICE $svc"
+              docker service inspect "$svc" --format '{{range .Spec.TaskTemplate.ContainerSpec.Env}}{{println .}}{{end}}' 2>&1 | sed -E 's/=.*/=***/' | grep -E "DB_|APP_URL|PORT" | head -20 || true
+            done
+            echo "--- Container itapoa_app (se for swarm, pegar task container) ---"
+            for ctr in $(docker ps -q 2>&1 | head -10); do
+              name=$(docker inspect "$ctr" --format '{{.Name}}' 2>&1 | head -1 || true)
+              echo "CTR $name"
+              docker inspect "$ctr" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | sed -E 's/=.*/=***/' | grep -E "DB_HOST|DB_NAME|APP_URL|PORT=" | head -10 || true
+            done
+            echo "--- Traefik: quem mapeia itapoa.online ---"
+            docker service inspect easypanel-traefik 2>&1 | grep -i "itapoa" | head -20 || true
+            echo "--- Volumes uploads: container vs host vs externo ---"
+            for ctr in $(docker ps -q 2>&1 | head -10); do
+              name=$(docker inspect "$ctr" --format '{{.Name}}' 2>&1 | head -1 || true)
+              echo "CTR $name mounts:"
+              docker inspect "$ctr" --format '{{json .Mounts}}' 2>&1 | head -c 3000; echo
+            done
+            echo "--- Host uploads (mesmo que antes) ---"
+            ls -la /opt/itapoa/app/uploads 2>&1 | head -20 || true
+            ls -la /var/lib/docker/volumes 2>&1 | head -20 || true
+            echo "--- DB externo vs interno: ambos existem? ---"
+            if [ -f /opt/itapoa/app/.env ]; then set -a; . /opt/itapoa/app/.env 2>/dev/null || true; set +a; fi
+            echo "Hostinger ${DB_HOST:-?}/${DB_NAME:-?}"
+            timeout 5 mariadb -h "${DB_HOST:-srv887.hstgr.io}" -P "${DB_PORT:-3306}" -u "${DB_USER:-u619805679_itapoa}" -p"${DB_PASSWORD:-x}" -e "SELECT DATABASE() AS db, COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE()" 2>&1 | head -5 || echo "externo falhou"
+            echo "Interno: verificar via docker exec mariadb"
+            for ctr in $(docker ps -q --filter "ancestor=mariadb:11" 2>&1 | head -5); do
+              echo "mariadb ctr $ctr"
+              docker exec "$ctr" mariadb -u root -p"$(docker exec "$ctr" printenv MARIADB_ROOT_PASSWORD 2>&1 | head -1)" -e "SHOW DATABASES" 2>&1 | head -20 || true
+            done || true
+            echo "=== FIM v2 ==="
