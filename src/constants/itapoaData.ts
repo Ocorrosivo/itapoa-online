@@ -44,7 +44,8 @@ export const ITAPOA_CITY_CONFIG = {
   longitude: -48.6148,
   phoneDdd: '47',
   portalName: 'Portal Oficial de Itapoá SC',
-  ameBrand: 'A.M.E. ITAPOÁ - Assoc. Mulheres Empreendedoras'
+  ameBrand: 'A.M.E. ITAPOÁ - Assoc. Mulheres Empreendedoras',
+  contactEmail: 'contato@itapoa.online'
 };
 
 export const BAIRROS_ITAPOA: BairroItapoa[] = [

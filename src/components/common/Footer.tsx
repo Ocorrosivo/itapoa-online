@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { Facebook, Instagram, Youtube, LayoutGrid } from 'lucide-react';
+import { Facebook, Instagram, Youtube, Mail } from 'lucide-react';
 import { ITAPOA_CITY_CONFIG } from '../../constants/itapoaData';
 
 interface FooterProps {
@@ -53,6 +53,13 @@ export const Footer: React.FC<FooterProps> = ({ onNavigateTab }) => {
             <p className="text-[9px] leading-relaxed text-slate-500 font-medium max-w-[220px]">
               O portal oficial de conexões comerciais, gastronomia, turismo e serviços locais do município de Itapoá SC.
             </p>
+            <a
+              href={`mailto:${ITAPOA_CITY_CONFIG.contactEmail}`}
+              className="inline-flex items-center gap-1.5 text-[10px] font-bold text-slate-300 hover:text-white transition break-all"
+            >
+              <Mail className="w-3.5 h-3.5 shrink-0" />
+              {ITAPOA_CITY_CONFIG.contactEmail}
+            </a>
           </div>
 
           {/* Col 2: CIDADES ATENDIDAS */}

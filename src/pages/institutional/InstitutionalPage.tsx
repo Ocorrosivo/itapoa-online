@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { ArrowLeft, Building2, HelpCircle, Phone, ShieldCheck, FileText, Sparkles, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Building2, HelpCircle, Phone, Mail, ShieldCheck, FileText, Sparkles, CheckCircle2 } from 'lucide-react';
 import { ITAPOA_CITY_CONFIG } from '../../constants/itapoaData';
 
 interface InstitutionalPageProps {
@@ -95,12 +95,26 @@ export const InstitutionalPage: React.FC<InstitutionalPageProps> = ({
             <div className="space-y-4">
               <h2 className="text-lg font-black text-white">Fale Conosco</h2>
               <p>Dúvidas, suporte ao anunciante ou parcerias institucionais em Itapoá SC:</p>
-              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
+                <a
+                  href={`mailto:${ITAPOA_CITY_CONFIG.contactEmail}`}
+                  className="flex items-center gap-2 text-white font-bold hover:text-emerald-300 transition"
+                >
+                  <Mail className="w-4 h-4 text-[#C8102E]" />
+                  <span>{ITAPOA_CITY_CONFIG.contactEmail}</span>
+                </a>
                 <div className="flex items-center gap-2 text-white font-bold">
                   <Phone className="w-4 h-4 text-[#C8102E]" />
                   <span>WhatsApp Suporte: (47) 99719-0413</span>
                 </div>
                 <p className="text-slate-400">Atendimento de Segunda a Sexta das 08h às 18h em Itapoá SC.</p>
+                <p className="text-[11px] text-slate-500">
+                  Preferimos e-mail para registro e acompanhamento. Mensagens para{' '}
+                  <a href={`mailto:${ITAPOA_CITY_CONFIG.contactEmail}`} className="text-emerald-400 underline font-semibold">
+                    {ITAPOA_CITY_CONFIG.contactEmail}
+                  </a>{' '}
+                  são respondidas no mesmo horário comercial.
+                </p>
               </div>
             </div>
           )}
