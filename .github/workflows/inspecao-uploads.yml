@@ -1,0 +1,51 @@
+name: Inspecao Uploads Externo (volume e imagem real)
+
+on: workflow_dispatch
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspecao uploads volume e imagem externa
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            echo "=== UPLOADS: VOLUME REAL E IMAGENS EXTERNAS ==="
+            # 1. Onde o app salva uploads (multer dest)?
+            APP_CTR=$(docker ps -q --filter "name=itapoa_app" 2>&1 | head -n1)
+            echo "App CTR $APP_CTR"
+            if [ -n "$APP_CTR" ]; then
+              docker exec "$APP_CTR" sh -c "ls -la /app/uploads 2>&1 | head -20; echo ---; ls -la /app/public/uploads 2>&1 | head -20; echo ---; cat /app/src/server/routes/api.ts 2>&1 | grep -i upload | head -20; echo ---; env 2>&1 | grep -i UPLOAD | sed 's/=.*/=***/' | head -10" 2>&1 | head -60 || true
+              echo "--- Mounts completos do app (confirmar sem bind upload) ---"
+              docker inspect "$APP_CTR" --format '{{json .Mounts}}' 2>&1 | head -c 4000; echo
+              echo "--- App env completo (UPLOAD_DIR etc, mascarado) ---"
+              docker inspect "$APP_CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | sed -E 's/=.*/=***/' | head -30 || true
+            fi
+            echo "--- Host upload dirs ---"
+            ls -laR /opt/itapoa/app 2>&1 | grep -E "upload|Upload" | head -20 || true
+            ls -la /opt/itapoa/app/uploads 2>&1 | head -20 || true
+            find /opt/itapoa/app -name "*.jpg" -o -name "*.png" -o -name "*.webp" 2>&1 | head -20 || true
+            echo "--- Docker volumes (se houver upload volume) ---"
+            docker volume ls 2>&1 | head -20 || true
+            echo "--- Easypanel project upload path (traefik/app config) ---"
+            ls -R /etc/easypanel/projects/itapoa 2>&1 | head -100 || true
+            find /etc/easypanel/projects/itapoa -type f 2>&1 | xargs grep -l -i "upload\|UPLOAD" 2>&1 | head -20 || true
+            echo "--- DB: imagens sao internas ou externas? ---"
+            # Interno ja acessivel via mariadb container
+            CTR=$(docker ps -q --filter "ancestor=mariadb:11" 2>&1 | head -n1)
+            if [ -n "$CTR" ]; then
+              U=$(docker inspect "$CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | grep "^MARIADB_USER=" | cut -d= -f2)
+              P=$(docker inspect "$CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | grep "^MARIADB_PASSWORD=" | cut -d= -f2)
+              DB=$(docker inspect "$CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | grep "^MARIADB_DATABASE=" | cut -d= -f2)
+              echo "DB interno $DB/$U"
+              docker exec "$CTR" mariadb -u "$U" -p"$P" "$DB" -N -e "SELECT COUNT(*) FROM companies WHERE logo LIKE 'http%'; SELECT COUNT(*) FROM companies WHERE coverImage LIKE 'http%'; SELECT COUNT(*) FROM companies WHERE logo LIKE '/uploads%';" 2>&1 | head -10
+              docker exec "$CTR" mariadb -u "$U" -p"$P" "$DB" -N -e "SELECT logo FROM companies LIMIT 1;" 2>&1 | head -5
+            fi
+            echo "=== FIM UPLOADS ==="
+
