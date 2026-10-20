@@ -1,0 +1,35 @@
+name: Snapshot Final v2 (via root, itapoa_db)
+
+on: workflow_dispatch
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Snapshot via root mariadb (itapoa_db ativo)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            STAMP="$(date +%Y-%m-%d)"
+            CTR=$(docker ps -q --filter "ancestor=mariadb:11" 2>&1 | head -n1)
+            DB_NAME=$(docker inspect "$CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | grep "MARIADB_DATABASE=" | cut -d= -f2)
+            ROOT_PASS=$(docker inspect "$CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | grep "MARIADB_ROOT_PASSWORD=" | cut -d= -f2)
+            echo "Snapshot v2: $DB_NAME via root (sem gravar apos captura)"
+            docker exec "$CTR" mariadb -u root -p"$ROOT_PASS" "$DB_NAME" -N -e "
+              SELECT 'TABLES', COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE()
+              UNION ALL SELECT 'companies', COUNT(*) FROM companies
+              UNION ALL SELECT 'users', COUNT(*) FROM users
+              UNION ALL SELECT 'companies_users', COUNT(*) FROM companies_users;
+            " 2>&1 | head -20
+            docker exec "$CTR" sh -c "mariadb-dump --single-transaction -u root -p\"$ROOT_PASS\" $DB_NAME > /tmp/itapoa_snapshot_v2_${STAMP}.sql" 2>&1 | head -5 || docker exec "$CTR" sh -c "mysqldump --single-transaction -u root -p\"$ROOT_PASS\" $DB_NAME > /tmp/itapoa_snapshot_v2_${STAMP}.sql" 2>&1 | head -5
+            docker exec "$CTR" sh -c "ls -lh /tmp/itapoa_snapshot_v2_${STAMP}.sql && grep -c 'CREATE TABLE' /tmp/itapoa_snapshot_v2_${STAMP}.sql && grep -c 'INSERT INTO' /tmp/itapoa_snapshot_v2_${STAMP}.sql" 2>&1 | head -10
+            docker cp "$CTR:/tmp/itapoa_snapshot_v2_${STAMP}.sql" "/tmp/itapoa_snapshot_v2_${STAMP}.sql" 2>&1 | head -5
+            ls -lh "/tmp/itapoa_snapshot_v2_${STAMP}.sql" 2>&1 | head -5
+            sha256sum "/tmp/itapoa_snapshot_v2_${STAMP}.sql" 2>&1 | head -5
+
