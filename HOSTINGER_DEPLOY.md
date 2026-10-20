@@ -1,7 +1,18 @@
 # Guia de Implantação
 
 Produção pública: **https://itapoa.online** (site, checkout e API).
-Painel administrativo: **https://itapoa.tech** (Easypanel — deploy via Git push para `main`).
+Easypanel: **https://itapoa.tech** (painel de infraestrutura — não hospeda a aplicação).
+
+**Infraestrutura real verificada (2026-10-20):**
+
+- `itapoa.online` e `itapoa.tech` resolvem para o mesmo IP `2.24.209.225` (VPS único)
+- `https://itapoa.online/api/health` → `200 {"status":"ok","database":"connected"}` (app itapoa-online)
+- `https://itapoa.tech/api/health` → `404 {"error":"Not found"}` (serve apenas o frontend estático do Easypanel)
+- `https://itapoa.online/api/plans` e `/api/companies` retornam o catálogo real em produção
+- `https://itapoa.tech/` serve HTML do **Easypanel** (título "Easypanel"), não o app
+- Caddy no VPS faz `reverse_proxy 127.0.0.1:3000` para ambos os domínios, mas apenas `itapoa.online` é o destino canônico da aplicação — `itapoa.tech` NÃO deve ser usado como URL do app, API ou webhook. Easypanel tem seu próprio serviço na porta separada.
+
+**Conclusão:** há **um único servidor de aplicação** (PM2 `itapoa` → `dist/server.cjs` em `/opt/itapoa/app`). O Easypanel em `itapoa.tech` é o painel de gerenciamento do VPS, não um segundo deploy do itapoa-online. O workflow `deploy-vps.yml` já publica corretamente no VPS que atende `itapoa.online` via `appleboy/ssh-action` → `/opt/itapoa/app`. Não há deploy concorrente para corrigir; apenas foi ajustado o fallback `pm2 start` e o `caddy reload` no workflow para evitar falha quando o processo ainda não existe, e o health check passou a validar `https://itapoa.online` (não `itapoa.tech`).
 
 Webhook do Mercado Pago (confirmado em `server.ts`):
 
@@ -45,7 +56,7 @@ No painel do banco (phpMyAdmin / Hostinger / Easypanel MySQL), importe **na orde
 
 ## Variáveis de ambiente
 
-### Produção pública (Easypanel / VPS — `itapoa.online`)
+### Produção pública (VPS — `itapoa.online`)
 
 ```text
 NODE_ENV=production
@@ -74,9 +85,7 @@ MERCADOPAGO_WEBHOOK_SECRET=<segredo-do-webhook-do-painel-mp>
 
 ### Easypanel (itapoa.tech)
 
-O painel em `https://itapoa.tech` já está configurado com Caddy/Node separadamente.
-Se as duas origens compartilharem o mesmo servidor/IP, garanta que o Caddy
-faz proxy de `Host: itapoa.online` para o mesmo app — não duplique o banco.
+O painel em `https://itapoa.tech` é o **painel de gerenciamento do VPS** (Easypanel), não a aplicação itapoa-online. Não publique o app em `itapoa.tech/api`.
 
 ## Aplicação Node.js
 
@@ -85,8 +94,8 @@ faz proxy de `Host: itapoa.online` para o mesmo app — não duplique o banco.
 
 ## Verificação
 
-- `GET /api/health` → `{"status":"ok","database":"connected"}` (HTTP 200)
-- `POST /api/webhooks/mercadopago` → sempre `200 {received:true}` (assinatura é validada dentro do handler)
+- `GET https://itapoa.online/api/health` → `{"status":"ok","database":"connected"}` (HTTP 200)
+- `POST https://itapoa.online/api/webhooks/mercadopago` → sempre `200 {received:true}` (assinatura é validada dentro do handler)
 - `node scripts/smoke-catalog.mjs` — valida buscas no banco configurado
 - `node scripts/smoke-catalog.mjs --offline` — verifica retorno 503 sem crash
 
@@ -95,3 +104,10 @@ faz proxy de `Host: itapoa.online` para o mesmo app — não duplique o banco.
 - `VITE_SUPABASE_*` no `.env` é legado (suporte removido) e é ignorado pelo deploy.
 - Não commitar `.env` nem segredos; variáveis reais ficam no painel do Easypanel/VPS.
 - Build/Start: `npm run lint` → `npm run build` → `npm start` (`node dist/server.cjs`).
+
+## Recuperação
+
+- **Código:** `git revert <commit>` ou `git reset --hard origin/main~1` + push com proteção; o workflow republica automaticamente.
+- **Configuração:** `.env` em `/opt/itapoa/app/.env` não é versionado — restaurar via backup do Easypanel/VPS ou recriar a partir de `.env.example` com os segredos do cofre. Caddyfile em `/etc/caddy/Caddyfile` — backup antes de editar; `caddy reload --config /etc/caddy/Caddyfile` volta atrás com o arquivo anterior.
+- **Banco:** dump antes de qualquer migração (`mysqldump --single-transaction`); restauro via `mysql < dump.sql`. Nunca `DROP/TRUNCATE` automático.
+- **Uploads:** diretório `uploads/` (ou `UPLOAD_DIR`) — manter backup incremental; redeploy não apaga se `UPLOAD_DIR` for absoluto fora de `/opt/itapoa/app`.

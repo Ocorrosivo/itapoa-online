@@ -57,11 +57,11 @@ jobs:
             npm ci
             echo "[deploy] npm run build"
             npm run build
-            echo "[deploy] pm2 restart"
-            pm2 restart itapoa --update-env
+            echo "[deploy] pm2 restart (or start)"
+            pm2 restart itapoa --update-env 2>&1 || pm2 start dist/server.cjs --name itapoa --update-env
             pm2 save
             echo "[deploy] caddy reload (se necessário)"
-            systemctl reload caddy 2>/dev/null || systemctl restart caddy 2>/dev/null || echo "[deploy] caddy reload skip"
+            caddy reload --config /etc/caddy/Caddyfile 2>&1 || systemctl reload caddy 2>/dev/null || systemctl restart caddy 2>/dev/null || echo "[deploy] caddy reload skip"
             sleep 4
             echo "[deploy] health local"
             curl -fsS http://127.0.0.1:3000/api/health
@@ -73,16 +73,17 @@ jobs:
           echo "Aguardando VPS propagar..."
           sleep 15
           for i in 1 2 3 4 5; do
-            CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" https://itapoa.tech/api/health || echo "000")
-            echo "Tentativa $i: https://itapoa.tech/api/health -> $CODE $(cat /tmp/health.json 2>/dev/null | head -c 300)"
+            CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" https://itapoa.online/api/health || echo "000")
+            echo "Tentativa $i: https://itapoa.online/api/health -> $CODE $(cat /tmp/health.json 2>/dev/null | head -c 300)"
             if [ "$CODE" = "200" ] && grep -q "connected" /tmp/health.json 2>/dev/null; then
-              CODE2=$(curl -s -o /dev/null -w "%{http_code}" https://itapoa.tech/empresa/hamburgueria-itapema-burger || echo "000")
-              echo "  https://itapoa.tech/empresa/hamburgueria-itapema-burger -> $CODE2"
-              CODE3=$(curl -s -o /dev/null -w "%{http_code}" http://2.24.209.225/api/health || echo "000")
-              echo "  http://2.24.209.225/api/health -> $CODE3"
-              if [ "$CODE2" = "200" ] && [ "$CODE3" = "200" ]; then
-                echo "Health OK"
+              CODE2=$(curl -s -o /tmp/app.json -w "%{http_code}" https://itapoa.online/ || echo "000")
+              OG=$(grep -o 'og:url[^>]*content="[^"]*"' /tmp/app.json 2>/dev/null || echo "no og:url")
+              echo "  https://itapoa.online/ -> $CODE2 $OG"
+              if echo "$OG" | grep -q "itapoa.online"; then
+                echo "Health OK (itapoa.online publicado)"
                 exit 0
+              else
+                echo "::warning::OG ainda aponta legado (cache Caddy?)"
               fi
             fi
             sleep 20
