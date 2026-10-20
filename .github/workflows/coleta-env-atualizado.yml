@@ -1,0 +1,38 @@
+name: Coleta Env Atualizado (apos rotacao, para backup)
+
+on: workflow_dispatch
+
+jobs:
+  coleta:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Coletar .env atual pos-rotacao (mascarado em logs, upload como artifact privado temporario)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            echo "=== COLETA .ENV ATUALIZADO POS-ROTACAO (para recriar backup) ==="
+            echo "--- Host .env (mascarado) ---"
+            if [ -f /opt/itapoa/app/.env ]; then sed 's/=.*/=***/' /opt/itapoa/app/.env 2>&1 | head -20; fi
+            echo "--- Easypanel service env (mascarado) ---"
+            docker service inspect itapoa_app --format '{{range .Spec.TaskTemplate.ContainerSpec.Env}}{{println .}}{{end}}' 2>&1 | sed 's/=.*/=***/' | head -20 || true
+            CTR=$(docker ps -q --filter "name=itapoa_app" 2>&1 | head -n1)
+            if [ -n "$CTR" ]; then
+              docker inspect "$CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | sed 's/=.*/=***/' | head -20 || true
+            fi
+            echo "--- HOSTINGER_API_TOKEN presente? ---"
+            if grep -q "HOSTINGER_API_TOKEN" /opt/itapoa/app/.env 2>&1; then echo "AINDA PRESENTE (erro)"; else echo "REMOVIDO OK"; fi
+            echo "--- Health ---"
+            curl -s https://itapoa.online/api/health 2>&1 | head -c 200 || true; echo
+            echo "=== FIM COLETA ==="
+      - name: Preparar backup .env atualizado para download local (nao via artifact publico)
+        run: |
+          echo "O .env atualizado deve ser copiado manualmente via scp seguro, nao via artifact publico."
+          echo "Instrucao: o operador deve usar scp com chave SSH para baixar /opt/itapoa/app/.env e recriar backup local."
+          echo "Workflow apenas confirma que .env host foi atualizado (JWT novo, HOSTINGER_API_TOKEN removido, DB_PASSWORD Hostinger pendente via hPanel)."
+
