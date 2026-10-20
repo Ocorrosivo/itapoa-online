@@ -1,0 +1,65 @@
+name: Inspecao Banco Real (somente leitura)
+
+on: workflow_dispatch
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspecao banco real e volumes (somente leitura)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            echo "=== INSPECAO BANCO REAL (itapoa.online) ==="
+            echo "--- 0. Quem escuta 80/443/3000 ---"
+            ss -tulpn 2>&1 | grep -E "80|443|3000" | head -20
+            echo "--- 1. Containers Docker (qual banco existe) ---"
+            docker ps -a --format "table {{.ID}} {{.Image}} {{.Names}} {{.Status}}" 2>&1 | head -30
+            echo "--- 2. Easypanel projetos e DB externo vs interno ---"
+            ls -R /etc/easypanel/projects 2>&1 | head -100 || true
+            find /etc/easypanel -maxdepth 4 -name "*.json" -o -name "*.yml" 2>&1 | head -20 || true
+            echo "--- 3. ENV do container itapoa_app (mascarado: DB_HOST/DB_NAME/DB_USER/PORT/APP_URL) ---"
+            APP_CTR=$(docker ps --filter "name=itapoa_app" --format "{{.ID}}" 2>&1 | head -n1 || true)
+            if [ -n "$APP_CTR" ]; then
+              echo "Container itapoa_app: $APP_CTR"
+              docker inspect "$APP_CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | sed -E 's/=(.*)/=***/; s/PASSWORD.*=.*/=***/; s/SECRET.*=.*/=***/; s/TOKEN.*=.*/=***/' | grep -E "DB_|APP_URL|PORT|NODE_ENV" | head -20 || true
+              docker inspect "$APP_CTR" --format '{{json .Config.Env}}' 2>&1 | grep -o "DB[^,]*" | sed 's/=.*/=***/' | head -20 || true
+              echo "--- mounts do app ---"
+              docker inspect "$APP_CTR" --format '{{json .Mounts}}' 2>&1 | head -c 2000 || true; echo
+            else
+              echo "sem container itapoa_app em docker ps - use docker ps -a"
+              docker inspect $(docker ps -aq 2>&1 | head -n1) --format '{{.Name}} {{range .Config.Env}}{{println .}}{{end}}' 2>&1 | sed -E 's/=.*/=***/' | head -30 || true
+            fi
+            echo "--- 4. ENV do mariadb container (DB_NAME interno) ---"
+            DB_CTR=$(docker ps --filter "ancestor=mariadb:11" --format "{{.ID}}" 2>&1 | head -n1 || true)
+            if [ -n "$DB_CTR" ]; then
+              echo "Container mariadb: $DB_CTR"
+              docker inspect "$DB_CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | sed -E 's/=(.*)/=***/' | grep -E "MYSQL|MARIADB|DB_" | head -20 || true
+              echo "--- volumes mariadb ---"
+              docker inspect "$DB_CTR" --format '{{json .Mounts}}' 2>&1 | head -c 2000 || true; echo
+            fi
+            echo "--- 5. DB externo Hostinger ainda existe? (SELECT VERSION sem senha, so host) ---"
+            if [ -f /opt/itapoa/app/.env ]; then set -a; . /opt/itapoa/app/.env 2>/dev/null || true; set +a; fi
+            echo "PM2 .env: DB_HOST=${DB_HOST:-?} DB_NAME=${DB_NAME:-?} DB_USER=${DB_USER:-?}"
+            echo "--- 6. Reachability: app pode falar com srv887? ---"
+            timeout 5 mysql -h "${DB_HOST:-srv887.hstgr.io}" -P "${DB_PORT:-3306}" -u "${DB_USER:-u619805679_itapoa}" -p"${DB_PASSWORD:-x}" -e "SELECT DATABASE() AS db, COUNT(*) AS n FROM information_schema.tables WHERE table_schema=DATABASE()" 2>&1 | head -10 || echo "mysql externo falhou ou timeout"
+            echo "--- 7. Volumes uploads (container vs host) ---"
+            if [ -n "$APP_CTR" ]; then
+              docker exec "$APP_CTR" ls -la /app/uploads 2>&1 | head -30 || docker exec "$APP_CTR" ls -la /usr/src/app/uploads 2>&1 | head -30 || docker exec "$APP_CTR" ls -la uploads 2>&1 | head -30 || echo "sem uploads no container"
+              docker exec "$APP_CTR" ls -la /app/public/uploads 2>&1 | head -20 || true
+              echo "--- host uploads ---"
+              ls -la /opt/itapoa/app/uploads 2>&1 | head -20 || true
+              echo "--- images: onde estão logos/covers? (DB URLs) ---"
+              # So conta URLs, nao expoe dados
+              if command -v mysql >/dev/null 2>&1 && [ -n "${DB_PASSWORD:-}" ]; then
+                mysql -h "${DB_HOST}" -P "${DB_PORT}" -u "${DB_USER}" -p"${DB_PASSWORD}" "${DB_NAME}" -N -e "SELECT COUNT(*) FROM companies WHERE logo LIKE 'http%'; SELECT COUNT(*) FROM companies WHERE coverImage LIKE 'http%'" 2>&1 | head -10 || true
+              fi
+            fi
+            echo "=== FIM INSPECAO (somente leitura) ==="
+
