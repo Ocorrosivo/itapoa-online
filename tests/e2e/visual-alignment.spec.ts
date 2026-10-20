@@ -3,7 +3,7 @@ import { test, expect, Page } from '@playwright/test';
 const base = process.env.VISUAL_TEST_URL || 'http://127.0.0.1:4173';
 const companies = [1, 2, 3].map(n => ({
   id: `visual_${n}`, name: `Empresa Teste ${n}`, slug: `empresa-teste-${n}`,
-  logo: '/logotipo.png', coverImage: '/logotipo.png', planLevel: 'gold_vip',
+  logo: '/logotipo.png?w=100&q=80', coverImage: '/logotipo.png?w=800&q=90', planLevel: 'gold_vip',
   cityId: 'city_test', categoryId: 'cat_test', rating: 5, reviewCount: 0,
   phone: '47999990000', whatsapp: '47999990000', description: 'Empresa de teste visual',
   features: [], products: [], faqs: [], latitude: -26.11, longitude: -48.61

@@ -7,6 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import { Phone, ArrowRight, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { Company } from '../types';
+import { imageIdentity } from '../utils/imageIdentity';
 
 interface PremiumCompaniesCarouselProps {
   companies: Company[];
@@ -143,7 +144,7 @@ export const PremiumCompaniesCarousel: React.FC<PremiumCompaniesCarouselProps> =
                   <div className="absolute top-3 left-3 bg-[#C8102E] text-white text-[9px] font-black uppercase px-2.5 py-1 rounded-full shadow-md flex items-center gap-1">
                     <span>📍 PARCEIRO VIP PREMIUM</span>
                   </div>
-                  {comp.logo && comp.logo !== coverImg && (
+                  {comp.logo && imageIdentity(comp.logo) !== imageIdentity(coverImg) && (
                     <div className="absolute bottom-3 right-3 w-12 h-12 bg-white border border-slate-200 rounded-2xl p-1 shadow-md">
                       <img
                         src={comp.logo}
