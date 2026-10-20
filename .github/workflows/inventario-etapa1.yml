@@ -1,0 +1,71 @@
+name: Inventario Etapa1
+
+on: workflow_dispatch
+
+jobs:
+  inventario:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inventario e backup VPS (somente leitura)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            APP_DIR="/opt/itapoa/app"
+            STAMP="$(date +%Y-%m-%d)"
+            OUT="/tmp"
+            echo "=== INVENTARIO VPS 2.24.209.225 ==="
+            cat /etc/os-release 2>&1 | head -20
+            echo "---"; free -h 2>&1 | head -20; df -h 2>&1 | head -20
+            echo "--- SS ---"; ss -tulpn 2>&1 | head -n 80 || true
+            echo "--- PM2 ---"; pm2 list 2>&1 | head -60 || true
+            echo "--- Caddy ---"; cat /etc/caddy/Caddyfile 2>&1 | head -n 120 || true
+            echo "--- APP ---"; ls -la "$APP_DIR" 2>&1 | head -n 100 || true
+            echo "--- GIT ---"; git -C "$APP_DIR" status 2>&1 | head -40 || true
+            git -C "$APP_DIR" log --oneline -5 2>&1 | head -20 || true
+            echo "--- CRON ---"; crontab -l 2>&1 | head -40 || true
+            systemctl list-timers 2>&1 | head -n 40 || true
+            echo "--- DOCKER / OPT ---"; docker ps -a 2>&1 | head -n 80 || echo "sem docker"
+            ls -la /opt/ 2>&1 | head -n 60 || true; ls -la /etc/easypanel 2>&1 | head -n 20 || true
+            echo "--- VERSOES ---"; node -v 2>&1; npm -v 2>&1; caddy version 2>&1 | head -5 || true
+            echo "--- ENV mascarado ---"; if [ -f "$APP_DIR/.env" ]; then sed 's/=.*/=***/' "$APP_DIR/.env" 2>&1 | head -n 40; fi
+            echo "--- DUMP (somente leitura, 120s) ---"
+            if [ -f "$APP_DIR/.env" ]; then set -a; . "$APP_DIR/.env" 2>/dev/null || true; set +a; fi
+            DB_HOST="${DB_HOST:-srv887.hstgr.io}"; DB_PORT="${DB_PORT:-3306}"; DB_NAME="${DB_NAME:-u619805679_itapoa}"; DB_USER="${DB_USER:-u619805679_itapoa}"
+            if [ -z "${DB_PASSWORD:-}" ]; then echo "DB_PASSWORD vazia abort"; exit 1; fi
+            timeout 120 mysqldump --single-transaction --routines --triggers --skip-column-statistics -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" > "$OUT/itapoa_dump_${STAMP}.sql" 2>&1 || { head -20 "$OUT/itapoa_dump_${STAMP}.sql" 2>&1 | head -20; exit 1; }
+            echo "DUMP OK $(du -h "$OUT/itapoa_dump_${STAMP}.sql" | cut -f1) $(grep -c "CREATE TABLE" "$OUT/itapoa_dump_${STAMP}.sql" 2>&1 || echo "?") tabelas"
+            tar -czf "$OUT/itapoa_app_${STAMP}.tar.gz" -C /opt itapoa/app --exclude=.git --exclude=node_modules --exclude=dist 2>&1 | tail -5 || tar -czf "$OUT/itapoa_app_${STAMP}.tar.gz" -C /opt itapoa/app --exclude=.git --exclude=node_modules 2>&1 | tail -5
+            echo "APP TAR $(du -h "$OUT/itapoa_app_${STAMP}.tar.gz" | cut -f1)"
+            for cand in "$APP_DIR/uploads" "$APP_DIR/public/uploads"; do if [ -d "$cand" ]; then U="$cand"; break; fi; done; U="${U:-}"
+            if [ -n "$U" ] && [ -n "$(ls -A "$U" 2>/dev/null)" ]; then tar -czf "$OUT/itapoa_uploads_${STAMP}.tar.gz" -C "$(dirname "$U")" "$(basename "$U")" 2>&1 | tail -5; else echo "sem uploads" | tar -czf "$OUT/itapoa_uploads_${STAMP}.tar.gz" -T - 2>&1 | tail -5; fi
+            cp /etc/caddy/Caddyfile "$OUT/Caddyfile.bak" 2>&1 | tail -3 || true
+            cp "$APP_DIR/.env" "$OUT/env.bak" 2>&1 && chmod 600 "$OUT/env.bak" 2>&1 | tail -3 || true
+            crontab -l > "$OUT/crontab.bak" 2>&1 || echo "# sem crontab" > "$OUT/crontab.bak"
+            if git -C "$APP_DIR" rev-parse --git-dir >/dev/null 2>&1; then git -C "$APP_DIR" diff > "$OUT/git_diff.patch" 2>&1 | tail -3 || true; git -C "$APP_DIR" status --porcelain > "$OUT/git_status.txt" 2>&1 | tail -3 || true; fi
+            sha256sum "$OUT/itapoa_dump_${STAMP}.sql" "$OUT/itapoa_app_${STAMP}.tar.gz" "$OUT/itapoa_uploads_${STAMP}.tar.gz" 2>&1 | tee "$OUT/checksums.txt" | head -20
+            for f in "$OUT/Caddyfile.bak" "$OUT/env.bak"; do [ -f "$f" ] && sha256sum "$f" >> "$OUT/checksums.txt" 2>&1 || true; done
+            cat "$OUT/checksums.txt" 2>&1 | head -20
+            sha256sum -c "$OUT/checksums.txt" 2>&1 | head -20
+            echo "=== INVENTARIO OK (VPS intacta) ==="; curl -fsS http://127.0.0.1:3000/api/health 2>&1 | head -5 || true
+      - name: Baixar artifacts via SCP
+        run: |
+          STAMP="$(date +%Y-%m-%d)"
+          mkdir -p /tmp/vps-backup
+          sudo apt-get update -qq && sudo apt-get install -y -qq sshpass > /dev/null 2>&1 || true
+          for f in "itapoa_dump_${STAMP}.sql" "itapoa_app_${STAMP}.tar.gz" "itapoa_uploads_${STAMP}.tar.gz" "checksums.txt" "Caddyfile.bak" "crontab.bak" "git_status.txt" "git_diff.patch"; do
+            sshpass -p "${{ secrets.VPS_PASSWORD }}" scp -P "${{ secrets.VPS_PORT }}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST}}:/tmp/$f" "/tmp/vps-backup/$f" 2>&1 | head -5 || echo "scp $f falhou"
+          done
+          ls -lh /tmp/vps-backup/ 2>&1 | head -30; cat /tmp/vps-backup/checksums.txt 2>&1 | head -20 || true
+          sha256sum -c /tmp/vps-backup/checksums.txt 2>&1 | head -20 || echo "checksum verify parcial"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vps-backup-inventario
+          path: /tmp/vps-backup/
+          retention-days: 7
