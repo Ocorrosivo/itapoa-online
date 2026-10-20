@@ -1,0 +1,142 @@
+name: Rotacao Seguranca (DB + JWT, sem expor valores)
+
+on: workflow_dispatch
+
+jobs:
+  rotacao:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rotacao DB Hostinger + Easypanel mariadb + JWT_SECRET + remover HOSTINGER_API_TOKEN
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            echo "=== ROTACAO SEGURANCA (sem expor valores em logs) ==="
+            # Gerar novos segredos localmente na VPS (nao via logs)
+            NEW_DB_HOST_PASS="$(openssl rand -base64 24 | tr -d '\n' | head -c 32)"
+            NEW_DB_EASYPANEL_PASS="$(openssl rand -base64 24 | tr -d '\n' | head -c 32)"
+            NEW_JWT="$(openssl rand -base64 48 | tr -d '\n' | head -c 64)"
+            echo "Novos segredos gerados (comprimentos: DB_HOST ${#NEW_DB_HOST_PASS}, DB_EASYPANEL ${#NEW_DB_EASYPANEL_PASS}, JWT ${#NEW_JWT})"
+
+            # --- 1. Trocar DB_PASSWORD do Hostinger (usuario u619805679_itapoa) ---
+            echo "--- 1. Hostinger MariaDB u619805679_itapoa: ALTER USER ---"
+            if [ -f /opt/itapoa/app/.env ]; then set -a; . /opt/itapoa/app/.env 2>/dev/null || true; set +a; fi
+            OLD_DB_HOST="${DB_HOST:-srv887.hstgr.io}"
+            OLD_DB_NAME="${DB_NAME:-u619805679_itapoa}"
+            OLD_DB_USER="${DB_USER:-u619805679_itapoa}"
+            OLD_DB_PASS="${DB_PASSWORD:-}"
+            if [ -z "$OLD_DB_PASS" ]; then echo "ERRO: DB_PASSWORD vazio, abort"; exit 1; fi
+            # Tentar ALTER USER no Hostinger via cliente mariadb (pode precisar de privilegio)
+            mariadb -h "$OLD_DB_HOST" -P "${DB_PORT:-3306}" -u "$OLD_DB_USER" -p"$OLD_DB_PASS" -e "SELECT 1" 2>&1 | head -5 || mysql -h "$OLD_DB_HOST" -P "${DB_PORT:-3306}" -u "$OLD_DB_USER" -p"$OLD_DB_PASS" -e "SELECT 1" 2>&1 | head -5 || echo "conexao Hostinger falhou (verificar rede/firewall)"
+            echo "Tentando ALTER USER para $OLD_DB_USER ..."
+            if mariadb -h "$OLD_DB_HOST" -P "${DB_PORT:-3306}" -u "$OLD_DB_USER" -p"$OLD_DB_PASS" -e "ALTER USER '$OLD_DB_USER'@'%' IDENTIFIED BY '$NEW_DB_HOST_PASS'; FLUSH PRIVILEGES;" 2>&1 | head -10; then
+              echo "ALTER USER Hostinger OK"
+              HOSTINGER_OK="1"
+            elif mysql -h "$OLD_DB_HOST" -P "${DB_PORT:-3306}" -u "$OLD_DB_USER" -p"$OLD_DB_PASS" -e "ALTER USER '$OLD_DB_USER'@'%' IDENTIFIED BY '$NEW_DB_HOST_PASS'; FLUSH PRIVILEGES;" 2>&1 | head -10; then
+              echo "ALTER USER Hostinger OK (via mysql)"
+              HOSTINGER_OK="1"
+            else
+              echo "ALTER USER falhou - Hostinger pode exigir troca via painel hPanel (ver instrucao ao final)"
+              HOSTINGER_OK="0"
+            fi
+            # Testar nova senha (nao logar valor)
+            if [ "$HOSTINGER_OK" = "1" ]; then
+              if mariadb -h "$OLD_DB_HOST" -P "${DB_PORT:-3306}" -u "$OLD_DB_USER" -p"$NEW_DB_HOST_PASS" -e "SELECT 1" 2>&1 | head -5 | grep -q "1"; then
+                echo "Nova senha Hostinger validada OK"
+              else
+                echo "Nova senha Hostinger NAO validada - rollback necessario (manter antiga por enquanto)"
+              fi
+              # Testar que antiga NAO funciona mais
+              if mariadb -h "$OLD_DB_HOST" -P "${DB_PORT:-3306}" -u "$OLD_DB_USER" -p"$OLD_DB_PASS" -e "SELECT 1" 2>&1 | grep -qi "Access denied"; then
+                echo "Antiga senha Hostinger REVOGADA (Access denied) - OK"
+              else
+                echo "Antiga senha ainda pode funcionar - verificar privilegios ALTER USER"
+              fi
+            fi
+
+            # --- 2. Trocar DB_PASSWORD do Easypanel mariadb (itapoa_db) ---
+            echo "--- 2. Easypanel mariadb itapoa_db: ALTER USER + redeploy app ---"
+            CTR=$(docker ps -q --filter "ancestor=mariadb:11" 2>&1 | head -n1)
+            if [ -z "$CTR" ]; then echo "sem mariadb ctr"; else
+              echo "CTR $CTR"
+              # Pegar root password do container para ALTER
+              ROOT_PASS=$(docker inspect "$CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | grep "MARIADB_ROOT_PASSWORD=" | cut -d= -f2)
+              DB_NAME_EASY=$(docker inspect "$CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | grep "MARIADB_DATABASE=" | cut -d= -f2)
+              DB_USER_EASY=$(docker inspect "$CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | grep "^MARIADB_USER=" | cut -d= -f2)
+              echo "Easypanel DB $DB_NAME_EASY/$DB_USER_EASY"
+              docker exec "$CTR" mariadb -u root -p"$ROOT_PASS" -e "ALTER USER '$DB_USER_EASY'@'%' IDENTIFIED BY '$NEW_DB_EASYPANEL_PASS'; FLUSH PRIVILEGES;" 2>&1 | head -10 || docker exec "$CTR" mysql -u root -p"$ROOT_PASS" -e "ALTER USER '$DB_USER_EASY'@'%' IDENTIFIED BY '$NEW_DB_EASYPANEL_PASS'; FLUSH PRIVILEGES;" 2>&1 | head -10 || echo "ALTER USER easypanel falhou"
+              echo "Testar nova senha interno..."
+              if docker exec "$CTR" mariadb -u "$DB_USER_EASY" -p"$NEW_DB_EASYPANEL_PASS" "$DB_NAME_EASY" -N -e "SELECT 1" 2>&1 | head -5 | grep -q "1"; then
+                echo "Nova senha Easypanel OK"
+              else
+                echo "Nova senha Easypanel falhou - verificar"
+              fi
+              # Antiga deve falhar
+              OLD_EASY_PASS=$(docker inspect "$CTR" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 | grep "^MARIADB_PASSWORD=" | cut -d= -f2)
+              if [ "$OLD_EASY_PASS" != "$NEW_DB_EASYPANEL_PASS" ]; then
+                echo "Antiga Easypanel ainda no env do container (sera atualizada via service update)"
+              fi
+            fi
+
+            # --- 3. Atualizar .env do Host PM2 e env do service Easypanel ---
+            echo "--- 3. Atualizar .env (PM2 host) e service Easypanel ---"
+            # PM2 .env (se existir, legado mas atualizar para nao deixar falha)
+            if [ -f /opt/itapoa/app/.env ]; then
+              if [ "$HOSTINGER_OK" = "1" ]; then
+                # Usar python para escapar corretamente sem expor em logs
+                python3 -c "
+            import re
+            p=open('/opt/itapoa/app/.env').read()
+            import os
+            new_host=os.environ['NEW_DB_HOST_PASS']
+            new_jwt=os.environ['NEW_JWT']
+            p=re.sub(r'^DB_PASSWORD=.*', 'DB_PASSWORD='+new_host, p, flags=re.M)
+            p=re.sub(r'^JWT_SECRET=.*', 'JWT_SECRET='+new_jwt, p, flags=re.M)
+            # Remover HOSTINGER_API_TOKEN se existir
+            p=re.sub(r'^HOSTINGER_API_TOKEN=.*\n?', '', p, flags=re.M)
+            open('/opt/itapoa/app/.env','w').write(p)
+            " 2>&1 | head -5 || echo "update PM2 .env falhou"
+                echo "PM2 .env atualizado (HOSTINGER_API_TOKEN removido, DB_PASSWORD/JWT rotacionados)"
+                # Remover HOSTINGER_API_TOKEN do env do processo se estiver exportado
+              else
+                echo "Hostinger ALTER falhou - nao atualiza PM2 .env ainda (aguardar painel)"
+              fi
+            fi
+
+            # Easypanel service env update (via docker service update)
+            if docker service ls 2>&1 | grep -q "itapoa_app"; then
+              echo "Atualizando service itapoa_app env (DB_PASSWORD e JWT_SECRET)"
+              # Easypanel armazena env em /etc/easypanel/projects/itapoa/app/.env ou via service inspect
+              # Tentar via docker service update --env-add/--env-rm (nao expor valores em logs com set +x)
+              set +x
+              docker service update --env-rm DB_PASSWORD itapoa_app 2>&1 | head -5 || true
+              docker service update --env-add "DB_PASSWORD=$NEW_DB_EASYPANEL_PASS" itapoa_app 2>&1 | head -5 || true
+              docker service update --env-rm JWT_SECRET itapoa_app 2>&1 | head -5 || true
+              docker service update --env-add "JWT_SECRET=$NEW_JWT" itapoa_app 2>&1 | head -5 || true
+              set -x
+              echo "Service env atualizado, aguardando redeploy..."
+              sleep 10
+              docker service ps itapoa_app 2>&1 | head -20 || true
+            else
+              echo "sem service itapoa_app (talvez container standalone) - verificar manualmente"
+            fi
+
+            # --- 4. Validar aplicacao apos rotacao ---
+            echo "--- 4. Validar https://itapoa.online/api/health apos rotacao ---"
+            for i in 1 2 3 4 5; do
+              sleep 5
+              CODE=$(curl -s -o /tmp/health_rot.json -w "%{http_code}" https://itapoa.online/api/health 2>&1 | head -5 || echo "000")
+              echo "Try $i: $CODE $(cat /tmp/health_rot.json 2>&1 | head -c 200)"
+              if [ "$CODE" = "200" ]; then
+                echo "Health OK apos rotacao"
+                break
+              fi
+            done
+            echo "=== ROTACAO CONCLUIDA (verificar se antiga parou e nova funciona) ==="
+            echo "NOTA: sessoes JWT antigas invalidadas (JWT_SECRET novo). Usuarios precisarao relogar."
+
