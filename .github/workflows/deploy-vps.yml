@@ -37,8 +37,9 @@ jobs:
           test -f dist/server.cjs
           echo "Build OK: dist/server.cjs $(wc -c < dist/server.cjs) bytes"
           ls -lh dist/assets/
+          grep -q 'itapoa.online' dist/index.html && echo "OG OK (itapoa.online)" || (echo "OG check failed" && grep -m1 'og:url' dist/index.html && exit 1)
 
-      - name: Deploy to VPS (itapoa.tech)
+      - name: Deploy to VPS (itapoa.online via VPS itapoa.tech)
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -53,40 +54,63 @@ jobs:
             echo "[deploy] reset --hard origin/main"
             git reset --hard origin/main
             echo "[deploy] HEAD=$(git rev-parse --short HEAD)"
+            echo "[deploy] clean old dist (avoid stale assets)"
+            rm -rf dist
             echo "[deploy] npm ci"
             npm ci
             echo "[deploy] npm run build"
             npm run build
+            echo "[deploy] verify dist contains canonical OG"
+            grep -q 'itapoa.online' dist/index.html || (echo "dist/index.html OG not canonical" && cat dist/index.html | head -n 30 && exit 1)
             echo "[deploy] pm2 restart (or start)"
-            pm2 restart itapoa --update-env 2>&1 || pm2 start dist/server.cjs --name itapoa --update-env
+            pm2 restart itapoa --update-env 2>&1 || pm2 delete itapoa 2>&1 || true
+            pm2 start dist/server.cjs --name itapoa --update-env
             pm2 save
-            echo "[deploy] caddy reload (se necessário)"
-            caddy reload --config /etc/caddy/Caddyfile 2>&1 || systemctl reload caddy 2>/dev/null || systemctl restart caddy 2>/dev/null || echo "[deploy] caddy reload skip"
-            sleep 4
-            echo "[deploy] health local"
-            curl -fsS http://127.0.0.1:3000/api/health
+            echo "[deploy] caddy reload"
+            systemctl reload caddy 2>&1 || systemctl restart caddy 2>&1 || echo "[deploy] caddy reload skip (admin off)"
+            echo "[deploy] wait for app"
+            for i in 1 2 3 4 5 6; do
+              if curl -fsS http://127.0.0.1:3000/api/health 2>&1 | grep -q '"status":"ok"'; then
+                echo "[deploy] health local OK (try $i)"
+                break
+              fi
+              echo "[deploy] health local try $i failed, wait 3s"
+              sleep 3
+              if [ "$i" = "6" ]; then
+                echo "[deploy] health local failed after 6 tries — dump pm2 logs"
+                pm2 logs itapoa --lines 80 --nostream 2>&1 | tail -n 80 || true
+                pm2 list 2>&1 | tail -n 20 || true
+                exit 1
+              fi
+            done
             echo "[deploy] done"
 
-      - name: Health check (itapoa.tech)
+      - name: Health check (itapoa.online — canônico)
         if: always()
         run: |
           echo "Aguardando VPS propagar..."
           sleep 15
-          for i in 1 2 3 4 5; do
+          for i in 1 2 3 4 5 6; do
             CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" https://itapoa.online/api/health || echo "000")
-            echo "Tentativa $i: https://itapoa.online/api/health -> $CODE $(cat /tmp/health.json 2>/dev/null | head -c 300)"
-            if [ "$CODE" = "200" ] && grep -q "connected" /tmp/health.json 2>/dev/null; then
+            echo "Tentativa $i: https://itapoa.online/api/health -> $CODE $(cat /tmp/health.json 2>/dev/null | head -c 400)"
+            if [ "$CODE" = "200" ] && grep -q '"status":"ok"' /tmp/health.json 2>/dev/null; then
               CODE2=$(curl -s -o /tmp/app.json -w "%{http_code}" https://itapoa.online/ || echo "000")
               OG=$(grep -o 'og:url[^>]*content="[^"]*"' /tmp/app.json 2>/dev/null || echo "no og:url")
-              echo "  https://itapoa.online/ -> $CODE2 $OG"
-              if echo "$OG" | grep -q "itapoa.online"; then
-                echo "Health OK (itapoa.online publicado)"
-                exit 0
-              else
-                echo "::warning::OG ainda aponta legado (cache Caddy?)"
+              ASSET=$(grep -o 'assets/index-[^"]*\.js' /tmp/app.json 2>/dev/null | head -n 1 || echo "no asset")
+              echo "  https://itapoa.online/ -> $CODE2 $OG $ASSET"
+              if echo "$OG" | grep -q "itapoa.online" && echo "$ASSET" | grep -q "assets/index-"; then
+                # verify the JS asset actually serves JS (not SPA fallback)
+                JS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://itapoa.online/$ASSET" || echo "000")
+                JS_CT=$(curl -s -D - "https://itapoa.online/$ASSET" -o /dev/null 2>&1 | grep -i "^content-type" | head -n 1 || echo "")
+                echo "  $ASSET -> $JS_CODE $JS_CT"
+                if [ "$JS_CODE" = "200" ] && echo "$JS_CT" | grep -qi "javascript"; then
+                  echo "Health OK (itapoa.online publicado com assets válidos)"
+                  exit 0
+                fi
               fi
+              echo "  (aguardando asset/OG canônico...)"
             fi
             sleep 20
           done
-          echo "::warning::Health check falhou apos 5 tentativas"
+          echo "::warning::Health check falhou apos 6 tentativas — verificar VPS manualmente"
           exit 0
