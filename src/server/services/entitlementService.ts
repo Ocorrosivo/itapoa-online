@@ -274,6 +274,13 @@ export class EntitlementService {
          FROM companies WHERE id = ? LIMIT 1`,
         [companyId]
       );
+    }).catch(async () => {
+      return await pool.query(
+        `SELECT id, name, slug, logo, coverImage, isSponsored, planLevel,
+                'bronze' as access_grant_type, NULL as trial_ends_at, 0 as has_used_trial
+         FROM companies WHERE id = ? LIMIT 1`,
+        [companyId]
+      );
     });
 
     if (!companyRows || companyRows.length === 0) {
@@ -482,6 +489,12 @@ export class EntitlementService {
     ).catch(async () => {
       return await pool.query(
         `SELECT id, planLevel, access_grant_type, trial_ends_at, 0 as has_used_trial
+         FROM companies WHERE id = ? LIMIT 1`,
+        [companyId]
+      );
+    }).catch(async () => {
+      return await pool.query(
+        `SELECT id, planLevel, 'bronze' as access_grant_type, NULL as trial_ends_at, 0 as has_used_trial
          FROM companies WHERE id = ? LIMIT 1`,
         [companyId]
       );
