@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { ShieldCheck, User, Mail, Phone, Lock, Sparkles } from 'lucide-react';
+import { ShieldCheck, User, Mail, Phone, Lock, Sparkles, Eye, EyeOff } from 'lucide-react';
 import { api, ApiError } from '../lib/apiClient';
 import { useAuth } from '../context/AuthContext';
 import { maskPhone } from '../utils/validators';
@@ -25,6 +25,7 @@ export default function UserAuthModal({
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [city, setCity] = useState('Itapoá');
@@ -190,15 +191,24 @@ export default function UserAuthModal({
             <div className="relative flex items-center bg-slate-50 border rounded-xl focus-within:border-blue-400">
               <Lock className="w-4 h-4 text-slate-400 absolute left-3" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 placeholder="••••••••"
                 minLength={isRegisterMode ? MIN_PASSWORD_LENGTH : undefined}
                 autoComplete={isRegisterMode ? 'new-password' : 'current-password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-9 pr-3 py-3 bg-transparent text-slate-800 focus:outline-none"
+                className="w-full pl-9 pr-10 py-3 bg-transparent text-slate-800 focus:outline-none"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 p-1 text-slate-400 hover:text-slate-700 transition cursor-pointer"
+                title={showPassword ? 'Ocultar senha' : 'Ver senha'}
+                aria-label={showPassword ? 'Ocultar senha' : 'Ver senha'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 

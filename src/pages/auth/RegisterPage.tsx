@@ -5,7 +5,7 @@
  */
 
 import React, { useState } from 'react';
-import { Building2, Mail, Phone, MapPin, Lock, ArrowLeft, UserCheck, ShieldCheck } from 'lucide-react';
+import { Building2, Mail, Phone, MapPin, Lock, ArrowLeft, UserCheck, ShieldCheck, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api, ApiError } from '../../lib/apiClient';
 import { readPendingPurchase } from '../../lib/pendingPurchase';
@@ -26,6 +26,8 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateTab }) => 
   const [city, setCity] = useState('Itapoá');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -201,15 +203,24 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateTab }) => 
               <div className="relative flex items-center">
                 <Lock className="w-4 h-4 text-slate-500 absolute left-3.5" />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   placeholder="Mínimo 8 caracteres"
                   minLength={MIN_PASSWORD_LENGTH}
                   autoComplete="new-password"
-                  className="w-full pl-10 pr-4 py-3.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#C8102E]"
+                  className="w-full pl-10 pr-11 py-3.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#C8102E]"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 p-1 text-slate-400 hover:text-white transition cursor-pointer"
+                  title={showPassword ? 'Ocultar senha' : 'Ver senha'}
+                  aria-label={showPassword ? 'Ocultar senha' : 'Ver senha'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
@@ -220,15 +231,24 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateTab }) => 
               <div className="relative flex items-center">
                 <Lock className="w-4 h-4 text-slate-500 absolute left-3.5" />
                 <input
-                  type="password"
+                  type={showConfirmPassword ? 'text' : 'password'}
                   value={confirmPassword}
                   onChange={e => setConfirmPassword(e.target.value)}
                   placeholder="Repita a senha"
                   minLength={MIN_PASSWORD_LENGTH}
                   autoComplete="new-password"
-                  className="w-full pl-10 pr-4 py-3.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#C8102E]"
+                  className="w-full pl-10 pr-11 py-3.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#C8102E]"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3.5 p-1 text-slate-400 hover:text-white transition cursor-pointer"
+                  title={showConfirmPassword ? 'Ocultar senha' : 'Ver senha'}
+                  aria-label={showConfirmPassword ? 'Ocultar senha' : 'Ver senha'}
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
           </div>
