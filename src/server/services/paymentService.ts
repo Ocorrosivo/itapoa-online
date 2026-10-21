@@ -118,7 +118,7 @@ class PaymentService {
       const errDetail = payment?.message || (Array.isArray(payment?.cause) ? payment.cause.map((c: any) => c.description || c.code).join(', ') : '');
       console.error(`[payment-card] Mercado Pago error (HTTP ${response.status}):`, errDetail);
       if (response.status >= 500) return { subscriptionId, status: 'unknown' };
-      throw new PaymentError(response.status === 400 ? 400 : 502, errDetail || 'O Mercado Pago não conseguiu processar esta tentativa. Confira os dados ou tente novamente.');
+      throw new PaymentError(response.status === 400 ? 400 : 422, errDetail || 'O Mercado Pago não conseguiu processar esta tentativa. Confira os dados ou tente novamente.');
     }
     await pool.query(
       `INSERT INTO payment_logs (id, subscriptionId, amount, status, gateway_reference) VALUES (?, ?, ?, 'pending', ?)
@@ -178,73 +178,44 @@ class PaymentService {
 
     const token = await this.accessToken();
 
-    let subscriptionId: string;
-    let nextBilling: Date;
-    let lockKey: string;
-    {
-      const conn = await pool.getConnection();
-      lockKey = `pix_${companyId}_${planId}_${userId}`.slice(0, 64);
-      try {
-        await conn.beginTransaction();
-        await conn.query('SELECT GET_LOCK(?, 10)', [lockKey]);
-        const [pending]: any = await conn.query(
-          `SELECT id FROM subscriptions
-            WHERE companyId = ? AND planId = ? AND userId = ? AND status = 'pending' AND paymentMethod = 'pix'
-            ORDER BY createdAt DESC LIMIT 1 FOR UPDATE`,
-          [companyId, planId, userId]
-        );
-        if (pending.length > 0) {
-          const reuse = await this.getActivePixForCompany(companyId, planId, userId);
-          if (reuse) {
-            await conn.query('SELECT RELEASE_LOCK(?)', [lockKey]);
-            await conn.rollback();
-            conn.release();
-            return reuse;
-          }
-          // Cobrança no gateway não foi concluída ou já expirou: cancelar tentativa órfã e prosseguir com nova cobrança
-          await conn.query(
-            "UPDATE subscriptions SET status = 'canceled' WHERE companyId = ? AND planId = ? AND userId = ? AND status = 'pending' AND paymentMethod = 'pix'",
-            [companyId, planId, userId]
-          );
-        }
+    // Cancela qualquer tentativa pendente anterior órfã para evitar conflito de 409
+    await pool.query(
+      "UPDATE subscriptions SET status = 'canceled' WHERE companyId = ? AND planId = ? AND userId = ? AND status = 'pending' AND paymentMethod = 'pix'",
+      [companyId, planId, userId]
+    ).catch(() => {});
 
-        subscriptionId = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        nextBilling = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const subscriptionId = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const nextBilling = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-        await conn.query(
-          `INSERT INTO subscriptions
-             (id, userId, companyId, planId, status, amount, paymentMethod, payment_type, contracted_price, plan_version, nextBillingDate)
-           VALUES (?, ?, ?, ?, 'pending', ?, 'pix', 'onetime_pix', ?, ?, ?)`,
-          [subscriptionId, userId, companyId, planId, plan.price, plan.price, plan.version || 1, nextBilling]
-        ).catch(async () => {
-          return await conn.query(
-            `INSERT INTO subscriptions
-               (id, userId, companyId, planId, status, amount, paymentMethod, nextBillingDate)
-             VALUES (?, ?, ?, ?, 'pending', ?, 'pix', ?)`,
-            [subscriptionId, userId, companyId, planId, plan.price, nextBilling]
-          );
-        });
-        await conn.query('SELECT RELEASE_LOCK(?)', [lockKey]);
-        await conn.commit();
-        conn.release();
-      } catch (err) {
-        try { await conn.query('SELECT RELEASE_LOCK(?)', [lockKey]); } catch {}
-        try { await conn.rollback(); } catch {}
-        try { conn.release(); } catch {}
-        if (err instanceof PaymentError) throw err;
-        throw err;
-      }
-    }
+    await pool.query(
+      `INSERT INTO subscriptions
+         (id, userId, companyId, planId, status, amount, paymentMethod, payment_type, contracted_price, plan_version, nextBillingDate)
+       VALUES (?, ?, ?, ?, 'pending', ?, 'pix', 'onetime_pix', ?, ?, ?)`,
+      [subscriptionId, userId, companyId, planId, plan.price, plan.price, plan.version || 1, nextBilling]
+    ).catch(async () => {
+      return await pool.query(
+        `INSERT INTO subscriptions
+           (id, userId, companyId, planId, status, amount, paymentMethod, nextBillingDate)
+         VALUES (?, ?, ?, ?, 'pending', ?, 'pix', ?)`,
+        [subscriptionId, userId, companyId, planId, plan.price, nextBilling]
+      );
+    });
 
-    const idempotencyKey = `${subscriptionId!}`;
+    const idempotencyKey = `${subscriptionId}`;
     const dateOfExpiration = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    const appUrl = (process.env.APP_URL || 'https://itapoa.online').replace(/\/$/, '');
     const body = {
       transaction_amount: Number(plan.price.toFixed(2)),
       description: `Assinatura ${plan.name} — Guia Comercial Itapoá`,
       payment_method_id: 'pix',
-      external_reference: subscriptionId!,
+      external_reference: subscriptionId,
       date_of_expiration: dateOfExpiration,
-      payer: { email: payerEmail }
+      notification_url: `${appUrl}/api/webhooks/mercadopago`,
+      payer: {
+        email: payerEmail,
+        first_name: 'Cliente',
+        last_name: 'Itapoá'
+      }
     };
 
     let mp: any;
@@ -261,23 +232,18 @@ class PaymentService {
       mp = await resp.json().catch(() => ({}));
       if (!resp.ok) {
         const errDetail = mp?.message || mp?.error || (Array.isArray(mp?.cause) ? mp.cause.map((c: any) => c.description || c.code).join(', ') : '');
-        console.error(`[payment-pix] Mercado Pago error (HTTP ${resp.status}):`, errDetail);
-        throw new PaymentError(502, errDetail || 'Falha ao criar cobrança no gateway.');
+        console.error(`[payment-pix] Mercado Pago error (HTTP ${resp.status}):`, errDetail, JSON.stringify(mp));
+        throw new PaymentError(422, errDetail || 'Falha ao criar cobrança Pix no gateway.');
       }
     } catch (err) {
       if (err instanceof PaymentError) {
-        const sc = (err as PaymentError).status;
-        if (sc === 502) {
-          console.warn(`[payment] MP error for ${subscriptionId!}, keeping pending for reconciliation`);
-        } else {
-          try {
-            await pool.query('UPDATE subscriptions SET status = ? WHERE id = ? AND status = ?', ['canceled', subscriptionId!, 'pending']);
-          } catch {}
-        }
+        try {
+          await pool.query('UPDATE subscriptions SET status = ? WHERE id = ? AND status = ?', ['canceled', subscriptionId, 'pending']);
+        } catch {}
         throw err;
       }
-      console.warn(`[payment] MP timeout/network for ${subscriptionId!}, keeping pending for reconciliation (X-Idempotency-Key=${idempotencyKey})`);
-      throw new PaymentError(502, 'Gateway temporariamente indisponível. Sua cobrança foi preservada — tente recuperar ou aguarde confirmação via webhook.');
+      console.warn(`[payment] MP timeout/network for ${subscriptionId}`);
+      throw new PaymentError(503, 'Gateway temporariamente indisponível. Tente novamente em instantes.');
     }
 
     const gatewayId = String(mp.id);

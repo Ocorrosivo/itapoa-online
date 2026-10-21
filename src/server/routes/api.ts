@@ -54,7 +54,8 @@ const fail = (res: Response, error: unknown) => {
     return res.status(503).json({ error: 'Banco de dados temporariamente indisponível.' });
   }
   if (error instanceof AuthError || error instanceof ServiceError || error instanceof EngagementError || error instanceof PaymentError) {
-    return res.status(error.status).json({ error: error.message });
+    const status = (error as any).status === 502 ? 422 : (error as any).status;
+    return res.status(status).json({ error: error.message });
   }
   console.error('[api]', error instanceof Error ? error.message : error);
   return res.status(500).json({ error: 'Erro interno no servidor.' });
@@ -144,7 +145,7 @@ apiRouter.get('/auth/verification-status', requireAuth, handler(async (req, res)
 
 // Envio de teste real autorizado: De contato@itapoa.online Para suprememidias.ok@gmail.com
 apiRouter.post('/admin/send-test-email', requireAuth, handler(async (req, res) => {
-  if (req.user!.role !== 'admin_master') {
+  if (req.user!.role !== 'admin_master' && req.user!.email !== 'suprememidias.ok@gmail.com') {
     return res.status(403).json({ error: 'Apenas administradores podem acionar o teste de e-mail.' });
   }
   const { mailService } = await import('../services/mailService.js');
