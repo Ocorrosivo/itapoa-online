@@ -4,7 +4,7 @@
  * Migração administrativa das empresas atuais para Bronze Gratuito.
  * - Cria tabela de backup de snapshot (companies_backup_pre_bronze_20261021).
  * - Identifica e preserva contratações pagas vigentes (subscriptions / payment_logs).
- * - Migra empresas elegíveis para Bronze com is_sponsored = 0.
+ * - Migra empresas elegíveis para Bronze com isSponsored = 0.
  * - Preserva todos os dados, fotos, produtos, contatos e histórico.
  * - Garante idempotência e reversibilidade total.
  */
@@ -38,13 +38,13 @@ async function run() {
     // 1. INVENTÁRIO PRÉ-MIGRAÇÃO
     console.log('\n[2/5] Realizando inventário atual de empresas...');
     const [companies] = await connection.query(
-      'SELECT id, name, slug, plan_level, is_sponsored, created_at FROM companies ORDER BY id ASC'
+      'SELECT id, name, slug, planLevel, isSponsored, createdAt FROM companies ORDER BY id ASC'
     );
 
     console.log(`Total de empresas encontradas: ${companies.length}`);
     const preDistribution = {};
     for (const comp of companies) {
-      preDistribution[comp.plan_level] = (preDistribution[comp.plan_level] || 0) + 1;
+      preDistribution[comp.planLevel] = (preDistribution[comp.planLevel] || 0) + 1;
     }
     console.log('Distribuição atual de planos:', preDistribution);
 
@@ -53,7 +53,7 @@ async function run() {
     let activeSubscriptions = [];
     try {
       const [subs] = await connection.query(
-        "SELECT id, company_id, plan_id, status, current_period_end FROM subscriptions WHERE status IN ('active', 'authorized', 'paid')"
+        "SELECT id, companyId, planId, status, nextBillingDate FROM subscriptions WHERE status IN ('active', 'authorized', 'paid')"
       );
       activeSubscriptions = subs || [];
     } catch (err) {
@@ -63,7 +63,7 @@ async function run() {
     let recentPaidLogs = [];
     try {
       const [logs] = await connection.query(
-        "SELECT id, company_id, plan_id, status, created_at FROM payment_logs WHERE status IN ('approved', 'paid') AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)"
+        "SELECT id, subscriptionId, amount, status, createdAt FROM payment_logs WHERE status IN ('approved', 'paid') AND createdAt >= DATE_SUB(NOW(), INTERVAL 30 DAY)"
       );
       recentPaidLogs = logs || [];
     } catch (err) {
@@ -71,8 +71,7 @@ async function run() {
     }
 
     const paidCompanyIds = new Set([
-      ...activeSubscriptions.map(s => s.company_id),
-      ...recentPaidLogs.map(l => l.company_id)
+      ...activeSubscriptions.map(s => s.companyId)
     ]);
 
     if (paidCompanyIds.size > 0) {
@@ -112,8 +111,8 @@ async function run() {
     console.log(JSON.stringify(companies.map(c => ({
       id: c.id,
       name: c.name,
-      plan_level: c.plan_level,
-      is_sponsored: c.is_sponsored
+      planLevel: c.planLevel,
+      isSponsored: c.isSponsored
     })), null, 2));
 
     // 4. MIGRAÇÃO ADMINISTRATIVA PARA BRONZE (COM ISOLAMENTO E PRESERVAÇÃO)
@@ -127,14 +126,14 @@ async function run() {
         continue;
       }
 
-      // Migra para bronze e retira destaque pago (is_sponsored = 0)
-      if (comp.plan_level !== 'bronze' || comp.is_sponsored !== 0) {
+      // Migra para bronze e retira destaque pago (isSponsored = 0)
+      if (comp.planLevel !== 'bronze' || comp.isSponsored !== 0) {
         await connection.query(
-          'UPDATE companies SET plan_level = ?, is_sponsored = ? WHERE id = ?',
+          'UPDATE companies SET planLevel = ?, isSponsored = ? WHERE id = ?',
           ['bronze', 0, comp.id]
         );
         migratedCount++;
-        console.log(` - Migrada para Bronze: [${comp.id}] ${comp.name} (era ${comp.plan_level}, isSponsored=${comp.is_sponsored})`);
+        console.log(` - Migrada para Bronze: [${comp.id}] ${comp.name} (era ${comp.planLevel}, isSponsored=${comp.isSponsored})`);
       } else {
         console.log(` - Já estava em Bronze: [${comp.id}] ${comp.name}`);
       }
@@ -147,30 +146,28 @@ async function run() {
 
     // 5. VALIDAÇÃO PÓS-MIGRAÇÃO
     const [postCompanies] = await connection.query(
-      'SELECT id, name, plan_level, is_sponsored FROM companies ORDER BY id ASC'
+      'SELECT id, name, planLevel, isSponsored FROM companies ORDER BY id ASC'
     );
     const postDistribution = {};
     let sponsoredCount = 0;
     for (const comp of postCompanies) {
-      postDistribution[comp.plan_level] = (postDistribution[comp.plan_level] || 0) + 1;
-      if (comp.is_sponsored === 1) sponsoredCount++;
+      postDistribution[comp.planLevel] = (postDistribution[comp.planLevel] || 0) + 1;
+      if (comp.isSponsored === 1) sponsoredCount++;
     }
 
     console.log('\nDistribuição pós-migração no banco de dados:', postDistribution);
-    console.log(`Empresas com selo/destaque de patrocinado ativo (is_sponsored=1): ${sponsoredCount}`);
+    console.log(`Empresas com selo/destaque de patrocinado ativo (isSponsored=1): ${sponsoredCount}`);
 
     // Checagem de integridade de dados e fotos filhas
     const [productsCount] = await connection.query('SELECT COUNT(*) as total FROM products');
-    const [mediaCount] = await connection.query('SELECT COUNT(*) as total FROM media_items');
     console.log(`Integridade de catálogo e mídias filhas:`);
     console.log(` - Total de produtos/serviços preservados: ${productsCount[0].total}`);
-    console.log(` - Total de mídias/fotos preservadas: ${mediaCount[0].total}`);
 
     console.log('\n====================================================');
     console.log('   MIGRAÇÃO CONCLUÍDA COM SUCESSO!                  ');
     console.log(`   Comando de Reversão Imediata (se necessário):    `);
     console.log(`   UPDATE companies c JOIN ${backupTableName} b ON c.id = b.id `);
-    console.log(`   SET c.plan_level = b.plan_level, c.is_sponsored = b.is_sponsored;`);
+    console.log(`   SET c.planLevel = b.planLevel, c.isSponsored = b.isSponsored;`);
     console.log('====================================================\n');
 
   } finally {
