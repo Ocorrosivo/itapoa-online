@@ -20,4 +20,10 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], viewport: { width: 1366, height: 900 } },
     },
   ],
+  webServer: {
+    command: 'npx vite preview --port 4173 --host 127.0.0.1',
+    url: 'http://127.0.0.1:4173',
+    reuseExistingServer: true,
+    timeout: 30000,
+  },
 });

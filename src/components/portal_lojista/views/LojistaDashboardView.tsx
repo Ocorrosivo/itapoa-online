@@ -235,13 +235,13 @@ export const LojistaDashboardView: React.FC<LojistaDashboardViewProps> = ({ comp
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-black text-white">
-              {loading ? '…' : (data?.periodTotals.views ?? 0)}
+              {loading ? '…' : (data?.periodTotals?.views ?? data?.totals?.views ?? 0)}
             </span>
             <span className="text-[11px] text-slate-500 font-semibold">no período</span>
           </div>
           <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
             <span>Total acumulado:</span>
-            <span className="font-bold text-slate-200">{data?.totals.views ?? 0}</span>
+            <span className="font-bold text-slate-200">{data?.totals?.views ?? 0}</span>
           </div>
         </div>
 
@@ -255,13 +255,13 @@ export const LojistaDashboardView: React.FC<LojistaDashboardViewProps> = ({ comp
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-black text-white">
-              {loading ? '…' : (data?.periodTotals.whatsapp ?? 0)}
+              {loading ? '…' : (data?.periodTotals?.whatsapp ?? data?.totals?.whatsapp ?? 0)}
             </span>
             <span className="text-[11px] text-slate-500 font-semibold">no período</span>
           </div>
           <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
             <span>Total acumulado:</span>
-            <span className="font-bold text-slate-200">{data?.totals.whatsapp ?? 0}</span>
+            <span className="font-bold text-slate-200">{data?.totals?.whatsapp ?? 0}</span>
           </div>
         </div>
 
@@ -275,13 +275,13 @@ export const LojistaDashboardView: React.FC<LojistaDashboardViewProps> = ({ comp
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-black text-white">
-              {loading ? '…' : (data?.periodTotals.phone ?? 0)}
+              {loading ? '…' : (data?.periodTotals?.phone ?? data?.totals?.phone ?? 0)}
             </span>
             <span className="text-[11px] text-slate-500 font-semibold">no período</span>
           </div>
           <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
             <span>Total acumulado:</span>
-            <span className="font-bold text-slate-200">{data?.totals.phone ?? 0}</span>
+            <span className="font-bold text-slate-200">{data?.totals?.phone ?? 0}</span>
           </div>
         </div>
 
@@ -295,13 +295,13 @@ export const LojistaDashboardView: React.FC<LojistaDashboardViewProps> = ({ comp
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-black text-white">
-              {loading ? '…' : (data?.periodTotals.route ?? 0)}
+              {loading ? '…' : (data?.periodTotals?.route ?? data?.totals?.route ?? 0)}
             </span>
             <span className="text-[11px] text-slate-500 font-semibold">no período</span>
           </div>
           <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
             <span>Total acumulado:</span>
-            <span className="font-bold text-slate-200">{data?.totals.route ?? 0}</span>
+            <span className="font-bold text-slate-200">{data?.totals?.route ?? 0}</span>
           </div>
         </div>
 
