@@ -17,6 +17,7 @@ import { AnalyticsLojistaView } from '../views/AnalyticsLojistaView';
 import { EditMiniSiteView } from '../views/EditMiniSiteView';
 import { ProductsView } from '../views/ProductsView';
 import { CouponsView } from '../views/CouponsView';
+import { ProductsAndServicesView } from '../views/ProductsAndServicesView';
 import { BlogView } from '../views/BlogView';
 import { CrmView } from '../views/CrmView';
 import { ReviewsView } from '../views/ReviewsView';
@@ -48,7 +49,7 @@ export const LojistaLayout: React.FC<LojistaLayoutProps> = ({ onNavigateCompany 
 
   const myCompany: Company | null = ownedCompanies[0] || null;
 
-  const [currentTab, setCurrentTab] = useState<LojistaTabType>('dashboard');
+  const [currentTab, setCurrentTab] = useState<LojistaTabType>('overview');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isHealthModalOpen, setIsHealthModalOpen] = useState(false);
@@ -154,15 +155,45 @@ export const LojistaLayout: React.FC<LojistaLayoutProps> = ({ onNavigateCompany 
             </div>
           )}
 
-          {/* ── Tab views ── */}
-          {currentTab === 'dashboard' && (
-            <LojistaDashboardView company={myCompany} onNavigateTab={setCurrentTab} />
+          {/* ── 1. Visão geral ── */}
+          {(currentTab === 'overview' || currentTab === 'dashboard') && (
+            <LojistaDashboardView company={myCompany} onNavigateTab={handleSelectTab} />
           )}
 
+          {/* ── 2. Minha empresa ── */}
+          {(currentTab === 'company' || currentTab === 'profile') && myCompany && (
+            <EditMiniSiteView
+              company={myCompany}
+              onSaved={() => setReload(n => n + 1)}
+              onNavigateCompany={onNavigateCompany}
+            />
+          )}
+
+          {/* ── 3. Produtos e serviços ── */}
+          {(currentTab === 'products_services' || currentTab === 'products' || currentTab === 'coupons') && (
+            <ProductsAndServicesView company={myCompany} onNavigateTab={handleSelectTab} />
+          )}
+
+          {/* ── 4. Clientes (CRM) ── */}
+          {(currentTab === 'clients' || currentTab === 'crm') && (
+            <CrmView company={myCompany} />
+          )}
+
+          {/* ── 5. Meu plano ── */}
+          {(currentTab === 'plan' || currentTab === 'billing') && (
+            <BillingSubscriptionView company={myCompany} />
+          )}
+
+          {/* ── 6. Ajuda ── */}
+          {(currentTab === 'help' || currentTab === 'helpdesk') && (
+            <HelpdeskView company={myCompany} />
+          )}
+
+          {/* ── Módulos secundários preservados ── */}
           {currentTab === 'health' && (
             <HealthView
               company={myCompany}
-              onNavigateTab={setCurrentTab}
+              onNavigateTab={handleSelectTab}
               onNavigateCompany={myCompany?.slug ? onNavigateCompany : undefined}
             />
           )}
@@ -171,28 +202,8 @@ export const LojistaLayout: React.FC<LojistaLayoutProps> = ({ onNavigateCompany 
             <AnalyticsLojistaView company={myCompany} />
           )}
 
-          {currentTab === 'profile' && myCompany && (
-            <EditMiniSiteView
-              company={myCompany}
-              onSaved={() => setReload(n => n + 1)}
-              onNavigateCompany={onNavigateCompany}
-            />
-          )}
-
-          {currentTab === 'products' && (
-            <ProductsView company={myCompany} />
-          )}
-
-          {currentTab === 'coupons' && (
-            <CouponsView company={myCompany} />
-          )}
-
           {currentTab === 'blog' && (
             <BlogView company={myCompany} />
-          )}
-
-          {currentTab === 'crm' && (
-            <CrmView company={myCompany} />
           )}
 
           {currentTab === 'reviews' && (
@@ -210,16 +221,8 @@ export const LojistaLayout: React.FC<LojistaLayoutProps> = ({ onNavigateCompany 
             />
           )}
 
-          {currentTab === 'billing' && (
-            <BillingSubscriptionView company={myCompany} />
-          )}
-
           {currentTab === 'staff' && (
             <StaffView company={myCompany} />
-          )}
-
-          {currentTab === 'helpdesk' && (
-            <HelpdeskView company={myCompany} />
           )}
 
           {currentTab === 'tourism' && (

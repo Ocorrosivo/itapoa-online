@@ -153,6 +153,61 @@ apiRouter.post('/companies/:id/click', handler(async (req, res) => {
   res.json({ success: true, clicks: await companyService.registerClick(req.params.id) });
 }));
 
+// Fotos da Galeria da Empresa (com validação estrita de limite por plano)
+apiRouter.get('/companies/:id/media', handler(async (req, res) => {
+  const pool = (await import('../mysql.js')).pool;
+  const [rows]: any = await pool.query(
+    'SELECT id, url, fileType, createdAt FROM media_items WHERE entityId = ? AND entityType = ? ORDER BY createdAt DESC',
+    [req.params.id, 'company']
+  );
+  res.json(rows);
+}));
+
+apiRouter.post('/companies/:id/media', requireAuth, requireCompanyParam('id'), handler(async (req, res) => {
+  const { url, fileType } = req.body ?? {};
+  if (!url || typeof url !== 'string' || !url.trim()) {
+    return res.status(400).json({ error: 'URL da imagem é obrigatória.' });
+  }
+
+  const companyId = req.params.id;
+  const entitlements = await EntitlementService.getCompanyEntitlements(companyId);
+  const maxPhotos = entitlements.limits.maxGalleryPhotos;
+
+  const pool = (await import('../mysql.js')).pool;
+  const [countRows]: any = await pool.query(
+    'SELECT COUNT(*) as total FROM media_items WHERE entityId = ? AND entityType = ?',
+    [companyId, 'company']
+  );
+  const currentTotal = Number(countRows[0]?.total ?? 0);
+
+  if (currentTotal >= maxPhotos) {
+    return res.status(403).json({
+      error: `Limite de fotos atingido para o plano ${entitlements.planName} (${maxPhotos} fotos). Faça upgrade para adicionar mais fotos à galeria.`,
+      errorType: 'plan_limit',
+      limit: maxPhotos,
+      current: currentTotal
+    });
+  }
+
+  const { nanoid } = await import('nanoid');
+  const id = `media_${nanoid(16)}`;
+  await pool.query(
+    'INSERT INTO media_items (id, url, entityId, entityType, fileType, createdAt) VALUES (?, ?, ?, ?, ?, NOW())',
+    [id, url.trim(), companyId, 'company', fileType || 'image/jpeg']
+  );
+
+  res.json({ success: true, item: { id, url: url.trim(), entityId: companyId, entityType: 'company' } });
+}));
+
+apiRouter.delete('/companies/:id/media/:mediaId', requireAuth, requireCompanyParam('id'), handler(async (req, res) => {
+  const pool = (await import('../mysql.js')).pool;
+  await pool.query(
+    'DELETE FROM media_items WHERE id = ? AND entityId = ? AND entityType = ?',
+    [req.params.mediaId, req.params.id, 'company']
+  );
+  res.json({ success: true });
+}));
+
 // ============================================================
 // 3. PUBLIC CATALOGUE (read-only)
 // ============================================================
@@ -325,6 +380,15 @@ apiRouter.put(
   })
 );
 
+apiRouter.delete(
+  '/crm/leads/:id',
+  requireAuth,
+  requireRecordOwnership('crm_leads', 'company_id'),
+  handler(async (req, res) => {
+    res.json(await crmService.remove(req.params.id));
+  })
+);
+
 // ============================================================
 // 7. BILLING + PAYMENTS (Mercado Pago)
 // Reads come from MySQL; charges are created and verified server-side.
@@ -462,9 +526,137 @@ apiRouter.get('/subscriptions', requireAuth, attachCompanyScope, handler(async (
 }));
 
 // ============================================================
-// 8. ANALYTICS
+// 8. ANALYTICS & TELEMETRIA REAL
 // Figures are aggregated in SQL. No estimated or sample values.
 // ============================================================
+
+// Registro de eventos de telemetria pública (view, whatsapp, phone, route)
+apiRouter.post('/analytics/events', handler(async (req, res) => {
+  const { company_id, event_type, source, device } = req.body ?? {};
+  if (!company_id || typeof company_id !== 'string') {
+    return res.status(400).json({ error: 'company_id é obrigatório.' });
+  }
+
+  const rawType = String(event_type || '').toLowerCase().replace('click_', '');
+  const VALID_EVENTS = ['view', 'whatsapp', 'phone', 'route'];
+  if (!VALID_EVENTS.includes(rawType)) {
+    return res.status(400).json({ error: 'Tipo de evento inválido.' });
+  }
+
+  const pool = (await import('../mysql.js')).pool;
+  const { nanoid } = await import('nanoid');
+  const eventId = `evt_${nanoid(16)}`;
+
+  // Insere o evento real com timestamp exato
+  await pool.query(
+    'INSERT INTO company_analytics_events (id, company_id, event_type, source, device, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
+    [eventId, company_id, rawType, String(source || 'direct').slice(0, 64), String(device || 'mobile').slice(0, 32)]
+  );
+
+  // Incrementa contador consolidado em companies
+  if (rawType === 'view') {
+    await pool.query('UPDATE companies SET views = views + 1 WHERE id = ?', [company_id]);
+  } else if (rawType === 'whatsapp') {
+    await pool.query('UPDATE companies SET clicksWhatsapp = clicksWhatsapp + 1 WHERE id = ?', [company_id]);
+  } else if (rawType === 'phone') {
+    await pool.query('UPDATE companies SET clicksPhone = clicksPhone + 1 WHERE id = ?', [company_id]);
+  } else if (rawType === 'route') {
+    await pool.query('UPDATE companies SET clicksRoute = clicksRoute + 1 WHERE id = ?', [company_id]);
+  }
+
+  res.json({ success: true, eventId });
+}));
+
+// Métricas reais da empresa com controle de histórico por plano (Bronze: 7 dias; Gold/Diamond: 7, 30 e 90 dias)
+apiRouter.get('/companies/:id/analytics', requireAuth, requireCompanyParam('id'), handler(async (req, res) => {
+  const companyId = req.params.id;
+  const pool = (await import('../mysql.js')).pool;
+
+  const entitlements = await EntitlementService.getCompanyEntitlements(companyId);
+  const isBronze = entitlements.planTier === 'bronze';
+
+  const requestedDays = parseInt(String(req.query.days || '7'), 10);
+  let days = 7;
+  let planRestricted = false;
+
+  if (requestedDays === 30 || requestedDays === 90) {
+    if (isBronze) {
+      days = 7;
+      planRestricted = true;
+    } else {
+      days = requestedDays;
+    }
+  }
+
+  // Agrupamento diário real
+  const [dailyRows]: any = await pool.query(
+    `SELECT DATE(created_at) as date, event_type, COUNT(*) as count 
+     FROM company_analytics_events 
+     WHERE company_id = ? AND created_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+     GROUP BY DATE(created_at), event_type 
+     ORDER BY date ASC`,
+    [companyId, days]
+  );
+
+  // Totais consolidados
+  const [companyRows]: any = await pool.query(
+    'SELECT views, clicksWhatsapp, clicksPhone, clicksRoute FROM companies WHERE id = ? LIMIT 1',
+    [companyId]
+  );
+  const totals = companyRows[0] || { views: 0, clicksWhatsapp: 0, clicksPhone: 0, clicksRoute: 0 };
+
+  const dayMap = new Map<string, { views: number; whatsapp: number; phone: number; route: number }>();
+  for (const r of dailyRows) {
+    const dStr = typeof r.date === 'string' ? r.date.split('T')[0] : new Date(r.date).toISOString().split('T')[0];
+    if (!dayMap.has(dStr)) {
+      dayMap.set(dStr, { views: 0, whatsapp: 0, phone: 0, route: 0 });
+    }
+    const cur = dayMap.get(dStr)!;
+    if (r.event_type === 'view') cur.views += Number(r.count);
+    else if (r.event_type === 'whatsapp') cur.whatsapp += Number(r.count);
+    else if (r.event_type === 'phone') cur.phone += Number(r.count);
+    else if (r.event_type === 'route') cur.route += Number(r.count);
+  }
+
+  // Monta linha do tempo preenchendo dias ausentes com 0
+  const timeline: { date: string; views: number; whatsapp: number; phone: number; route: number }[] = [];
+  const now = new Date();
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const dStr = d.toISOString().split('T')[0];
+    const val = dayMap.get(dStr) || { views: 0, whatsapp: 0, phone: 0, route: 0 };
+    timeline.push({ date: dStr, ...val });
+  }
+
+  const periodTotals = timeline.reduce(
+    (acc, cur) => ({
+      views: acc.views + cur.views,
+      whatsapp: acc.whatsapp + cur.whatsapp,
+      phone: acc.phone + cur.phone,
+      route: acc.route + cur.route
+    }),
+    { views: 0, whatsapp: 0, phone: 0, route: 0 }
+  );
+
+  res.json({
+    companyId,
+    plan: entitlements.planTier,
+    planDisplayName: entitlements.planName,
+    days,
+    allowedDays: isBronze ? [7] : [7, 30, 90],
+    planRestricted,
+    restrictionMessage: planRestricted ? 'Histórico estendido de 30 e 90 dias exclusivo para planos Gold VIP e Diamond.' : null,
+    totals: {
+      views: Number(totals.views || 0),
+      whatsapp: Number(totals.clicksWhatsapp || 0),
+      phone: Number(totals.clicksPhone || 0),
+      route: Number(totals.clicksRoute || 0)
+    },
+    periodTotals,
+    timeline
+  });
+}));
 
 apiRouter.get('/analytics', requireAuth, requireRole(ADMIN_ONLY), handler(async (_req, res) => {
   res.json(await analyticsService.getPlatformStats());

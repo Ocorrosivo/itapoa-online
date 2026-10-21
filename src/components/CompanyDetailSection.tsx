@@ -132,7 +132,27 @@ export default function CompanyDetailSection({
     setActiveGalleryIdx(prev => (prev - 1 + galleryImages.length) % galleryImages.length);
   };
 
+  const trackTelemetry = (eventType: 'view' | 'whatsapp' | 'phone' | 'route') => {
+    if (!company.id) return;
+    fetch('/api/analytics/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        company_id: company.id,
+        event_type: eventType,
+        source: 'guiacomercial',
+        device: typeof window !== 'undefined' && window.innerWidth < 768 ? 'mobile' : 'desktop'
+      })
+    }).catch(() => {});
+  };
+
+  // Registra visualização real na montagem
+  useEffect(() => {
+    trackTelemetry('view');
+  }, [company.id]);
+
   const handleLeadWhatsAppClick = () => {
+    trackTelemetry('whatsapp');
     fetch(`/api/companies/${company.id}/click`, { method: 'POST' }).catch(() => {});
     const cleanPhone = (company.whatsapp || company.phone || '').replace(/\D/g, '');
     const textMsg = encodeURIComponent(
@@ -142,12 +162,30 @@ export default function CompanyDetailSection({
   };
 
   const handleProductWhatsAppClick = (productName: string) => {
+    trackTelemetry('whatsapp');
     fetch(`/api/companies/${company.id}/click`, { method: 'POST' }).catch(() => {});
     const cleanPhone = (company.whatsapp || company.phone || '').replace(/\D/g, '');
     const textMsg = encodeURIComponent(
       `Olá! Vi o item "${productName}" no catálogo de ${company.name} no Guia Comercial de Itapoá e gostaria de saber mais detalhes e disponibilidade.`
     );
     window.open(`https://wa.me/55${cleanPhone}?text=${textMsg}`, '_blank');
+  };
+
+  const handlePhoneClick = () => {
+    trackTelemetry('phone');
+    if (company.phone) {
+      window.open(`tel:${company.phone}`, '_self');
+    }
+  };
+
+  const handleRouteClick = () => {
+    trackTelemetry('route');
+    const destination = company.address 
+      ? encodeURIComponent(`${company.address}, Itapoá, SC`) 
+      : company.latitude && company.longitude 
+        ? `${company.latitude},${company.longitude}` 
+        : encodeURIComponent(`${company.name}, Itapoá, SC`);
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${destination}`, '_blank');
   };
 
   const handleCopyLink = () => {
@@ -321,7 +359,7 @@ export default function CompanyDetailSection({
                 {company.phone && (
                   <button
                     type="button"
-                    onClick={() => window.open(`tel:${company.phone}`, '_self')}
+                    onClick={handlePhoneClick}
                     className="px-4 py-3 bg-slate-900/90 hover:bg-slate-800 text-white border border-white/20 font-bold text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
                   >
                     <span>Ligar</span>
@@ -808,23 +846,37 @@ export default function CompanyDetailSection({
                 )}
 
                 {company.address && (
-                  <div className="flex gap-3">
-                    <MapPin className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold text-slate-900 block">Endereço</span>
-                      <span className="text-slate-600">{company.address}</span>
+                  <div className="flex flex-col gap-2 pt-1 border-t border-slate-100">
+                    <div className="flex gap-3">
+                      <MapPin className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold text-slate-900 block">Endereço</span>
+                        <span className="text-slate-600">{company.address}</span>
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={handleRouteClick}
+                      className="w-full mt-1 py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 border border-rose-200"
+                    >
+                      <MapPin className="w-3.5 h-3.5" />
+                      <span>Como Chegar (Traçar Rota no Mapa)</span>
+                    </button>
                   </div>
                 )}
 
                 {company.phone && (
-                  <div className="flex gap-3">
+                  <div className="flex gap-3 pt-1 border-t border-slate-100">
                     <Phone className="w-4 h-4 text-teal-500 shrink-0 mt-0.5" />
                     <div>
                       <span className="font-bold text-slate-900 block">Telefone de Contato</span>
-                      <a href={`tel:${company.phone}`} className="text-indigo-600 hover:underline font-semibold">
+                      <button
+                        type="button"
+                        onClick={handlePhoneClick}
+                        className="text-indigo-600 hover:underline font-semibold text-left p-0 bg-transparent border-none cursor-pointer"
+                      >
                         {company.phone}
-                      </a>
+                      </button>
                     </div>
                   </div>
                 )}

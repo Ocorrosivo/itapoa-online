@@ -22,7 +22,7 @@ export const EXPECTED_TABLES = [
   'portfolio_items', 'blog_posts', 'blog_comments', 'events', 'tourism_places',
   'route_guides', 'route_guide_steps', 'solidarity_campaigns',
   'campaign_comments', 'plans', 'subscriptions', 'payment_logs', 'crm_leads',
-  'support_tickets', 'media_items', 'faq_items', 'audit_logs', 'seo_settings',
+  'support_tickets', 'media_items', 'company_analytics_events', 'faq_items', 'audit_logs', 'seo_settings',
   'general_config', 'payment_config', 'notifications'
 ] as const;
 

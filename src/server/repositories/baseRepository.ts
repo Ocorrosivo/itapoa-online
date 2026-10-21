@@ -17,6 +17,7 @@ const TABLE_COLUMNS: Record<string, string[]> = {
     'id', 'name', 'slug', 'logo', 'coverImage', 'categoryId', 'cityId', 'description',
     'detailedDescription', 'rating', 'reviewCount', 'phone', 'whatsapp', 'address', 'hours',
     'latitude', 'longitude', 'isSponsored', 'planLevel', 'features', 'views', 'clicksWhatsapp',
+    'clicksPhone', 'clicksRoute',
     'access_grant_type', 'trial_ends_at', 'createdAt'
   ],
   companies_users: ['user_id', 'company_id', 'access_level'],
@@ -85,8 +86,9 @@ const TABLE_COLUMNS: Record<string, string[]> = {
     'nextBillingDate', 'createdAt'
   ],
   payment_logs: ['id', 'subscriptionId', 'amount', 'status', 'gateway_reference', 'createdAt'],
-  crm_leads: ['id', 'company_id', 'name', 'email', 'phone', 'source', 'status', 'createdAt'],
-  support_tickets: ['id', 'userId', 'subject', 'message', 'status', 'createdAt'],
+  crm_leads: ['id', 'company_id', 'name', 'email', 'phone', 'source', 'status', 'interest', 'notes', 'next_contact_at', 'createdAt'],
+  support_tickets: ['id', 'userId', 'company_id', 'subject', 'message', 'status', 'createdAt'],
+  company_analytics_events: ['id', 'company_id', 'event_type', 'source', 'device', 'created_at'],
   media_items: ['id', 'url', 'entityId', 'entityType', 'fileType', 'createdAt'],
   faq_items: ['id', 'entityId', 'question', 'answer', 'createdAt'],
   audit_logs: ['id', 'userId', 'userName', 'userEmail', 'action', 'details', 'ip', 'createdAt'],
@@ -342,6 +344,7 @@ export const PaymentLogRepository = new BaseRepository('payment_logs');
 export const CrmLeadRepository = new BaseRepository('crm_leads');
 export const SupportTicketRepository = new BaseRepository('support_tickets');
 export const MediaItemRepository = new BaseRepository('media_items');
+export const CompanyAnalyticsEventRepository = new BaseRepository('company_analytics_events');
 export const AuditLogRepository = new BaseRepository('audit_logs');
 export const GeneralConfigRepository = new BaseRepository('general_config');
 export const PaymentConfigRepository = new BaseRepository('payment_config');
