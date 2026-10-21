@@ -15,8 +15,10 @@ export interface PlanCapabilities {
   canAccessCRM: boolean;
   canCreateCoupons: boolean;
   canPublishPromotions: boolean;
+  maxActivePromotions: number;
   hasDiamondBadge: boolean;
   hasPremiumBadge: boolean;
+  hasHomeHighlight: boolean;
   hasSeoTools: boolean;
   hasAnalytics: boolean;
   priorityLevel: number;
@@ -26,92 +28,104 @@ const PLAN_CAPABILITIES_MAP: Record<PlanLevel, PlanCapabilities> = {
   bronze: {
     maxImages: 3,
     maxVideos: 0,
-    maxProducts: 5,
-    maxJobs: 1,
-    maxCampaigns: 1,
-    canAccessCRM: false,
+    maxProducts: 0,
+    maxJobs: 0,
+    maxCampaigns: 0,
+    canAccessCRM: true,
     canCreateCoupons: false,
     canPublishPromotions: false,
+    maxActivePromotions: 0,
     hasDiamondBadge: false,
     hasPremiumBadge: false,
+    hasHomeHighlight: false,
     hasSeoTools: false,
-    hasAnalytics: false,
+    hasAnalytics: true,
     priorityLevel: 1
   },
   prata: {
-    maxImages: 10,
+    maxImages: 15,
     maxVideos: 1,
-    maxProducts: 15,
+    maxProducts: 5,
     maxJobs: 3,
     maxCampaigns: 2,
-    canAccessCRM: false,
+    canAccessCRM: true,
     canCreateCoupons: true,
     canPublishPromotions: true,
+    maxActivePromotions: 1,
     hasDiamondBadge: false,
     hasPremiumBadge: true,
+    hasHomeHighlight: true,
     hasSeoTools: false,
     hasAnalytics: true,
     priorityLevel: 2
   },
   ouro: {
-    maxImages: 25,
+    maxImages: 15,
     maxVideos: 3,
-    maxProducts: 50,
-    maxJobs: 10,
-    maxCampaigns: 5,
+    maxProducts: 5,
+    maxJobs: 5,
+    maxCampaigns: 3,
     canAccessCRM: true,
     canCreateCoupons: true,
     canPublishPromotions: true,
+    maxActivePromotions: 1,
     hasDiamondBadge: false,
     hasPremiumBadge: true,
+    hasHomeHighlight: true,
     hasSeoTools: true,
     hasAnalytics: true,
-    priorityLevel: 3
+    priorityLevel: 2
   },
   gold_vip: {
-    maxImages: 25,
+    maxImages: 15,
     maxVideos: 3,
-    maxProducts: 50,
+    maxProducts: 5,
+    maxJobs: 5,
+    maxCampaigns: 3,
+    canAccessCRM: true,
+    canCreateCoupons: true,
+    canPublishPromotions: true,
+    maxActivePromotions: 1,
+    hasDiamondBadge: false,
+    hasPremiumBadge: true,
+    hasHomeHighlight: true,
+    hasSeoTools: true,
+    hasAnalytics: true,
+    priorityLevel: 2
+  },
+  diamond: {
+    maxImages: 30,
+    maxVideos: 10,
+    maxProducts: 30,
     maxJobs: 10,
     maxCampaigns: 5,
     canAccessCRM: true,
     canCreateCoupons: true,
     canPublishPromotions: true,
-    hasDiamondBadge: false,
+    maxActivePromotions: 3,
+    hasDiamondBadge: true,
     hasPremiumBadge: true,
+    hasHomeHighlight: true,
     hasSeoTools: true,
     hasAnalytics: true,
     priorityLevel: 3
   },
-  diamond: {
-    maxImages: 999,
-    maxVideos: 10,
-    maxProducts: 999,
-    maxJobs: 999,
-    maxCampaigns: 999,
-    canAccessCRM: true,
-    canCreateCoupons: true,
-    canPublishPromotions: true,
-    hasDiamondBadge: true,
-    hasPremiumBadge: true,
-    hasSeoTools: true,
-    hasAnalytics: true,
-    priorityLevel: 4
-  },
   diamond_extremo: {
-    maxImages: 999,
+    maxImages: 30,
     maxVideos: 10,
-    maxProducts: 999,
-    maxJobs: 999,
-    maxCampaigns: 999,
+    maxProducts: 30,
+    maxJobs: 10,
+    maxCampaigns: 5,
     canAccessCRM: true,
     canCreateCoupons: true,
     canPublishPromotions: true,
+    maxActivePromotions: 3,
     hasDiamondBadge: true,
     hasPremiumBadge: true,
+    hasHomeHighlight: true,
     hasSeoTools: true,
     hasAnalytics: true,
-    priorityLevel: 4
+    priorityLevel: 3
   }
 };
 

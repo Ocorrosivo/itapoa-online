@@ -31,6 +31,7 @@ import { engagementService, EngagementError } from '../services/engagementServic
 import { billingService } from '../services/billingService.js';
 import { CrudService, ServiceError } from '../services/crudService.js';
 import { paymentService, PaymentError } from '../services/paymentService.js';
+import { EntitlementService } from '../services/entitlementService.js';
 import {
   requireAuth, requireRole, optionalAuth, attachCompanyScope,
   requireCompanyAccess, requireCompanyParam, requireRecordOwnership
@@ -173,13 +174,14 @@ publicList('cities', CityRepository);
 publicList('professionals', ProfessionalRepository);
 publicList('events', EventRepository);
 publicList('tourism', TourismPlaceRepository);
-publicList('plans', PlanRepository);
-publicList('products', ProductRepository);
-publicList('services', ServiceRepository);
+// Public plans catalog — centralizado com benefícios e limites versionados
+apiRouter.get('/plans', handler(async (_req, res) => {
+  res.json(EntitlementService.getPlansCatalog());
+}));
 
 // ============================================================
 // 4. TENANT-OWNED ENTITIES
-// Public read; writes require ownership of the target company.
+// Public read; writes require ownership and respect plan entitlements.
 // ============================================================
 
 const tenantEntity = (path: string, repository: BaseRepository, table: string) => {
@@ -194,9 +196,39 @@ const tenantEntity = (path: string, repository: BaseRepository, table: string) =
     res.json(await service.get(req.params.id));
   }));
 
-  // The company id is resolved and verified by the middleware, then read from
-  // req.companyIds — the body cannot redirect the write to another tenant.
+  // Validação centralizada de limites de plano antes de criar itens
+  // O conteúdo existente NUNCA é apagado se a empresa estiver acima do limite
   apiRouter.post(`/${path}`, requireAuth, requireCompanyAccess, handler(async (req, res) => {
+    const targetCompanyId = req.body?.companyId || req.body?.company_id || (req.companyIds && req.companyIds[0]);
+
+    if (path === 'products' || path === 'services') {
+      if (targetCompanyId) {
+        const check = await EntitlementService.checkCanAddProduct(targetCompanyId);
+        if (!check.allowed) {
+          return res.status(403).json({
+            error: check.message,
+            current: check.current,
+            max: check.max,
+            planName: check.planName,
+            upgradeRequired: true
+          });
+        }
+      }
+    } else if (path === 'coupons') {
+      if (targetCompanyId) {
+        const check = await EntitlementService.checkCanAddCoupon(targetCompanyId);
+        if (!check.allowed) {
+          return res.status(403).json({
+            error: check.message,
+            current: check.current,
+            max: check.max,
+            planName: check.planName,
+            upgradeRequired: true
+          });
+        }
+      }
+    }
+
     res.json(await service.create(req.body ?? {}, req.companyIds ?? []));
   }));
 
@@ -219,8 +251,16 @@ const tenantEntity = (path: string, repository: BaseRepository, table: string) =
   );
 };
 
+// Registro de entidades com anti-IDOR e controle de limites
+tenantEntity('products', ProductRepository, 'products');
+tenantEntity('services', ServiceRepository, 'services');
 tenantEntity('coupons', CouponRepository, 'coupons');
 tenantEntity('jobs', JobRepository, 'jobs');
+
+// Consulta de Direitos, Limites e Uso de Recursos da Empresa
+apiRouter.get('/companies/:id/entitlements', optionalAuth, handler(async (req, res) => {
+  res.json(await EntitlementService.getCompanyEntitlements(req.params.id));
+}));
 
 // ============================================================
 // 5. ENGAGEMENT (public, optionally attributed)
@@ -500,3 +540,76 @@ const singletonConfig = (path: string, repository: BaseRepository, rowId: string
 
 singletonConfig('general-config', GeneralConfigRepository, 'general');
 singletonConfig('payment-config', PaymentConfigRepository, 'payment');
+
+// ============================================================
+// 10. SUPPORT TICKETS (lojista-scoped)
+// ============================================================
+
+const supportService = new CrudService(SupportTicketRepository, 'ticket');
+
+// List tickets for the current user (lojista sees own; admin sees all).
+apiRouter.get('/support/tickets', requireAuth, handler(async (req, res) => {
+  if (req.user!.role === 'admin_master') {
+    return res.json(await supportService.list(req.query as Record<string, any>));
+  }
+  const [rows]: any = await (await import('../mysql.js')).pool.query(
+    'SELECT * FROM support_tickets WHERE userId = ? ORDER BY createdAt DESC LIMIT 50',
+    [req.user!.id]
+  );
+  res.json(rows);
+}));
+
+// Create a ticket assigned to the logged-in user.
+apiRouter.post('/support/tickets', requireAuth, handler(async (req, res) => {
+  const { subject, message, category } = req.body ?? {};
+  if (!subject?.trim()) return res.status(400).json({ error: 'Assunto obrigatório.' });
+  if (!message?.trim()) return res.status(400).json({ error: 'Mensagem obrigatória.' });
+  const { nanoid } = await import('nanoid');
+  const id = `ticket_${nanoid(12)}`;
+  const now = new Date().toISOString();
+  await (await import('../mysql.js')).pool.query(
+    'INSERT INTO support_tickets (id, userId, subject, message, status, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
+    [id, req.user!.id, subject.trim().slice(0, 255), message.trim().slice(0, 5000), 'open', now]
+  );
+  res.json({ success: true, id });
+}));
+
+// ============================================================
+// 11. COMPANY STAFF (members of a company)
+// ============================================================
+
+// List staff members for a company (owner only).
+apiRouter.get('/companies/:id/staff', requireAuth, requireCompanyParam('id'), handler(async (req, res) => {
+  const [rows]: any = await (await import('../mysql.js')).pool.query(
+    'SELECT cu.user_id, u.name, u.email, cu.access_level FROM companies_users cu LEFT JOIN users u ON u.id = cu.user_id WHERE cu.company_id = ?',
+    [req.params.id]
+  );
+  res.json(rows);
+}));
+
+// Invite/add a member by email.
+apiRouter.post('/companies/:id/staff', requireAuth, requireCompanyParam('id'), handler(async (req, res) => {
+  const { email, access_level } = req.body ?? {};
+  if (!email?.trim()) return res.status(400).json({ error: 'E-mail obrigatório.' });
+  const VALID_LEVELS = ['viewer', 'editor', 'manager'];
+  const level = VALID_LEVELS.includes(access_level) ? access_level : 'editor';
+  const pool = (await import('../mysql.js')).pool;
+  const [users]: any = await pool.query('SELECT id FROM users WHERE email = ? LIMIT 1', [email.trim()]);
+  if (!users[0]) return res.status(404).json({ error: 'Usuário não encontrado. O convidado precisa ter uma conta no Itapoá Online.' });
+  const userId = users[0].id;
+  if (userId === req.user!.id) return res.status(400).json({ error: 'Você já é o responsável por esta empresa.' });
+  await pool.query(
+    'INSERT INTO companies_users (user_id, company_id, access_level) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE access_level = VALUES(access_level)',
+    [userId, req.params.id, level]
+  );
+  res.json({ success: true });
+}));
+
+// Remove a staff member (owner cannot remove themselves).
+apiRouter.delete('/companies/:id/staff/:userId', requireAuth, requireCompanyParam('id'), handler(async (req, res) => {
+  const { userId } = req.params;
+  if (userId === req.user!.id) return res.status(400).json({ error: 'Você não pode remover a si mesmo como responsável.' });
+  const pool = (await import('../mysql.js')).pool;
+  await pool.query('DELETE FROM companies_users WHERE company_id = ? AND user_id = ?', [req.params.id, userId]);
+  res.json({ success: true });
+}));

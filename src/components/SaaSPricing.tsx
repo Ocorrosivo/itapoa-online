@@ -18,14 +18,16 @@ export default function SaaSPricing({ onNavigateTab = () => {} }: SaaSPricingPro
   const PLANS = [
     {
       id: 'bronze' as const,
-      name: 'Bronze (Básico)',
+      name: 'Bronze',
       price: 'Grátis',
-      subtext: 'Ideal para experimentar o portal hoje',
+      subtext: 'Ideal para ter presença básica no guia local',
       features: [
-        'Cadastro padrão no guia',
-        'Telefone fixo para contato',
-        'Horário comercial convencional',
-        'Visualização simples na lista'
+        'Até 3 fotos na galeria (logo e capa à parte)',
+        'CRM de leads e mensagens integrado',
+        'Métricas essenciais de visualização e cliques',
+        'Listagem padrão no diretório comercial',
+        'Sem novos produtos ou promoções publicáveis',
+        'Sem destaque na vitrine da Home'
       ],
       icon: Award,
       color: 'border-slate-200 bg-white text-slate-700',
@@ -37,14 +39,15 @@ export default function SaaSPricing({ onNavigateTab = () => {} }: SaaSPricingPro
       name: 'Gold VIP',
       price: 'R$ 49,90',
       period: '/mês',
-      subtext: 'Alta visibilidade e leads qualificados',
+      subtext: 'Apresentação completa e destaque rotativo',
       features: [
-        'Badge "Gold VIP" na foto de capa',
-        'Prioridade de exibição na pesquisa',
-        'Galeria de fotos expandida',
-        'Link direto para WhatsApp e Redes',
-        'Catálogo de produtos (até 5 itens)',
-        'Estatísticas de visualização mensais'
+        'Até 15 fotos na galeria exclusiva',
+        'Catálogo com até 5 produtos/serviços',
+        '1 promoção ou cupom de desconto ativo',
+        'Destaque rotativo garantido na Home',
+        'Apresentação completa e selo VIP',
+        'CRM de leads + Métricas de desempenho',
+        'Link direto para WhatsApp e telefone'
       ],
       icon: Zap,
       color: 'border-indigo-400 bg-indigo-50/5 ring-1 ring-indigo-400/20',
@@ -53,18 +56,18 @@ export default function SaaSPricing({ onNavigateTab = () => {} }: SaaSPricingPro
     },
     {
       id: 'diamond_extremo' as const,
-      name: 'Diamond Extremo',
+      name: 'Diamond',
       price: 'R$ 99,90',
       period: '/mês',
-      subtext: 'Inteligência Artificial e Domínio Total',
+      subtext: 'Máxima exposição, topo de buscas e mini-site',
       features: [
-        'Badge de Ouro "Diamante Premium" nos banners',
-        'Primeiro lugar garantido em todas as buscas',
-        'CONCIERGE DE INTELIGÊNCIA ARTIFICIAL',
-        'Chat virtual que responde sozinho 24/7',
-        'Catálogo ilimitado de ofertas',
-        'Painel analítico SaaS avançado',
-        'Suporte dedicado com gerente de conta'
+        'Até 30 fotos na galeria de alta qualidade',
+        'Catálogo expandido com até 30 produtos/serviços',
+        'Até 3 promoções ou cupons simultâneos',
+        'Todos os recursos e benefícios do plano Gold',
+        'Posicionamento prioritário no topo das buscas',
+        'Selo Diamante de parceiro oficial',
+        'Mini-site exclusivo de alta conversão'
       ],
       icon: Sparkles,
       color: 'border-amber-400 bg-amber-500/5 ring-1 ring-amber-400/20 shadow-lg',
