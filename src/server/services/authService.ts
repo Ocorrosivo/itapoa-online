@@ -120,12 +120,20 @@ export class AuthService {
       ]
     );
 
+    // Inicializar token de confirmação e enviar e-mail em background
+    const { emailVerificationService } = await import('./emailVerificationService.js');
+    const clientIp = typeof payload.ip === 'string' ? payload.ip : '127.0.0.1';
+    emailVerificationService.sendVerification(id, email, clientIp).catch((err) => {
+      console.warn('[auth] Could not send initial verification email:', err?.message || err);
+    });
+
     const user: AuthenticatedUser = {
       id,
       name,
       email,
       role,
-      city: typeof payload.city === 'string' ? payload.city : null
+      city: typeof payload.city === 'string' ? payload.city : null,
+      emailVerified: false
     };
 
     return { token: signToken({ id, email, role }), user };

@@ -103,8 +103,53 @@ apiRouter.post('/auth/login', handler(async (req, res) => {
 }));
 
 apiRouter.post('/auth/register', handler(async (req, res) => {
-  const { token, user } = await authService.register(req.body ?? {});
+  const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
+  const { token, user } = await authService.register({ ...(req.body ?? {}), ip });
   res.json({ success: true, token, user });
+}));
+
+// Confirmação de e-mail via POST (anti-scanner: nunca consome em GET)
+apiRouter.post('/auth/verify-email', handler(async (req, res) => {
+  const { emailVerificationService } = await import('../services/emailVerificationService.js');
+  const token = req.body?.token;
+  const result = await emailVerificationService.verifyToken(token);
+  res.json({ success: true, message: 'E-mail confirmado com sucesso!', email: result.email });
+}));
+
+// Reenvio seguro com rate-limit e cooldown de 60s
+apiRouter.post('/auth/resend-verification', handler(async (req, res) => {
+  const { emailVerificationService } = await import('../services/emailVerificationService.js');
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  if (!email) return res.status(400).json({ error: 'E-mail obrigatório.' });
+
+  const [users]: any = await (await import('../mysql.js')).pool.query(
+    'SELECT id FROM users WHERE email = ? LIMIT 1',
+    [email]
+  );
+  if (!users || users.length === 0) {
+    // Resposta genérica para evitar enumeração de e-mails
+    return res.json({ success: true, message: 'Se o e-mail estiver cadastrado, uma nova confirmação foi enviada.' });
+  }
+
+  const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
+  await emailVerificationService.sendVerification(users[0].id, email, ip);
+  res.json({ success: true, message: 'Link de confirmação reenviado com sucesso.' });
+}));
+
+apiRouter.get('/auth/verification-status', requireAuth, handler(async (req, res) => {
+  const { emailVerificationService } = await import('../services/emailVerificationService.js');
+  const verified = await emailVerificationService.isUserVerified(req.user!.id);
+  res.json({ verified });
+}));
+
+// Envio de teste real autorizado: De contato@itapoa.online Para suprememidias.ok@gmail.com
+apiRouter.post('/admin/send-test-email', requireAuth, handler(async (req, res) => {
+  if (req.user!.role !== 'admin_master') {
+    return res.status(403).json({ error: 'Apenas administradores podem acionar o teste de e-mail.' });
+  }
+  const { mailService } = await import('../services/mailService.js');
+  const result = await mailService.sendAuthorizedTest();
+  res.json({ success: true, ...result });
 }));
 
 // The session owner is taken from the token, never from the body.

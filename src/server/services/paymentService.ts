@@ -57,6 +57,7 @@ class PaymentService {
   }
 
   /** Only SDK-tokenized card data is accepted. Price and ownership never come from the browser. */
+  /** Only SDK-tokenized card data is accepted. Price and ownership never come from the browser. */
   async createCardPayment(userId: string, companyId: string, planId: string, input: Record<string, any>, appUrl: string) {
     const plan = await this.getPlan(planId);
     if (plan.price <= 0) throw new PaymentError(400, 'Este plano não requer pagamento.');
@@ -66,12 +67,15 @@ class PaymentService {
     const payer = form.payer ?? {};
     const email = typeof payer.email === 'string' ? payer.email.trim().toLowerCase() : '';
     const identification = payer.identification ?? {};
+    const docNumber = String(identification.number ?? '').replace(/\D/g, '');
+    const docType = String(identification.type ?? '').toUpperCase().trim();
+
     if (!/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(requestId) || !/^[\w-]{8,255}$/.test(String(form.token ?? '')) ||
         !/^[\w-]{2,60}$/.test(String(form.payment_method_id ?? '')) ||
         !Number.isInteger(form.installments) || form.installments < 1 || form.installments > 12 ||
         !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 ||
-        !['CPF', 'CNPJ'].includes(identification.type) ||
-        !(identification.type === 'CPF' ? /^\d{11}$/ : /^\d{14}$/).test(String(identification.number ?? ''))) {
+        !['CPF', 'CNPJ'].includes(docType) ||
+        !(docType === 'CPF' ? /^\d{11}$/ : /^\d{14}$/).test(docNumber)) {
       throw new PaymentError(400, 'Confira os dados do pagamento.');
     }
     const subscriptionId = `card_${crypto.createHash('sha256').update(`${userId}:${requestId}`).digest('hex')}`;
@@ -102,7 +106,7 @@ class PaymentService {
           installments: form.installments, transaction_amount: plan.price,
           description: `Plano ${plan.name} — Itapoá Online`, external_reference: subscriptionId,
           notification_url: `${appUrl.replace(/\/$/, '')}/api/webhooks/mercadopago`,
-          payer: { email, identification: { type: identification.type, number: identification.number } }
+          payer: { email, identification: { type: docType, number: docNumber } }
         })
       });
     } catch {
@@ -111,8 +115,10 @@ class PaymentService {
     }
     const payment: any = await response.json().catch(() => ({}));
     if (!response.ok || !payment.id) {
-      if (response.status >= 500 || response.ok) return { subscriptionId, status: 'unknown' };
-      throw new PaymentError(502, 'O Mercado Pago não conseguiu processar esta tentativa. Confira a configuração ou tente novamente mais tarde.');
+      const errDetail = payment?.message || (Array.isArray(payment?.cause) ? payment.cause.map((c: any) => c.description || c.code).join(', ') : '');
+      console.error(`[payment-card] Mercado Pago error (HTTP ${response.status}):`, errDetail);
+      if (response.status >= 500) return { subscriptionId, status: 'unknown' };
+      throw new PaymentError(response.status === 400 ? 400 : 502, errDetail || 'O Mercado Pago não conseguiu processar esta tentativa. Confira os dados ou tente novamente.');
     }
     await pool.query(
       `INSERT INTO payment_logs (id, subscriptionId, amount, status, gateway_reference) VALUES (?, ?, ?, 'pending', ?)
@@ -246,9 +252,11 @@ class PaymentService {
         },
         body: JSON.stringify(body)
       });
-      mp = await resp.json();
+      mp = await resp.json().catch(() => ({}));
       if (!resp.ok) {
-        throw new PaymentError(502, mp?.message || 'Falha ao criar cobrança no gateway.');
+        const errDetail = mp?.message || mp?.error || (Array.isArray(mp?.cause) ? mp.cause.map((c: any) => c.description || c.code).join(', ') : '');
+        console.error(`[payment-pix] Mercado Pago error (HTTP ${resp.status}):`, errDetail);
+        throw new PaymentError(502, errDetail || 'Falha ao criar cobrança no gateway.');
       }
     } catch (err) {
       if (err instanceof PaymentError) {

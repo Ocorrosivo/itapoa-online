@@ -30,6 +30,7 @@ import { AdminLoginPage } from '../pages/auth/AdminLoginPage';
 import { RegisterPage } from '../pages/auth/RegisterPage';
 import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage';
 import { ResetPasswordPage } from '../pages/auth/ResetPasswordPage';
+import { EmailVerificationPage } from '../pages/auth/EmailVerificationPage';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
 
 const AdminDashboardPage = lazy(() => import('../pages/AdminDashboardPage').then(m => ({ default: m.AdminDashboardPage })));
@@ -70,13 +71,15 @@ const pathToTabMap: Record<string, string> = {
   'login': 'login',
   'login/admin': 'login/admin',
   'cadastro': 'cadastro',
+  'confirmar-email': 'confirmar-email',
+  'verificar-email': 'confirmar-email',
   'esqueci-senha': 'esqueci-senha',
   'redefinir-senha': 'redefinir-senha',
   'painel': 'painel',
   'admin': 'admin'
 };
 
-const AUTH_TABS = ['login', 'login/admin', 'cadastro', 'esqueci-senha', 'redefinir-senha'];
+const AUTH_TABS = ['login', 'login/admin', 'cadastro', 'confirmar-email', 'esqueci-senha', 'redefinir-senha'];
 
 interface ParsedRoute {
   tab: string;
@@ -127,7 +130,7 @@ const getInitialRoute = (): ParsedRoute => {
 };
 
 // Rotas sem Header/Footer do site público (painel e autenticação).
-const PANEL_TABS = ['admin', 'painel', 'login', 'login/admin', 'cadastro', 'esqueci-senha', 'redefinir-senha'];
+const PANEL_TABS = ['admin', 'painel', 'login', 'login/admin', 'cadastro', 'confirmar-email', 'esqueci-senha', 'redefinir-senha'];
 const isPanelTab = (tab: string) => PANEL_TABS.includes(tab);
 const isAuthTab = (tab: string) => AUTH_TABS.includes(tab);
 
@@ -337,6 +340,9 @@ export const AppRoutes: React.FC = () => {
 
       case 'cadastro':
         return <RegisterPage onNavigateTab={handleNavigateTab} />;
+
+      case 'confirmar-email':
+        return <EmailVerificationPage onNavigateTab={handleNavigateTab} />;
 
       case 'esqueci-senha':
         return <ForgotPasswordPage onNavigateTab={handleNavigateTab} />;

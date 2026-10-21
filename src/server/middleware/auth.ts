@@ -18,6 +18,7 @@ export interface AuthenticatedUser {
   email: string;
   role: string;
   city: string | null;
+  emailVerified?: boolean;
 }
 
 declare global {

@@ -48,6 +48,7 @@ jobs:
           node scripts/smoke-catalog.mjs --offline
           node --import tsx --test tests/unit/checkout.test.ts
           node --import tsx --test tests/unit/password-recovery.test.ts
+          node --import tsx --test tests/unit/email-verification.test.ts
 
       - name: Deploy and verify on VPS
         uses: appleboy/ssh-action@v1.2.0
