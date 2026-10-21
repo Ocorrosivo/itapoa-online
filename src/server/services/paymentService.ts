@@ -27,6 +27,7 @@ interface PlanRow {
   id: string;
   name: string;
   price: number;
+  version?: number;
 }
 
 interface CreatedPix {
@@ -75,10 +76,16 @@ class PaymentService {
     }
     const subscriptionId = `card_${crypto.createHash('sha256').update(`${userId}:${requestId}`).digest('hex')}`;
     await pool.query(
-      `INSERT IGNORE INTO subscriptions (id, userId, companyId, planId, status, amount, paymentMethod, nextBillingDate)
-       VALUES (?, ?, ?, ?, 'pending', ?, 'credit_card', ?)`,
-      [subscriptionId, userId, companyId, planId, plan.price, new Date(Date.now() + 30 * 86400000)]
-    );
+      `INSERT IGNORE INTO subscriptions (id, userId, companyId, planId, status, amount, paymentMethod, payment_type, contracted_price, plan_version, nextBillingDate)
+       VALUES (?, ?, ?, ?, 'pending', ?, 'credit_card', 'subscription', ?, ?, ?)`,
+      [subscriptionId, userId, companyId, planId, plan.price, plan.price, plan.version || 1, new Date(Date.now() + 30 * 86400000)]
+    ).catch(async () => {
+      return await pool.query(
+        `INSERT IGNORE INTO subscriptions (id, userId, companyId, planId, status, amount, paymentMethod, nextBillingDate)
+         VALUES (?, ?, ?, ?, 'pending', ?, 'credit_card', ?)`,
+        [subscriptionId, userId, companyId, planId, plan.price, new Date(Date.now() + 30 * 86400000)]
+      );
+    });
     const [rows]: any = await pool.query('SELECT userId, companyId, planId, amount FROM subscriptions WHERE id = ?', [subscriptionId]);
     const sub = rows[0];
     if (!sub || sub.userId !== userId || sub.companyId !== companyId || sub.planId !== planId || Number(sub.amount) !== plan.price) {
@@ -136,11 +143,16 @@ class PaymentService {
 
   private async getPlan(planId: string): Promise<PlanRow> {
     const [rows]: any = await pool.query(
-      'SELECT id, name, price FROM plans WHERE id = ? LIMIT 1',
+      'SELECT id, name, price, version FROM plans WHERE id = ? LIMIT 1',
       [planId]
-    );
+    ).catch(async () => {
+      return await pool.query(
+        'SELECT id, name, price, 1 as version FROM plans WHERE id = ? LIMIT 1',
+        [planId]
+      );
+    });
     if (rows.length === 0) throw new PaymentError(404, 'Plano não encontrado.');
-    return { id: rows[0].id, name: rows[0].name, price: Number(rows[0].price) };
+    return { id: rows[0].id, name: rows[0].name, price: Number(rows[0].price), version: Number(rows[0].version) || 1 };
   }
 
   async createPixPayment(
@@ -189,10 +201,17 @@ class PaymentService {
 
         await conn.query(
           `INSERT INTO subscriptions
-             (id, userId, companyId, planId, status, amount, paymentMethod, nextBillingDate)
-           VALUES (?, ?, ?, ?, 'pending', ?, 'pix', ?)`,
-          [subscriptionId, userId, companyId, planId, plan.price, nextBilling]
-        );
+             (id, userId, companyId, planId, status, amount, paymentMethod, payment_type, contracted_price, plan_version, nextBillingDate)
+           VALUES (?, ?, ?, ?, 'pending', ?, 'pix', 'onetime_pix', ?, ?, ?)`,
+          [subscriptionId, userId, companyId, planId, plan.price, plan.price, plan.version || 1, nextBilling]
+        ).catch(async () => {
+          return await conn.query(
+            `INSERT INTO subscriptions
+               (id, userId, companyId, planId, status, amount, paymentMethod, nextBillingDate)
+             VALUES (?, ?, ?, ?, 'pending', ?, 'pix', ?)`,
+            [subscriptionId, userId, companyId, planId, plan.price, nextBilling]
+          );
+        });
         await conn.query('SELECT RELEASE_LOCK(?)', [lockKey]);
         await conn.commit();
         conn.release();
@@ -282,10 +301,17 @@ class PaymentService {
 
     await pool.query(
       `INSERT INTO subscriptions
-         (id, userId, companyId, planId, status, amount, paymentMethod, nextBillingDate)
-       VALUES (?, ?, ?, ?, 'pending', ?, 'credit_card', ?)`,
-      [subscriptionId, userId, companyId, planId, plan.price, nextBilling]
-    );
+         (id, userId, companyId, planId, status, amount, paymentMethod, payment_type, contracted_price, plan_version, nextBillingDate)
+       VALUES (?, ?, ?, ?, 'pending', ?, 'credit_card', 'subscription', ?, ?, ?)`,
+      [subscriptionId, userId, companyId, planId, plan.price, plan.price, plan.version || 1, nextBilling]
+    ).catch(async () => {
+      return await pool.query(
+        `INSERT INTO subscriptions
+           (id, userId, companyId, planId, status, amount, paymentMethod, nextBillingDate)
+         VALUES (?, ?, ?, ?, 'pending', ?, 'credit_card', ?)`,
+        [subscriptionId, userId, companyId, planId, plan.price, nextBilling]
+      );
+    });
 
     const base = appUrl.replace(/\/$/, '');
     const body = {
@@ -437,7 +463,17 @@ class PaymentService {
         const paid = subscriptions[0];
         if (paid?.companyId && paid?.planName) {
           const sponsored = paid.planName === 'gold_vip' || paid.planName === 'diamond_extremo';
-          await conn2.query('UPDATE companies SET planLevel = ?, isSponsored = ? WHERE id = ?', [paid.planName, sponsored ? 1 : 0, paid.companyId]);
+          await conn2.query(
+            `UPDATE companies 
+             SET planLevel = ?, access_grant_type = 'paid', has_used_trial = 1, isSponsored = ? 
+             WHERE id = ?`,
+            [paid.planName, sponsored ? 1 : 0, paid.companyId]
+          ).catch(async () => {
+            return await conn2.query(
+              'UPDATE companies SET planLevel = ?, isSponsored = ? WHERE id = ?',
+              [paid.planName, sponsored ? 1 : 0, paid.companyId]
+            );
+          });
         }
       } else if (status === 'rejected' || status === 'cancelled') {
         if (curStatus === 'pending') await conn2.query('UPDATE subscriptions SET status = ? WHERE id = ?', ['canceled', subscriptionId]);
@@ -519,6 +555,62 @@ class PaymentService {
         ORDER BY createdAt DESC LIMIT 1`,
       companyIds
     ).then(([rows]: any) => rows[0]?.status ?? 'trial') as Promise<string>;
+  }
+
+  /**
+   * Reconcilia uma cobrança/assinatura pendente consultando o Mercado Pago de forma idempotente.
+   * Evita duplicidade de liberação e resolve atrasos ou falhas na entrega do webhook.
+   */
+  async reconcilePayment(subscriptionId: string): Promise<{
+    status: string;
+    reconciled: boolean;
+    message: string;
+  }> {
+    const [subRows]: any = await pool.query(
+      'SELECT id, status, planId, companyId, amount, paymentMethod FROM subscriptions WHERE id = ? LIMIT 1',
+      [subscriptionId]
+    );
+    if (subRows.length === 0) {
+      throw new PaymentError(404, 'Assinatura / Cobrança não encontrada.');
+    }
+    const sub = subRows[0];
+    if (sub.status === 'active') {
+      return { status: 'active', reconciled: true, message: 'Cobrança já confirmada e plano ativo.' };
+    }
+
+    const [logs]: any = await pool.query(
+      'SELECT gateway_reference FROM payment_logs WHERE subscriptionId = ? ORDER BY createdAt DESC LIMIT 1',
+      [subscriptionId]
+    );
+    const paymentId = logs[0]?.gateway_reference;
+    if (!paymentId) {
+      return { status: sub.status, reconciled: false, message: 'Nenhum registro de pagamento associado no gateway.' };
+    }
+
+    const token = await this.accessToken();
+    let mp: any;
+    try {
+      const resp = await fetch(`${MP_API}/v1/payments/${encodeURIComponent(paymentId)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!resp.ok) {
+        return { status: sub.status, reconciled: false, message: 'Gateway não retornou status atualizado.' };
+      }
+      mp = await resp.json();
+    } catch {
+      return { status: sub.status, reconciled: false, message: 'Falha de comunicação com o Mercado Pago.' };
+    }
+
+    if (mp.status === 'approved') {
+      await this.handlePaymentNotification(paymentId);
+      return { status: 'active', reconciled: true, message: 'Pagamento confirmado e plano ativado com sucesso!' };
+    }
+
+    return {
+      status: mp.status || sub.status,
+      reconciled: false,
+      message: `Status atual no Mercado Pago: ${mp.status || 'pendente'}`
+    };
   }
 }
 

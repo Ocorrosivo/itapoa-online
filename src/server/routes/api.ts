@@ -472,6 +472,50 @@ apiRouter.get('/payments/subscription/:id/status', requireAuth, handler(async (r
   res.json({ status: rows[0].status, planId: rows[0].planId, companyId: rows[0].companyId });
 }));
 
+// Reconciliação idempotente com o gateway Mercado Pago (evita duplicidade e resolve atrasos de webhook)
+apiRouter.post('/payments/subscription/:id/reconcile', requireAuth, handler(async (req, res) => {
+  const subId = String(req.params.id || '');
+  if (!subId) return res.status(400).json({ error: 'subscriptionId obrigatório.' });
+  const [rows]: any = await (await import('../mysql.js')).pool.query(
+    'SELECT status, planId, companyId FROM subscriptions WHERE id = ? LIMIT 1',
+    [subId]
+  );
+  if (rows.length === 0) return res.status(404).json({ error: 'Assinatura não encontrada.' });
+  const owns = req.user!.role === 'admin_master'
+    || (await (await import('../middleware/auth.js')).loadUserCompanies(req.user!.id)).includes(String(rows[0].companyId));
+  if (!owns) return res.status(403).json({ error: 'Acesso negado.' });
+
+  const result = await paymentService.reconcilePayment(subId);
+  res.json(result);
+}));
+
+// Elegibilidade para a experiência Gold de 7 dias (novos clientes elegíveis, sem repetições indevidas)
+apiRouter.get('/plans/trial-eligibility/:companyId', requireAuth, handler(async (req, res) => {
+  const companyId = req.params.companyId;
+  const owns = req.user!.role === 'admin_master'
+    || (await (await import('../middleware/auth.js')).loadUserCompanies(req.user!.id)).includes(companyId);
+  if (!owns) return res.status(403).json({ error: 'Acesso negado a esta empresa.' });
+
+  const eligibility = await EntitlementService.checkTrialEligibility(companyId);
+  res.json(eligibility);
+}));
+
+// Inicia os 7 dias de experiência Gold (sem autorização de cobrança, sem cartão de crédito)
+apiRouter.post('/plans/start-trial', requireAuth, handler(async (req, res) => {
+  const companyId = String(req.body?.companyId || req.body?.company_id || '');
+  if (!companyId) return res.status(400).json({ error: 'companyId obrigatório.' });
+  const owns = req.user!.role === 'admin_master'
+    || (await (await import('../middleware/auth.js')).loadUserCompanies(req.user!.id)).includes(companyId);
+  if (!owns) return res.status(403).json({ error: 'Acesso negado a esta empresa.' });
+
+  try {
+    const result = await EntitlementService.startSevenDayGoldTrial(companyId);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message || 'Falha ao ativar período de teste.' });
+  }
+}));
+
 // Create a Checkout Pro preference (card) and return the hosted checkout URL.
 apiRouter.post('/payments/checkout', requireAuth, requireCompanyAccess, handler(async (req, res) => {
   const companyId = (req.companyIds && req.companyIds[0]) || String(req.body?.companyId ?? req.body?.company_id ?? '');

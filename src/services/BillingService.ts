@@ -98,4 +98,41 @@ export class BillingService {
     const res = await api.get<{ status: string }>('/api/payments/status');
     return res.status;
   }
+
+  /** Reconciliação com o Mercado Pago para confirmar pagamento sem esperar pelo webhook. */
+  static async reconcilePayment(subscriptionId: string): Promise<{ status: string; reconciled: boolean; message: string }> {
+    return await api.post<{ status: string; reconciled: boolean; message: string }>(
+      `/api/payments/subscription/${encodeURIComponent(subscriptionId)}/reconcile`
+    );
+  }
+
+  /** Consulta elegibilidade para 7 dias de experiência Gold. */
+  static async checkTrialEligibility(companyId: string): Promise<{
+    eligible: boolean;
+    reason?: string;
+    hasUsedTrial: boolean;
+    trialEndsAt: string | null;
+  }> {
+    return await api.get<{
+      eligible: boolean;
+      reason?: string;
+      hasUsedTrial: boolean;
+      trialEndsAt: string | null;
+    }>(`/api/plans/trial-eligibility/${encodeURIComponent(companyId)}`);
+  }
+
+  /** Inicia os 7 dias de experiência Gold (sem cobrança). */
+  static async startSevenDayGoldTrial(companyId: string): Promise<{
+    success: boolean;
+    trialEndsAt: string;
+    planTier: string;
+    message: string;
+  }> {
+    return await api.post<{
+      success: boolean;
+      trialEndsAt: string;
+      planTier: string;
+      message: string;
+    }>('/api/plans/start-trial', { companyId });
+  }
 }

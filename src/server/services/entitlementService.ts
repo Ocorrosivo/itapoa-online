@@ -172,9 +172,17 @@ export interface CompanyEntitlements {
   grantDetails: {
     isTrial: boolean;
     trialEndsAt?: string | null;
+    trialEligible?: boolean;
+    hasUsedTrial?: boolean;
     subscriptionId?: string | null;
     subscriptionStatus?: string | null;
+    paymentType?: 'subscription' | 'onetime_pix' | null;
+    paymentMethod?: string | null;
+    nextBillingDate?: string | null;
+    contractedPrice?: number | null;
     isAdminGrant: boolean;
+    adminGrantEndDate?: string | null;
+    adminGrantReason?: string | null;
   };
   limits: PlanLimits;
   usage: ResourceUsage;
@@ -256,12 +264,13 @@ export class EntitlementService {
     // 1. Buscar dados da empresa
     const [companyRows]: any = await pool.query(
       `SELECT id, name, slug, logo, coverImage, isSponsored, planLevel, 
-              access_grant_type, trial_ends_at
+              access_grant_type, trial_ends_at, has_used_trial
        FROM companies WHERE id = ? LIMIT 1`,
       [companyId]
     ).catch(async () => {
       return await pool.query(
-        `SELECT id, name, slug, logo, coverImage, isSponsored, planLevel
+        `SELECT id, name, slug, logo, coverImage, isSponsored, planLevel,
+                access_grant_type, trial_ends_at, 0 as has_used_trial
          FROM companies WHERE id = ? LIMIT 1`,
         [companyId]
       );
@@ -274,14 +283,22 @@ export class EntitlementService {
     const company = companyRows[0];
     const rawPlan = company.planLevel || 'bronze';
 
-    // 2. Verificar se há assinatura paga ativa no banco
+    // 2. Verificar se há assinatura paga ativa no banco (preservando condições contratadas)
     const [subsRows]: any = await pool.query(
-      `SELECT id, planId, status, nextBillingDate, createdAt
+      `SELECT id, planId, status, amount, paymentMethod, payment_type, contracted_price, nextBillingDate, createdAt
        FROM subscriptions
        WHERE companyId = ? AND status = 'active'
        ORDER BY createdAt DESC LIMIT 1`,
       [companyId]
-    ).catch(() => [[]]);
+    ).catch(async () => {
+      return await pool.query(
+        `SELECT id, planId, status, amount, paymentMethod, NULL as payment_type, amount as contracted_price, nextBillingDate, createdAt
+         FROM subscriptions
+         WHERE companyId = ? AND status = 'active'
+         ORDER BY createdAt DESC LIMIT 1`,
+        [companyId]
+      ).catch(() => [[]]);
+    });
 
     const activeSub = subsRows && subsRows.length > 0 ? subsRows[0] : null;
 
@@ -307,7 +324,19 @@ export class EntitlementService {
       ).catch(() => {});
 
       // Expiração não pode remover outra contratação válida:
-      // Se tiver assinatura paga, retorna para o plano contratado pago; senão, bronze.
+      const fallbackPlan = activeSub ? normalizePlanTier(activeSub.planId) : 'bronze';
+      const fallbackGrantType = activeSub ? 'paid' : 'bronze';
+      await pool.query(
+        `UPDATE companies SET planLevel = ?, access_grant_type = ?, isSponsored = ? WHERE id = ?`,
+        [fallbackPlan, fallbackGrantType, activeSub ? 1 : 0, companyId]
+      ).catch(() => {});
+      company.planLevel = fallbackPlan;
+      company.access_grant_type = fallbackGrantType;
+    }
+
+    // Se o período de teste de 7 dias expirou pelo tempo:
+    // Regra estrita: teste sem autorização de cobrança termina sem débito e retorna ao direito válido disponível.
+    if (company.trial_ends_at && new Date(company.trial_ends_at) <= now && company.access_grant_type === 'trial') {
       const fallbackPlan = activeSub ? normalizePlanTier(activeSub.planId) : 'bronze';
       const fallbackGrantType = activeSub ? 'paid' : 'bronze';
       await pool.query(
@@ -405,6 +434,9 @@ export class EntitlementService {
       warnings.push(`Você possui ${usage.galleryPhotosCount} de ${limits.maxGalleryPhotos} fotos de galeria. Upgrade necessário para novas fotos.`);
     }
 
+    const hasUsedTrial = Boolean(company.has_used_trial || company.trial_ends_at);
+    const trialEligible = !activeSub && !hasUsedTrial && (normalizePlanTier(company.planLevel) === 'bronze');
+
     return {
       companyId: company.id,
       companyName: company.name,
@@ -414,14 +446,120 @@ export class EntitlementService {
       grantDetails: {
         isTrial,
         trialEndsAt,
+        trialEligible,
+        hasUsedTrial,
         subscriptionId: activeSub?.id ?? null,
         subscriptionStatus: activeSub?.status ?? null,
-        isAdminGrant
+        paymentType: activeSub?.payment_type ?? (activeSub?.paymentMethod === 'pix' ? 'onetime_pix' : activeSub ? 'subscription' : null),
+        paymentMethod: activeSub?.paymentMethod ?? null,
+        nextBillingDate: activeSub?.nextBillingDate ? new Date(activeSub.nextBillingDate).toISOString() : null,
+        contractedPrice: activeSub?.contracted_price ? Number(activeSub.contracted_price) : activeSub?.amount ? Number(activeSub.amount) : null,
+        isAdminGrant,
+        adminGrantEndDate: validAdminGrant ? new Date(validAdminGrant.end_date).toISOString() : null,
+        adminGrantReason: validAdminGrant?.reason ?? null
       },
       limits,
       usage,
       canAdd,
       warnings
+    };
+  }
+
+  /**
+   * Verifica se uma empresa é elegível para os 7 dias de experiência Gold.
+   * Regra estrita: Novos clientes com perfil Bronze que nunca utilizaram o período de teste.
+   */
+  static async checkTrialEligibility(companyId: string): Promise<{
+    eligible: boolean;
+    reason?: string;
+    hasUsedTrial: boolean;
+    trialEndsAt: string | null;
+  }> {
+    const [rows]: any = await pool.query(
+      `SELECT id, planLevel, access_grant_type, trial_ends_at, has_used_trial
+       FROM companies WHERE id = ? LIMIT 1`,
+      [companyId]
+    ).catch(async () => {
+      return await pool.query(
+        `SELECT id, planLevel, access_grant_type, trial_ends_at, 0 as has_used_trial
+         FROM companies WHERE id = ? LIMIT 1`,
+        [companyId]
+      );
+    });
+
+    if (!rows || rows.length === 0) {
+      return { eligible: false, reason: 'Empresa não encontrada.', hasUsedTrial: false, trialEndsAt: null };
+    }
+
+    const c = rows[0];
+    const hasUsed = Boolean(c.has_used_trial || c.trial_ends_at);
+    const trialEndsAt = c.trial_ends_at ? new Date(c.trial_ends_at).toISOString() : null;
+
+    if (hasUsed) {
+      return {
+        eligible: false,
+        reason: 'Esta empresa já usufruiu dos 7 dias de experiência Gold.',
+        hasUsedTrial: true,
+        trialEndsAt
+      };
+    }
+
+    const [subs]: any = await pool.query(
+      `SELECT id FROM subscriptions WHERE companyId = ? AND status = 'active' LIMIT 1`,
+      [companyId]
+    ).catch(() => [[]]);
+
+    if (subs && subs.length > 0) {
+      return {
+        eligible: false,
+        reason: 'A empresa já possui uma contratação ativa.',
+        hasUsedTrial: false,
+        trialEndsAt: null
+      };
+    }
+
+    return {
+      eligible: true,
+      hasUsedTrial: false,
+      trialEndsAt: null
+    };
+  }
+
+  /**
+   * Inicia os 7 dias de experiência Gold para novos clientes elegíveis.
+   * Regra estrita: Sem autorização de cobrança, sem cartão de crédito, sem débito automático.
+   * Ao término, retorna automaticamente para o plano Bronze sem gerar débitos.
+   */
+  static async startSevenDayGoldTrial(companyId: string): Promise<{
+    success: boolean;
+    trialEndsAt: string;
+    planTier: PlanTier;
+    message: string;
+  }> {
+    const check = await this.checkTrialEligibility(companyId);
+    if (!check.eligible) {
+      throw new Error(check.reason || 'Empresa não elegível para teste de 7 dias.');
+    }
+
+    const trialDurationMs = 7 * 24 * 60 * 60 * 1000;
+    const endsAt = new Date(Date.now() + trialDurationMs);
+
+    await pool.query(
+      `UPDATE companies
+       SET planLevel = 'gold_vip',
+           access_grant_type = 'trial',
+           trial_ends_at = ?,
+           has_used_trial = 1,
+           isSponsored = 1
+       WHERE id = ?`,
+      [endsAt, companyId]
+    );
+
+    return {
+      success: true,
+      trialEndsAt: endsAt.toISOString(),
+      planTier: 'gold_vip',
+      message: 'Experiência Gold de 7 dias ativada com sucesso! Sem débito automático ao término.'
     };
   }
 

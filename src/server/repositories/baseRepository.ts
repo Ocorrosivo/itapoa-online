@@ -18,7 +18,7 @@ const TABLE_COLUMNS: Record<string, string[]> = {
     'detailedDescription', 'rating', 'reviewCount', 'phone', 'whatsapp', 'address', 'hours',
     'latitude', 'longitude', 'isSponsored', 'planLevel', 'features', 'views', 'clicksWhatsapp',
     'clicksPhone', 'clicksRoute',
-    'access_grant_type', 'trial_ends_at', 'createdAt'
+    'access_grant_type', 'trial_ends_at', 'has_used_trial', 'createdAt'
   ],
   companies_users: ['user_id', 'company_id', 'access_level'],
   cities: ['id', 'name', 'state', 'created_at'],
@@ -83,6 +83,7 @@ const TABLE_COLUMNS: Record<string, string[]> = {
   ],
   subscriptions: [
     'id', 'userId', 'companyId', 'planId', 'status', 'amount', 'paymentMethod',
+    'payment_type', 'billing_period_days', 'plan_version', 'contracted_price',
     'nextBillingDate', 'createdAt'
   ],
   payment_logs: ['id', 'subscriptionId', 'amount', 'status', 'gateway_reference', 'createdAt'],
