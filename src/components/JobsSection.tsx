@@ -10,6 +10,7 @@ import {
   Send, CheckCircle, FileText, Sparkles 
 } from 'lucide-react';
 import { Job, City } from '../types';
+import { maskPhone } from '../utils/validators';
 
 interface JobsSectionProps {
   jobs: Job[];
@@ -258,8 +259,9 @@ export default function JobsSection({
                           <input 
                             type="tel" 
                             required
+                            maxLength={15}
                             value={candidatePhone}
-                            onChange={(e) => setCandidatePhone(e.target.value)}
+                            onChange={(e) => setCandidatePhone(maskPhone(e.target.value))}
                             placeholder="(47) 99999-0000"
                             className="w-full p-3 bg-slate-100 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-blue-500"
                           />

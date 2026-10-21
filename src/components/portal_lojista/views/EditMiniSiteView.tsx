@@ -19,6 +19,7 @@ import {
 import { Company } from '../../../types';
 import { useCompany } from '../../../context/CompanyContext';
 import { api } from '../../../lib/apiClient';
+import { maskPhone } from '../../../utils/validators';
 
 interface EditMiniSiteViewProps {
   company: Company;
@@ -410,23 +411,23 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
             Canais de Contato & Redes
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <FieldRow label="WhatsApp (com DDD)" hint="Ex: 47999998888">
+            <FieldRow label="WhatsApp (com DDD)" hint="Ex: (47) 99999-8888">
               <input
-                type="text"
-                maxLength={50}
+                type="tel"
+                maxLength={15}
                 value={form.whatsapp}
-                onChange={e => update('whatsapp', e.target.value)}
-                placeholder="47999998888"
+                onChange={e => update('whatsapp', maskPhone(e.target.value))}
+                placeholder="(47) 99999-8888"
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500 transition"
               />
             </FieldRow>
-            <FieldRow label="Telefone Fixo / Comercial">
+            <FieldRow label="Telefone Fixo / Comercial" hint="Ex: (47) 3443-1234">
               <input
-                type="text"
-                maxLength={50}
+                type="tel"
+                maxLength={15}
                 value={form.phone}
-                onChange={e => update('phone', e.target.value)}
-                placeholder="4734431234"
+                onChange={e => update('phone', maskPhone(e.target.value))}
+                placeholder="(47) 3443-1234"
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500 transition"
               />
             </FieldRow>

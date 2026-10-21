@@ -8,6 +8,7 @@ import { motion } from 'motion/react';
 import { ShieldCheck, User, Mail, Phone, Lock, Sparkles } from 'lucide-react';
 import { api, ApiError } from '../lib/apiClient';
 import { useAuth } from '../context/AuthContext';
+import { maskPhone } from '../utils/validators';
 
 interface UserAuthModalProps {
   onClose: () => void;
@@ -157,9 +158,10 @@ export default function UserAuthModal({
                   <input 
                     type="tel" 
                     required
-                    placeholder="(47) 9..."
+                    placeholder="(47) 99999-0000"
+                    maxLength={15}
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    onChange={(e) => setPhone(maskPhone(e.target.value))}
                     className="w-full pl-8 pr-2 py-3 bg-transparent text-slate-800 focus:outline-none"
                   />
                 </div>

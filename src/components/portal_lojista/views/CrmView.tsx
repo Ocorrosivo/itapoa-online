@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../../lib/apiClient';
 import { Company, CrmLead, CrmLeadStatus } from '../../../types';
+import { maskPhone } from '../../../utils/validators';
 
 const STATUS_LABELS: Record<CrmLeadStatus, string> = {
   new: 'Novo',
@@ -160,10 +161,10 @@ function CrmLeadModal({
               <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">WhatsApp / Telefone</label>
               <input
                 type="tel"
-                maxLength={30}
+                maxLength={15}
                 value={phone}
-                onChange={e => { setPhone(e.target.value); setDirty(true); }}
-                placeholder="47999998888"
+                onChange={e => { setPhone(maskPhone(e.target.value)); setDirty(true); }}
+                placeholder="(47) 99999-8888"
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500 transition"
               />
             </div>

@@ -25,14 +25,14 @@ export class Validators {
    * Format Phone to (XX) XXXXX-XXXX
    */
   static formatPhone(phone: string): string {
-    const clean = phone.replace(/\D/g, '');
-    if (clean.length === 11) {
-      return `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7)}`;
-    }
-    if (clean.length === 10) {
-      return `(${clean.slice(0, 2)}) ${clean.slice(2, 6)}-${clean.slice(6)}`;
-    }
-    return phone;
+    return maskPhone(phone);
+  }
+
+  /**
+   * Realtime progressive phone mask
+   */
+  static maskPhone(value: string): string {
+    return maskPhone(value);
   }
 
   /**
@@ -82,3 +82,23 @@ export class Validators {
       .replace(/\//g, '&#x2F;');
   }
 }
+
+/**
+ * Máscara progressiva para telefone fixo (10 dígitos) e celular (11 dígitos)
+ * Exemplos:
+ * 47 -> (47)
+ * 47997190413 -> (47) 99719-0413
+ * 4734432000 -> (47) 3443-2000
+ */
+export function maskPhone(value: string): string {
+  if (!value) return '';
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  if (digits.length === 0) return '';
+  if (digits.length <= 2) return `(${digits}`;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
+}
+

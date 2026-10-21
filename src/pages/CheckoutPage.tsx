@@ -7,6 +7,7 @@ import { BillingService, PixDetails } from '../services/BillingService';
 import { MercadoPagoCard } from '../components/common/MercadoPagoCard';
 import { Company } from '../types';
 import { useSEO } from '../hooks/useSEO';
+import { maskPhone } from '../utils/validators';
 
 interface Gateway { publicKey: string; pixEnabled: boolean; cardEnabled: boolean }
 interface Plan { id: string; name: string; price: number }
@@ -140,7 +141,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
           <form ref={formRef} onSubmit={e => e.preventDefault()} className="space-y-4" aria-label="Dados de contato">
             <label className="block text-sm font-medium">Nome<input autoComplete="name" required minLength={2} maxLength={120} value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-full rounded-xl border border-slate-300 p-3" /></label>
             <div className="grid sm:grid-cols-2 gap-4">
-              <label className="block text-sm font-medium">Telefone<input type="tel" autoComplete="tel" required minLength={10} maxLength={25} value={phone} onChange={e => setPhone(e.target.value)} className="mt-1 block w-full rounded-xl border border-slate-300 p-3" /></label>
+              <label className="block text-sm font-medium">Telefone<input type="tel" autoComplete="tel" required minLength={10} maxLength={15} placeholder="(47) 99999-0000" value={phone} onChange={e => setPhone(maskPhone(e.target.value))} className="mt-1 block w-full rounded-xl border border-slate-300 p-3" /></label>
               <label className="block text-sm font-medium">E-mail<input type="email" autoComplete="email" required maxLength={254} value={email} onChange={e => setEmail(e.target.value)} className="mt-1 block w-full rounded-xl border border-slate-300 p-3" /></label>
             </div>
             {companies.length > 0 && <label className="block text-sm font-medium">Anúncio<select value={companyChoice} onChange={e => { setCompanyChoice(e.target.value); preparedCompany.current = ''; requestId.current = crypto.randomUUID(); }} disabled={busy || Boolean(subscriptionId)} className="mt-1 block w-full border rounded-xl p-3"><option value="">Novo anúncio — completar depois</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}

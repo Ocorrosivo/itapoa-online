@@ -10,6 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import { api, ApiError } from '../../lib/apiClient';
 import { readPendingPurchase } from '../../lib/pendingPurchase';
 import { User } from '../../types';
+import { maskPhone } from '../../utils/validators';
 
 interface RegisterPageProps {
   onNavigateTab: (tab: string) => void;
@@ -164,10 +165,11 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateTab }) => 
               <div className="relative flex items-center">
                 <Phone className="w-4 h-4 text-slate-500 absolute left-3.5" />
                 <input
-                  type="text"
+                  type="tel"
                   value={phone}
-                  onChange={e => setPhone(e.target.value)}
+                  onChange={e => setPhone(maskPhone(e.target.value))}
                   placeholder="(47) 99999-0000"
+                  maxLength={15}
                   className="w-full pl-10 pr-4 py-3.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#C8102E]"
                   required
                 />
