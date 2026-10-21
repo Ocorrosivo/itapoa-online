@@ -56,13 +56,18 @@ jobs:
           MP_PUBLIC_KEY: ${{ secrets.MERCADOPAGO_PUBLIC_KEY }}
           MP_ACCESS_TOKEN: ${{ secrets.MERCADOPAGO_ACCESS_TOKEN }}
           MP_WEBHOOK_SECRET: ${{ secrets.MERCADOPAGO_WEBHOOK_SECRET }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
           port: ${{ secrets.VPS_PORT }}
           command_timeout: 15m
-          envs: MP_PUBLIC_KEY,MP_ACCESS_TOKEN,MP_WEBHOOK_SECRET
+          envs: MP_PUBLIC_KEY,MP_ACCESS_TOKEN,MP_WEBHOOK_SECRET,SMTP_HOST,SMTP_PORT,SMTP_USER,SMTP_PASSWORD,SMTP_FROM
           script: |
             set -eu
             EXPECTED_SHA='${{ github.sha }}'
@@ -98,6 +103,10 @@ jobs:
             }).catch(error => { console.error(error.message); process.exitCode = 1; });
             NODE
               set -- --env-add "MERCADOPAGO_PUBLIC_KEY=$MP_PUBLIC_KEY" --env-add "MERCADOPAGO_ACCESS_TOKEN=$MP_ACCESS_TOKEN" --env-add "MERCADOPAGO_WEBHOOK_SECRET=$MP_WEBHOOK_SECRET" --env-add 'APP_URL=https://itapoa.online' --env-add 'API_URL=https://itapoa.online/api'
+            fi
+
+            if [ -n "${SMTP_PASSWORD:-}" ]; then
+              set -- "$@" --env-add "SMTP_HOST=${SMTP_HOST:-smtp.hostinger.com}" --env-add "SMTP_PORT=${SMTP_PORT:-465}" --env-add "SMTP_USER=${SMTP_USER:-contato@itapoa.online}" --env-add "SMTP_PASSWORD=$SMTP_PASSWORD" --env-add "SMTP_FROM=${SMTP_FROM:-contato@itapoa.online}"
             fi
 
             PREVIOUS_IMAGE=$(docker service inspect "$SERVICE" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')

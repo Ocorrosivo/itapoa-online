@@ -168,7 +168,10 @@ class PaymentService {
     userId: string,
     companyId: string,
     planId: string,
-    payerEmail: string
+    payerEmail: string,
+    payerName?: string,
+    payerDoc?: { type?: string; number?: string },
+    requestId?: string
   ): Promise<CreatedPix> {
     await this.assertGatewayReady();
     const plan = await this.getPlan(planId);
@@ -181,33 +184,68 @@ class PaymentService {
 
     const token = await this.accessToken();
 
-    // Cancela qualquer tentativa pendente anterior órfã para evitar conflito de 409
-    await pool.query(
-      "UPDATE subscriptions SET status = 'canceled' WHERE companyId = ? AND planId = ? AND userId = ? AND status = 'pending' AND paymentMethod = 'pix'",
-      [companyId, planId, userId]
-    ).catch(() => {});
-
-    const subscriptionId = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    // subscriptionId determinístico com base em requestId (se fornecido) para garantir
+    // idempotência estrita entre cliques simultâneos
+    const normReqId = typeof requestId === 'string' && /^[a-f0-9-]{8,64}$/i.test(requestId.trim())
+      ? requestId.trim()
+      : null;
+    const subscriptionId = normReqId
+      ? `pix_${crypto.createHash('sha256').update(`${userId}:${companyId}:${planId}:${normReqId}`).digest('hex')}`
+      : `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const nextBilling = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
+    // Cancela qualquer tentativa pendente anterior com outro ID para evitar conflito de status
     await pool.query(
-      `INSERT INTO subscriptions
+      "UPDATE subscriptions SET status = 'canceled' WHERE companyId = ? AND planId = ? AND userId = ? AND status = 'pending' AND paymentMethod = 'pix' AND id != ?",
+      [companyId, planId, userId, subscriptionId]
+    ).catch(() => {});
+
+    await pool.query(
+      `INSERT IGNORE INTO subscriptions
          (id, userId, companyId, planId, status, amount, paymentMethod, payment_type, contracted_price, plan_version, nextBillingDate)
        VALUES (?, ?, ?, ?, 'pending', ?, 'pix', 'onetime_pix', ?, ?, ?)`,
       [subscriptionId, userId, companyId, planId, plan.price, plan.price, plan.version || 1, nextBilling]
     ).catch(async () => {
       return await pool.query(
-        `INSERT INTO subscriptions
+        `INSERT IGNORE INTO subscriptions
            (id, userId, companyId, planId, status, amount, paymentMethod, nextBillingDate)
          VALUES (?, ?, ?, ?, 'pending', ?, 'pix', ?)`,
         [subscriptionId, userId, companyId, planId, plan.price, nextBilling]
       );
     });
 
+    const [subRows]: any = await pool.query(
+      'SELECT userId, companyId, planId, amount FROM subscriptions WHERE id = ?',
+      [subscriptionId]
+    );
+    const sub = subRows[0];
+    if (!sub || sub.userId !== userId || sub.companyId !== companyId || sub.planId !== planId || Number(sub.amount) !== plan.price) {
+      throw new PaymentError(409, 'Esta tentativa pertence a outra compra. Inicie uma nova tentativa.');
+    }
+
+    // Se já houver um registro de gateway para esta tentativa determinística, reutilizar
+    const [existingLogs]: any = await pool.query(
+      'SELECT gateway_reference FROM payment_logs WHERE subscriptionId = ? LIMIT 1',
+      [subscriptionId]
+    );
+    if (existingLogs.length > 0 && existingLogs[0].gateway_reference) {
+      const reuse = await this.getActivePixForCompany(companyId, planId, userId);
+      if (reuse) return reuse;
+    }
+
     const idempotencyKey = `${subscriptionId}`;
     const dateOfExpiration = new Date(Date.now() + 30 * 60 * 1000).toISOString();
     const appUrl = (process.env.APP_URL || 'https://itapoa.online').replace(/\/$/, '');
-    const body = {
+
+    const nameParts = (payerName || '').trim().split(/\s+/);
+    const firstName = nameParts[0] || 'Cliente';
+    const lastName = nameParts.slice(1).join(' ') || 'Itapoá';
+
+    const cleanDocNumber = payerDoc?.number ? String(payerDoc.number).replace(/\D/g, '') : '';
+    const cleanDocType = payerDoc?.type ? String(payerDoc.type).toUpperCase().trim() : '';
+    const hasDoc = (cleanDocType === 'CPF' && cleanDocNumber.length === 11) || (cleanDocType === 'CNPJ' && cleanDocNumber.length === 14);
+
+    const body: Record<string, any> = {
       transaction_amount: Number(plan.price.toFixed(2)),
       description: `Assinatura ${plan.name} — Guia Comercial Itapoá`,
       payment_method_id: 'pix',
@@ -216,8 +254,9 @@ class PaymentService {
       notification_url: `${appUrl}/api/webhooks/mercadopago`,
       payer: {
         email: payerEmail,
-        first_name: 'Cliente',
-        last_name: 'Itapoá'
+        first_name: firstName,
+        last_name: lastName,
+        ...(hasDoc ? { identification: { type: cleanDocType, number: cleanDocNumber } } : {})
       }
     };
 
@@ -257,8 +296,9 @@ class PaymentService {
 
     await pool.query(
       `INSERT INTO payment_logs (id, subscriptionId, amount, status, gateway_reference)
-       VALUES (?, ?, ?, 'pending', ?)`,
-      [`pay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, subscriptionId!, plan.price, gatewayId]
+       VALUES (?, ?, ?, 'pending', ?)
+       ON DUPLICATE KEY UPDATE gateway_reference = VALUES(gateway_reference)`,
+      [`pay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, subscriptionId, plan.price, gatewayId]
     );
 
     return {
@@ -267,7 +307,7 @@ class PaymentService {
       qrCodeBase64: tx.qr_code_base64 ?? '',
       amount: plan.price,
       expirationDate: mp.date_of_expiration ?? dateOfExpiration,
-      subscriptionId: subscriptionId!
+      subscriptionId: subscriptionId
     };
   }
 

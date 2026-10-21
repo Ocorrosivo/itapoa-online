@@ -95,7 +95,13 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
     try {
       const companyId = await prepare();
       if (plan.price === 0) { clearPendingPurchase(); onNavigateTab('painel'); return; }
-      const details = await BillingService.generatePixPayment(companyId, plan.id, 0, email);
+      const pixAttemptKey = `itapoa_pix_attempt_${user?.id}_${companyId}_${plan.id}`;
+      let pixReqId = sessionStorage.getItem(pixAttemptKey);
+      if (!pixReqId || !/^[a-f0-9-]{36}$/i.test(pixReqId)) {
+        pixReqId = crypto.randomUUID();
+        sessionStorage.setItem(pixAttemptKey, pixReqId);
+      }
+      const details = await BillingService.generatePixPayment(companyId, plan.id, 0, email, name, undefined, pixReqId);
       if (!details.qrCode) throw new Error('O Mercado Pago não retornou o código Pix. Não efetue transferência sem o código oficial.');
       setPix(details); setSubscriptionId(details.subscriptionId);
     } catch (e) { setError(e instanceof Error ? e.message : 'Não foi possível gerar o Pix.'); }

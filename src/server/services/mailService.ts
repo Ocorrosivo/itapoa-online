@@ -10,9 +10,9 @@ export interface MailConfig {
 }
 
 export function mailConfig(): MailConfig | null {
-  const host = process.env.SMTP_HOST?.trim();
+  const host = (process.env.SMTP_HOST || 'smtp.hostinger.com')?.trim();
   const port = Number(process.env.SMTP_PORT || 465);
-  const user = process.env.SMTP_USER?.trim();
+  const user = (process.env.SMTP_USER || process.env.SMTP_USERNAME || 'contato@itapoa.online')?.trim();
   const pass = process.env.SMTP_PASSWORD || process.env.SMTP_PASS;
   const from = (process.env.SMTP_FROM || process.env.EMAIL_FROM || 'contato@itapoa.online')?.trim();
 

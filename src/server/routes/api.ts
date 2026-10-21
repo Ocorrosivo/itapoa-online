@@ -133,7 +133,13 @@ apiRouter.post('/auth/resend-verification', handler(async (req, res) => {
   }
 
   const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
-  await emailVerificationService.sendVerification(users[0].id, email, ip);
+  const sent = await emailVerificationService.sendVerification(users[0].id, email, ip);
+  if (!sent) {
+    return res.status(503).json({
+      success: false,
+      error: 'Serviço de envio de e-mails temporariamente indisponível no ambiente. Tente novamente mais tarde.'
+    });
+  }
   res.json({ success: true, message: 'Link de confirmação reenviado com sucesso.' });
 }));
 
@@ -144,12 +150,21 @@ apiRouter.get('/auth/verification-status', requireAuth, handler(async (req, res)
 }));
 
 // Envio de teste real autorizado: De contato@itapoa.online Para suprememidias.ok@gmail.com
+// Exclusivo para administradores (role admin_master). Sem exceções por e-mail no código.
 apiRouter.post('/admin/send-test-email', requireAuth, handler(async (req, res) => {
-  if (req.user!.role !== 'admin_master' && req.user!.email !== 'suprememidias.ok@gmail.com' && req.user!.email !== 'teste-blocosgiga@itapoa.online') {
-    return res.status(403).json({ error: 'Apenas administradores podem acionar o teste de e-mail.' });
+  if (req.user!.role !== 'admin_master') {
+    return res.status(403).json({ error: 'Acesso negado. Apenas administradores podem acionar o teste de e-mail.' });
   }
   const { mailService } = await import('../services/mailService.js');
   const result = await mailService.sendAuthorizedTest();
+  if (!result.accepted) {
+    return res.status(503).json({
+      success: false,
+      accepted: false,
+      error: 'Transporte SMTP não configurado ou envio recusado pelo provedor.',
+      timestamp: result.timestamp
+    });
+  }
   res.json({ success: true, ...result });
 }));
 
@@ -493,7 +508,10 @@ apiRouter.post('/payments/pix', requireAuth, requireCompanyAccess, handler(async
   const planId = String(req.body?.planId ?? '');
   if (!planId) return res.status(400).json({ error: 'planId obrigatório.' });
   const payerEmail = typeof req.body?.payerEmail === 'string' ? req.body.payerEmail : req.user!.email;
-  res.json(await paymentService.createPixPayment(req.user!.id, companyId, planId, payerEmail));
+  const requestId = typeof req.body?.requestId === 'string' ? req.body.requestId : undefined;
+  const payerName = typeof req.body?.payerName === 'string' ? req.body.payerName : undefined;
+  const payerDoc = req.body?.payerDoc && typeof req.body.payerDoc === 'object' ? req.body.payerDoc : undefined;
+  res.json(await paymentService.createPixPayment(req.user!.id, companyId, planId, payerEmail, payerName, payerDoc, requestId));
 }));
 
 // Recover a valid PIX attempt after a reload without creating a duplicate charge.
@@ -655,6 +673,10 @@ apiRouter.post('/analytics/events', handler(async (req, res) => {
     await pool.query('UPDATE companies SET views = views + 1 WHERE id = ?', [company_id]).catch(() => {});
   } else if (rawType === 'whatsapp') {
     await pool.query('UPDATE companies SET clicksWhatsapp = clicksWhatsapp + 1 WHERE id = ?', [company_id]).catch(() => {});
+  } else if (rawType === 'phone') {
+    await pool.query('UPDATE companies SET clicksPhone = clicksPhone + 1 WHERE id = ?', [company_id]).catch(() => {});
+  } else if (rawType === 'route') {
+    await pool.query('UPDATE companies SET clicksRoute = clicksRoute + 1 WHERE id = ?', [company_id]).catch(() => {});
   }
 
   res.json({ success: true, eventId });
@@ -691,17 +713,17 @@ apiRouter.get('/companies/:id/analytics', requireAuth, requireCompanyParam('id')
     [companyId, days]
   ).catch(() => [[]]);
 
-  // Totais consolidados
+  // Totais consolidados reais
   const [companyRows]: any = await pool.query(
-    'SELECT views, clicksWhatsapp FROM companies WHERE id = ? LIMIT 1',
+    'SELECT views, clicksWhatsapp, clicksPhone, clicksRoute FROM companies WHERE id = ? LIMIT 1',
     [companyId]
   ).catch(() => [[]]);
   const cRow = companyRows[0] || {};
   const totals = {
     views: Number(cRow.views || 0),
     clicksWhatsapp: Number(cRow.clicksWhatsapp || 0),
-    clicksPhone: 0,
-    clicksRoute: 0
+    clicksPhone: Number(cRow.clicksPhone || 0),
+    clicksRoute: Number(cRow.clicksRoute || 0)
   };
 
   const dayMap = new Map<string, { views: number; whatsapp: number; phone: number; route: number }>();
