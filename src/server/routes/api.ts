@@ -201,6 +201,12 @@ apiRouter.post('/companies/:id/click', handler(async (req, res) => {
   res.json({ success: true, clicks: await companyService.registerClick(req.params.id) });
 }));
 
+apiRouter.post('/companies/:id/views', handler(async (req, res) => {
+  const pool = (await import('../mysql.js')).pool;
+  await pool.query('UPDATE companies SET views = views + 1 WHERE id = ?', [req.params.id]).catch(() => {});
+  res.json({ success: true });
+}));
+
 // Fotos da Galeria da Empresa (com validação estrita de limite por plano)
 apiRouter.get('/companies/:id/media', handler(async (req, res) => {
   const pool = (await import('../mysql.js')).pool;
@@ -636,14 +642,13 @@ apiRouter.post('/analytics/events', handler(async (req, res) => {
   }
 
   const pool = (await import('../mysql.js')).pool;
-  const { nanoid } = await import('nanoid');
-  const eventId = `evt_${nanoid(16)}`;
+  const eventId = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
   // Insere o evento real com timestamp exato
   await pool.query(
     'INSERT INTO company_analytics_events (id, company_id, event_type, source, device, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
     [eventId, company_id, rawType, String(source || 'direct').slice(0, 64), String(device || 'mobile').slice(0, 32)]
-  );
+  ).catch(() => {});
 
   // Incrementa contador consolidado em companies
   if (rawType === 'view') {
