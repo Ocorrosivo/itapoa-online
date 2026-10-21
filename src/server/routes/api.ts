@@ -688,7 +688,7 @@ apiRouter.get('/companies/:id/analytics', requireAuth, requireCompanyParam('id')
      GROUP BY DATE(created_at), event_type 
      ORDER BY date ASC`,
     [companyId, days]
-  );
+  ).catch(() => [[]]);
 
   // Totais consolidados
   const [companyRows]: any = await pool.query(
