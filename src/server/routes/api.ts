@@ -660,26 +660,30 @@ apiRouter.post('/analytics/events', handler(async (req, res) => {
   }
 
   const pool = (await import('../mysql.js')).pool;
-  const eventId = `evt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  const eventId = typeof req.body?.eventId === 'string' && /^[a-zA-Z0-9_-]{8,64}$/.test(req.body.eventId.trim())
+    ? req.body.eventId.trim()
+    : `evt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
-  // Insere o evento real com timestamp exato
-  await pool.query(
-    'INSERT INTO company_analytics_events (id, company_id, event_type, source, device, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
+  // Insere o evento real com chave primária única para evitar contagem duplicada
+  const [insertResult]: any = await pool.query(
+    'INSERT IGNORE INTO company_analytics_events (id, company_id, event_type, source, device, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
     [eventId, company_id, rawType, String(source || 'direct').slice(0, 64), String(device || 'mobile').slice(0, 32)]
-  ).catch(() => {});
+  ).catch(() => [{ affectedRows: 0 }]);
 
-  // Incrementa contador consolidado em companies
-  if (rawType === 'view') {
-    await pool.query('UPDATE companies SET views = views + 1 WHERE id = ?', [company_id]).catch(() => {});
-  } else if (rawType === 'whatsapp') {
-    await pool.query('UPDATE companies SET clicksWhatsapp = clicksWhatsapp + 1 WHERE id = ?', [company_id]).catch(() => {});
-  } else if (rawType === 'phone') {
-    await pool.query('UPDATE companies SET clicksPhone = clicksPhone + 1 WHERE id = ?', [company_id]).catch(() => {});
-  } else if (rawType === 'route') {
-    await pool.query('UPDATE companies SET clicksRoute = clicksRoute + 1 WHERE id = ?', [company_id]).catch(() => {});
+  // Incrementa contador consolidado em companies somente se o evento for novo (não duplicado)
+  if (insertResult && insertResult.affectedRows > 0) {
+    if (rawType === 'view') {
+      await pool.query('UPDATE companies SET views = views + 1 WHERE id = ?', [company_id]).catch(() => {});
+    } else if (rawType === 'whatsapp') {
+      await pool.query('UPDATE companies SET clicksWhatsapp = clicksWhatsapp + 1 WHERE id = ?', [company_id]).catch(() => {});
+    } else if (rawType === 'phone') {
+      await pool.query('UPDATE companies SET clicksPhone = clicksPhone + 1 WHERE id = ?', [company_id]).catch(() => {});
+    } else if (rawType === 'route') {
+      await pool.query('UPDATE companies SET clicksRoute = clicksRoute + 1 WHERE id = ?', [company_id]).catch(() => {});
+    }
   }
 
-  res.json({ success: true, eventId });
+  res.json({ success: true, eventId, isDuplicate: Boolean(!insertResult || insertResult.affectedRows === 0) });
 }));
 
 // Métricas reais da empresa com controle de histórico por plano (Bronze: 7 dias; Gold/Diamond: 7, 30 e 90 dias)
@@ -703,7 +707,7 @@ apiRouter.get('/companies/:id/analytics', requireAuth, requireCompanyParam('id')
     }
   }
 
-  // Agrupamento diário real
+  // Agrupamento diário real (sem engolir erro de banco para não mascarar falhas como zero)
   const [dailyRows]: any = await pool.query(
     `SELECT DATE(created_at) as date, event_type, COUNT(*) as count 
      FROM company_analytics_events 
@@ -711,13 +715,16 @@ apiRouter.get('/companies/:id/analytics', requireAuth, requireCompanyParam('id')
      GROUP BY DATE(created_at), event_type 
      ORDER BY date ASC`,
     [companyId, days]
-  ).catch(() => [[]]);
+  );
 
   // Totais consolidados reais
   const [companyRows]: any = await pool.query(
     'SELECT views, clicksWhatsapp, clicksPhone, clicksRoute FROM companies WHERE id = ? LIMIT 1',
     [companyId]
-  ).catch(() => [[]]);
+  );
+  if (!companyRows || companyRows.length === 0) {
+    return res.status(404).json({ error: 'Empresa não encontrada.' });
+  }
   const cRow = companyRows[0] || {};
   const totals = {
     views: Number(cRow.views || 0),

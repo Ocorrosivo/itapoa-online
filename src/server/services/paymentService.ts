@@ -115,11 +115,8 @@ class PaymentService {
     }
     const payment: any = await response.json().catch(() => ({}));
     if (!response.ok || !payment.id) {
-      let errDetail = payment?.message || (Array.isArray(payment?.cause) ? payment.cause.map((c: any) => c.description || c.code).join(', ') : '');
+      const errDetail = payment?.message || (Array.isArray(payment?.cause) ? payment.cause.map((c: any) => c.description || c.code).join(', ') : '');
       console.error(`[payment-card] Mercado Pago error (HTTP ${response.status}):`, errDetail);
-      if (errDetail === 'Unauthorized use of live credentials') {
-        errDetail = 'Credenciais de produção não autorizadas pelo Mercado Pago: complete a homologação no painel Mercado Pago Developers para habilitar cobranças em produção (ou utilize chaves TEST- para testes).';
-      }
       if (response.status >= 500) return { subscriptionId, status: 'unknown' };
       throw new PaymentError(response.status === 400 ? 400 : 422, errDetail || 'O Mercado Pago não conseguiu processar esta tentativa. Confira os dados ou tente novamente.');
     }
@@ -184,21 +181,39 @@ class PaymentService {
 
     const token = await this.accessToken();
 
-    // subscriptionId determinístico com base em requestId (se fornecido) para garantir
-    // idempotência estrita entre cliques simultâneos
-    const normReqId = typeof requestId === 'string' && /^[a-f0-9-]{8,64}$/i.test(requestId.trim())
-      ? requestId.trim()
-      : null;
-    const subscriptionId = normReqId
-      ? `pix_${crypto.createHash('sha256').update(`${userId}:${companyId}:${planId}:${normReqId}`).digest('hex')}`
-      : `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const nextBilling = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    // subscriptionId determinístico e seguro contra concorrência entre abas diferentes:
+    // Se já houver uma tentativa pendente criada para a mesma empresa/plano/usuário nos últimos 30 min,
+    // reaproveitar o subscriptionId existente em vez de criar um segundo id conflitante
+    let subscriptionId: string;
+    const [existingPending]: any = await pool.query(
+      `SELECT id, createdAt FROM subscriptions
+        WHERE companyId = ? AND planId = ? AND userId = ? AND status = 'pending' AND paymentMethod = 'pix'
+        ORDER BY createdAt DESC LIMIT 1`,
+      [companyId, planId, userId]
+    ).catch(() => [[]]);
 
-    // Cancela qualquer tentativa pendente anterior com outro ID para evitar conflito de status
-    await pool.query(
-      "UPDATE subscriptions SET status = 'canceled' WHERE companyId = ? AND planId = ? AND userId = ? AND status = 'pending' AND paymentMethod = 'pix' AND id != ?",
-      [companyId, planId, userId, subscriptionId]
-    ).catch(() => {});
+    const activePending = existingPending?.[0];
+    const isRecent = activePending?.createdAt
+      ? (Date.now() - new Date(activePending.createdAt).getTime()) < 30 * 60 * 1000
+      : false;
+
+    if (activePending?.id && isRecent) {
+      subscriptionId = activePending.id;
+    } else {
+      // Cancela qualquer tentativa pendente anterior expirada ou obsoleta com outro ID
+      await pool.query(
+        "UPDATE subscriptions SET status = 'canceled' WHERE companyId = ? AND planId = ? AND userId = ? AND status = 'pending' AND paymentMethod = 'pix'",
+        [companyId, planId, userId]
+      ).catch(() => {});
+
+      const normReqId = typeof requestId === 'string' && /^[a-f0-9-]{8,64}$/i.test(requestId.trim())
+        ? requestId.trim()
+        : null;
+      subscriptionId = normReqId
+        ? `pix_${crypto.createHash('sha256').update(`${userId}:${companyId}:${planId}:${normReqId}`).digest('hex')}`
+        : `pix_${crypto.createHash('sha256').update(`${userId}:${companyId}:${planId}:${Date.now()}`).digest('hex')}`;
+    }
+    const nextBilling = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     await pool.query(
       `INSERT IGNORE INTO subscriptions
@@ -273,11 +288,8 @@ class PaymentService {
       });
       mp = await resp.json().catch(() => ({}));
       if (!resp.ok) {
-        let errDetail = mp?.message || mp?.error || (Array.isArray(mp?.cause) ? mp.cause.map((c: any) => c.description || c.code).join(', ') : '');
+        const errDetail = mp?.message || mp?.error || (Array.isArray(mp?.cause) ? mp.cause.map((c: any) => c.description || c.code).join(', ') : '');
         console.error(`[payment-pix] Mercado Pago error (HTTP ${resp.status}):`, errDetail, JSON.stringify(mp));
-        if (errDetail === 'Unauthorized use of live credentials') {
-          errDetail = 'Credenciais de produção não autorizadas pelo Mercado Pago: complete a homologação no painel Mercado Pago Developers para habilitar cobranças em produção (ou utilize chaves TEST- para testes).';
-        }
         throw new PaymentError(422, errDetail || 'Falha ao criar cobrança Pix no gateway.');
       }
     } catch (err) {

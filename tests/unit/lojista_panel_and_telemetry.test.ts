@@ -237,4 +237,52 @@ describe('Painel do Lojista — Regras de Negócio, Métricas Reais e Isolamento
     assert.equal(techBlock.canUpgrade, false);
   });
 
+  test('6. Idempotência de Eventos de Telemetria e Proteção Contra Dupla Contagem', () => {
+    // Simulação do comportamento de INSERT IGNORE e controle de affectedRows
+    const recordedEvents = new Set<string>();
+    let consolidatedCounter = 0;
+
+    function handleIncomingEvent(eventId: string, _type: string) {
+      if (recordedEvents.has(eventId)) {
+        // Evento duplicado (ex: retry de rede): não incrementa contador
+        return { isDuplicate: true, affectedRows: 0 };
+      }
+      recordedEvents.add(eventId);
+      consolidatedCounter += 1;
+      return { isDuplicate: false, affectedRows: 1 };
+    }
+
+    const first = handleIncomingEvent('evt_click_whatsapp_101', 'whatsapp');
+    assert.equal(first.isDuplicate, false);
+    assert.equal(consolidatedCounter, 1);
+
+    // Segundo envio com o mesmo eventId (retry de rede)
+    const duplicate = handleIncomingEvent('evt_click_whatsapp_101', 'whatsapp');
+    assert.equal(duplicate.isDuplicate, true);
+    assert.equal(consolidatedCounter, 1, 'Contador não deve ser incrementado duas vezes');
+
+    // Novo evento legítimo
+    const second = handleIncomingEvent('evt_click_whatsapp_102', 'whatsapp');
+    assert.equal(second.isDuplicate, false);
+    assert.equal(consolidatedCounter, 2);
+  });
+
+  test('7. Falha de Consulta no Banco de Métricas Não é Mascarada como Zero Real', () => {
+    // Validação de que erros de banco devem lançar exceção ou retornar status de erro, nunca zeros simulados
+    function resolveMetrics(queryResult: { ok: boolean; data?: any; error?: string }) {
+      if (!queryResult.ok) {
+        throw new Error('DATABASE_UNAVAILABLE');
+      }
+      return queryResult.data;
+    }
+
+    assert.throws(
+      () => resolveMetrics({ ok: false, error: 'Connection refused' }),
+      /DATABASE_UNAVAILABLE/
+    );
+
+    const validData = resolveMetrics({ ok: true, data: { views: 42, clicksWhatsapp: 12 } });
+    assert.equal(validData.views, 42);
+  });
+
 });

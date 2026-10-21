@@ -770,7 +770,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                           ) : (
                             <div className="rounded-2xl bg-amber-50 border border-amber-200 p-5 text-sm text-amber-900 leading-relaxed">
                               <p className="font-bold mb-1">Cartão temporariamente indisponível</p>
-                              A opção de cartão está em processo de homologação técnica. Por favor, selecione <strong>Pix oficial</strong> para liberação imediata da sua assinatura.
+                              O pagamento com cartão de crédito não está disponível no momento. Por favor, utilize o <strong>Pix oficial</strong> para ativação da sua assinatura.
                             </div>
                           )}
                         </div>
