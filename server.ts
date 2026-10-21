@@ -13,6 +13,7 @@ import { env } from './src/server/config/env.js';
 import { apiRouter } from './src/server/routes/api.js';
 import { reportSchemaState } from './src/server/init-db.js';
 import { requireAuth } from './src/server/middleware/auth.js';
+import { pool } from './src/server/mysql.js';
 
 const getDirname = () => {
   if (typeof __dirname !== 'undefined') return __dirname;
@@ -56,39 +57,76 @@ app.use('/api/auth', (req, res, next) => {
   next();
 });
 
-// Mercado Pago webhook. Registered before the JSON body parser so the raw body
-// is available for HMAC signature verification. Always returns 200 quickly so
-// Mercado Pago does not retry; failures are logged, not surfaced to the gateway.
+// Mercado Pago webhook. Fila persistente webhook_events garante retentativa.
+// - Assinatura inválida → 400 (Mercado Pago NÃO retentara; caller é inválido).
+// - Processamento falho (DB/gateway down) → 500 com evento já em 'failed' (MP retenta).
+// - Sucesso → 200. Nunca confirmar antes da persistência.
+// IMPORTANTE: ver docs oficiais em https://www.mercadopago.com.br/developers/pt/docs/your-integrations/notifications/webhooks
 app.post('/api/webhooks/mercadopago', express.json({ limit: '256kb' }), async (req, res) => {
-  try {
-    const { paymentService } = await import('./src/server/services/paymentService.js');
-    const signature = req.header('x-signature');
-    const requestId = req.header('x-request-id');
-    const dataId = String(
-      (req.query['data.id'] as string) ||
-      (req.query['topic'] === 'payment' ? (req.query['id'] as string) : '') ||
-      req.body?.data?.id ||
-      req.body?.id ||
-      (typeof req.body?.resource === 'string' ? req.body.resource.split('/').pop() : '') ||
-      ''
-    ).trim();
+  const { paymentService } = await import('./src/server/services/paymentService.js');
+  const signature = req.header('x-signature');
+  const requestId = req.header('x-request-id');
+  const dataId = String(
+    (req.query['data.id'] as string) ||
+    (req.query['topic'] === 'payment' ? (req.query['id'] as string) : '') ||
+    req.body?.data?.id ||
+    req.body?.id ||
+    (typeof req.body?.resource === 'string' ? req.body.resource.split('/').pop() : '') ||
+    ''
+  ).trim();
 
-    const ok = paymentService.verifyWebhookSignature(signature, requestId, dataId);
-    if (!ok) {
-      console.warn(`[webhook] invalid signature dataId=${dataId || 'missing'} ts=${String(req.header('x-signature') || '').slice(0, 80)}`);
-      return res.status(200).json({ received: true });
-    }
-
-    const type = req.body?.type || req.query['type'] || req.query['topic'];
-    const action: string = req.body?.action || '';
-    if ((type === 'payment' || action.startsWith('payment')) && dataId) {
-      await paymentService.handlePaymentNotification(dataId);
-    }
-    res.status(200).json({ received: true });
-  } catch (err) {
-    console.error('[webhook] mercadopago:', err instanceof Error ? err.message : err);
-    res.status(200).json({ received: true });
+  const topic = String(req.body?.type || req.query['type'] || req.query['topic'] || req.body?.action || 'payment');
+  const ok = paymentService.verifyWebhookSignature(signature, requestId, dataId);
+  if (!ok) {
+    console.warn(`[webhook] invalid signature dataId=${dataId || 'missing'} sig=${String(signature || '').slice(0, 80)}`);
+    return res.status(400).json({ received: false, error: 'invalid signature' });
   }
+  if (!dataId) {
+    return res.status(400).json({ received: false, error: 'missing dataId' });
+  }
+
+  // Persistir evento antes de processar (dedupe por gateway_event_id).
+  // Tabela webhook_events pode não existir em DBs ainda não migrados — fallback gracioso.
+  const eventId = `evt_${dataId}_${Date.now()}`;
+  let enqueued = false;
+  try {
+    const raw = JSON.stringify(req.body ?? {}).slice(0, 16000);
+    await pool.query(
+      `INSERT INTO webhook_events (id, gateway, gateway_event_id, topic, raw_body, signature_header, request_id, status)
+       VALUES (?, 'mercadopago', ?, ?, CAST(? AS JSON), ?, ?, 'pending')
+       ON DUPLICATE KEY UPDATE updated_at = NOW()`,
+      [eventId, dataId, topic.slice(0, 64), raw, String(signature || '').slice(0, 512), String(requestId || '').slice(0, 128)]
+    );
+    enqueued = true;
+    await pool.query(`UPDATE webhook_events SET status='processing', attempts=attempts+1 WHERE gateway='mercadopago' AND gateway_event_id=?`, [dataId]);
+  } catch (e: any) {
+    // Se tabela ainda não existe (ER_NO_SUCH_TABLE), seguir para processamento direto
+    const msg = String(e?.message || '');
+    if (!msg.includes('webhook_events')) {
+      console.error('[webhook] enqueue failed:', msg);
+      // Persistência falhou: não confirmar — Mercado Pago deve retentar
+      return res.status(500).json({ received: false, error: 'enqueue failed' });
+    }
+  }
+
+  const isPayment = topic === 'payment' || String(req.body?.action || '').startsWith('payment');
+  if (isPayment && dataId) {
+    try {
+      await paymentService.handlePaymentNotification(dataId);
+      if (enqueued) {
+        await pool.query(`UPDATE webhook_events SET status='done', last_error=NULL WHERE gateway='mercadopago' AND gateway_event_id=?`, [dataId]).catch(() => {});
+      }
+    } catch (err: any) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error('[webhook] mercadopago processing failed:', errMsg);
+      if (enqueued) {
+        await pool.query(`UPDATE webhook_events SET status='failed', last_error=? WHERE gateway='mercadopago' AND gateway_event_id=?`, [errMsg.slice(0, 2000), dataId]).catch(() => {});
+      }
+      // Falha temporária → 500 para que o Mercado Pago retente (recuperável via /reconcile idempotente)
+      return res.status(500).json({ received: false, error: 'processing failed, will retry' });
+    }
+  }
+  return res.status(200).json({ received: true });
 });
 
 app.use(express.json({ limit: '1mb' }));
@@ -145,12 +183,57 @@ app.use('/uploads', express.static(uploadDir, {
   }
 }));
 
-// Authenticated upload. An open upload endpoint is a storage abuse vector.
-app.post('/api/upload', requireAuth, upload.single('file'), (req, res) => {
-  if (!req.file) {
+/**
+ * Uploads — fixo ao escopo da empresa do caller (anti-IDOR) e persistido em
+ * media_items para sobreviver ao deploy (Easypanel recria volume mas mantém DB).
+ * - Requer companyId da sessão (requireCompanyAccess → companies_users).
+ * - Mensura limites de galeria por plano na rota POST /api/companies/:id/media, não aqui.
+ * - Em erro, o arquivo físico é removido e o registro é revertido.
+ * - Orfãos (media_items sem companies_users) são invisíveis no catálogo público.
+ */
+app.post('/api/upload', requireAuth, async (req, res, next) => {
+  // Resolve companyId antes do multipart: query ?companyId= ou header do front.
+  const rawCompanyId = typeof req.query.companyId === 'string' ? req.query.companyId : typeof (req.headers['x-company-id'] as string) === 'string' ? (req.headers['x-company-id'] as string) : '';
+  if (req.user?.role !== 'admin_master' && !rawCompanyId) {
+    return res.status(400).json({ error: 'Empresa não identificada para este upload (envie ?companyId=).' });
+  }
+  if (rawCompanyId) {
+    // Anti-IDOR: só prossegue se companies_users confirma vínculo
+    const [mem]: any = await pool.query('SELECT company_id FROM companies_users WHERE user_id = ? AND company_id = ? LIMIT 1', [req.user!.id, rawCompanyId]).catch(() => [[]]);
+    const isAdmin = String(req.user?.role) === 'admin_master';
+    if (!isAdmin && mem.length === 0) return res.status(403).json({ error: 'Acesso negado a esta empresa.' });
+  }
+  // Attach resolved id for downstream
+  (req as any).__uploadCompanyId = rawCompanyId || null;
+  return upload.single('file')(req as any, res as any, next);
+}, async (req, res) => {
+  if (!(req as any).file) {
     return res.status(400).json({ error: 'Nenhum arquivo válido enviado.' });
   }
-  res.json({ success: true, url: `/uploads/${req.file.filename}` });
+  const file = (req as any).file as Express.Multer.File;
+  const companyId: string | null = (req as any).__uploadCompanyId || null;
+  const url = `/uploads/${file.filename}`;
+  const id = `media_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  let mediaSaved = false;
+  try {
+    if (companyId) {
+      const [companies]: any = await pool.query('SELECT id FROM companies WHERE id = ? LIMIT 1', [companyId]);
+      if (!companies.length) {
+        fs.unlink(path.join(uploadDir, file.filename), () => {});
+        return res.status(404).json({ error: 'Empresa não encontrada.' });
+      }
+    }
+    await pool.query(
+      'INSERT INTO media_items (id, url, entityId, entityType, fileType, createdAt) VALUES (?, ?, ?, ?, ?, NOW())',
+      [id, url, companyId, companyId ? 'company' : 'platform', file.mimetype]
+    );
+    mediaSaved = true;
+    res.json({ success: true, url, mediaId: id, companyId });
+  } catch {
+    if (mediaSaved) await pool.query('DELETE FROM media_items WHERE id = ?', [id]).catch(() => {});
+    fs.unlink(path.join(uploadDir, file.filename), () => {});
+    res.status(500).json({ error: 'Não foi possível registrar o arquivo na biblioteca da empresa.' });
+  }
 });
 
 // Public sitemap. Built from live company slugs so search engines can reach

@@ -65,10 +65,12 @@ function ProductModal({
   const handleUpload = async (file: File) => {
     const form = new FormData();
     form.append('file', file);
-    form.append('entityType', 'product');
-    form.append('companyId', companyId);
     try {
-      const res = await apiFetch('/api/upload', { method: 'POST', body: form });
+      const res = await apiFetch(`/api/upload?companyId=${encodeURIComponent(companyId)}`, {
+        method: 'POST',
+        headers: { 'x-company-id': companyId } as any,
+        body: form
+      });
       if (!res.ok) throw new Error('Falha no upload.');
       const data = await res.json();
       setImageUrl(data.url ?? data.path ?? '');

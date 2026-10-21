@@ -131,16 +131,18 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
     setError('');
   };
 
-  // Upload genérico de arquivo
+  // Upload vinculado à empresa (anti-IDOR: ?companyId= + companies_users)
   const handleUploadFile = async (file: File): Promise<string> => {
     const formData = new FormData();
     formData.append('file', file);
 
     const token = localStorage.getItem('auth_token');
-    const res = await fetch('/api/upload', {
+    const companyIdParam = company?.id ? `?companyId=${encodeURIComponent(company.id)}` : '';
+    const res = await fetch(`/api/upload${companyIdParam}`, {
       method: 'POST',
       headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(company?.id ? { 'x-company-id': company.id } : {})
       },
       body: formData
     });
