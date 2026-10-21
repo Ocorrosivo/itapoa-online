@@ -34,14 +34,13 @@ export default function SaaSPricing({ onNavigateTab = () => {} }: SaaSPricingPro
       id: 'bronze' as const,
       name: 'Bronze',
       price: 'Grátis',
-      subtext: 'Ideal para ter presença básica no guia local',
+      subtext: 'Presença essencial no guia.',
       features: [
+        'Perfil com informações essenciais no guia local',
         'Até 3 fotos na galeria (logo e capa à parte)',
-        'CRM de leads e mensagens integrado',
-        'Métricas essenciais de visualização e cliques',
-        'Listagem padrão no diretório comercial',
-        'Sem novos produtos ou promoções publicáveis',
-        'Sem destaque na vitrine da Home'
+        'Canal direto para WhatsApp e telefone',
+        'CRM de mensagens e contatos recebidos',
+        'Métricas essenciais de visualizações'
       ],
       icon: Award,
       color: 'border-slate-200 bg-white text-slate-700',
@@ -53,40 +52,40 @@ export default function SaaSPricing({ onNavigateTab = () => {} }: SaaSPricingPro
       name: 'Gold VIP',
       price: 'R$ 49,90',
       period: '/mês',
-      subtext: 'Apresentação completa e destaque rotativo',
+      subtext: 'Mais exposição e vitrine ampliada.',
       features: [
+        'Mais exposição com destaque rotativo na Home',
+        'Vitrine ampliada com apresentação completa e capa',
         'Até 15 fotos na galeria exclusiva',
-        'Catálogo com até 5 produtos/serviços',
+        'Catálogo com até 5 produtos ou serviços',
         '1 promoção ou cupom de desconto ativo',
-        'Destaque rotativo garantido na Home',
-        'Apresentação completa e selo VIP',
-        'CRM de leads + Métricas de desempenho',
-        'Link direto para WhatsApp e telefone'
+        'Selo VIP de estabelecimento verificado',
+        'Perfil exclusivo sem anúncios de concorrentes'
       ],
       icon: Zap,
       color: 'border-indigo-400 bg-indigo-50/5 ring-1 ring-indigo-400/20',
       badgeColor: 'bg-indigo-600 text-white',
-      btnText: 'Assinar Plano Gold'
+      btnText: 'Assinar Gold VIP'
     },
     {
       id: 'diamond_extremo' as const,
       name: 'Diamond',
       price: 'R$ 99,90',
       period: '/mês',
-      subtext: 'Máxima exposição, topo de buscas e mini-site',
+      subtext: 'Recursos Gold com maior capacidade de catálogo, fotos e promoções.',
       features: [
-        'Até 30 fotos na galeria de alta qualidade',
-        'Catálogo expandido com até 30 produtos/serviços',
+        'Todos os benefícios e recursos do plano Gold VIP',
+        'Maior capacidade de catálogo: até 30 produtos ou serviços',
+        'Galeria expandida: até 30 fotos em alta qualidade',
         'Até 3 promoções ou cupons simultâneos',
-        'Todos os recursos e benefícios do plano Gold',
-        'Posicionamento prioritário no topo das buscas',
+        'Posicionamento prioritário nas buscas por categoria',
         'Selo Diamante de parceiro oficial',
-        'Mini-site exclusivo de alta conversão'
+        'Mini-site exclusivo de alta conversão sem concorrentes'
       ],
       icon: Sparkles,
       color: 'border-amber-400 bg-amber-500/5 ring-1 ring-amber-400/20 shadow-lg',
       badgeColor: 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-900',
-      btnText: 'Ativar Escopo Diamante'
+      btnText: 'Assinar Diamond'
     }
   ];
 
@@ -103,7 +102,7 @@ export default function SaaSPricing({ onNavigateTab = () => {} }: SaaSPricingPro
         subtext: live.description || def.subtext,
         features: Array.isArray(live.features) && live.features.length > 0 ? live.features : def.features,
         btnText: live.buttonText || def.btnText,
-        badgeText: live.badge || (def.id === 'diamond_extremo' ? '👑 DIAMOND' : def.name),
+        badgeText: live.badge || (def.id === 'diamond_extremo' ? '👑 DIAMOND' : def.id === 'gold_vip' ? '⭐ GOLD VIP' : 'BRONZE'),
         allowNew: live.allowNewSubscriptions !== false
       };
     });
@@ -114,10 +113,10 @@ export default function SaaSPricing({ onNavigateTab = () => {} }: SaaSPricingPro
       <div className="max-w-6xl mx-auto flex flex-col w-full">
 
         <section className="text-center mb-10 max-w-2xl mx-auto">
-          <span className="text-xs font-semibold text-indigo-600 uppercase tracking-widest block mb-1">Monetização SaaS</span>
-          <h1 className="text-2xl md:text-3xl font-sans font-black text-slate-900 tracking-tight leading-none mb-3">Escolha o plano ideal para escalar</h1>
+          <span className="text-xs font-semibold text-indigo-600 uppercase tracking-widest block mb-1">Planos Oficiais</span>
+          <h1 className="text-2xl md:text-3xl font-sans font-black text-slate-900 tracking-tight leading-none mb-3">Escolha o plano ideal para a sua empresa</h1>
           <p className="text-slate-500 text-xs font-sans">
-            Ative hoje o seu perfil de negócios e comece a impactar milhares de clientes locais de forma rápida e automatizada com robôs geradores de leads.
+            Ative a presença da sua empresa no guia comercial de Itapoá com informações claras, catálogo de produtos e contato direto com seus clientes.
           </p>
         </section>
 

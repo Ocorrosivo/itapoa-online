@@ -67,8 +67,14 @@ export const CANONICAL_PLANS: Record<PlanTier, PlanDefinition> = {
     isRecommended: false,
     allowNewSubscriptions: true,
     trialDays: 0,
-    description: 'Perfil essencial no diretório de Itapoá com CRM e 3 fotos na galeria.',
-    features: ['Perfil básico', '3 fotos na galeria', 'CRM de leads', 'Métricas essenciais', 'Listagem no diretório']
+    description: 'Presença essencial no guia.',
+    features: [
+      'Perfil com informações essenciais no guia local',
+      'Até 3 fotos na galeria (logo e capa à parte)',
+      'Canal direto para WhatsApp e telefone',
+      'CRM de mensagens e contatos recebidos',
+      'Métricas essenciais de visualizações'
+    ]
   },
   gold_vip: {
     id: 'plan_gold_vip',
@@ -91,8 +97,16 @@ export const CANONICAL_PLANS: Record<PlanTier, PlanDefinition> = {
     isRecommended: true,
     allowNewSubscriptions: true,
     trialDays: 0,
-    description: 'Apresentação completa, 15 fotos, 5 produtos, 1 promoção e destaque rotativo na Home.',
-    features: ['Apresentação completa', '15 fotos na galeria', '5 produtos ou serviços', '1 promoção/cupom', 'Destaque rotativo na Home', 'Selo VIP', 'CRM de leads']
+    description: 'Mais exposição e vitrine ampliada.',
+    features: [
+      'Mais exposição com destaque rotativo na Home',
+      'Vitrine ampliada com apresentação completa e capa',
+      'Até 15 fotos na galeria exclusiva',
+      'Catálogo com até 5 produtos ou serviços',
+      '1 promoção ou cupom de desconto ativo',
+      'Selo VIP de estabelecimento verificado',
+      'Perfil exclusivo sem anúncios de concorrentes'
+    ]
   },
   diamond_extremo: {
     id: 'plan_diamond_extremo',
@@ -115,8 +129,16 @@ export const CANONICAL_PLANS: Record<PlanTier, PlanDefinition> = {
     isRecommended: false,
     allowNewSubscriptions: true,
     trialDays: 0,
-    description: 'Topo das buscas, 30 fotos, 30 produtos, 3 promoções e mini-site de máxima visibilidade.',
-    features: ['Todos os recursos Gold', '30 fotos na galeria', '30 produtos ou serviços', '3 promoções/cupons simultâneos', 'Topo das buscas', 'Destaque Diamante prioritário', 'CRM avançado', 'Mini-site exclusivo']
+    description: 'Recursos Gold com maior capacidade de catálogo, fotos e promoções.',
+    features: [
+      'Todos os benefícios e recursos do plano Gold VIP',
+      'Maior capacidade de catálogo: até 30 produtos ou serviços',
+      'Galeria expandida: até 30 fotos em alta qualidade',
+      'Até 3 promoções ou cupons simultâneos',
+      'Posicionamento prioritário nas buscas por categoria',
+      'Selo Diamante de parceiro oficial',
+      'Mini-site exclusivo de alta conversão sem concorrentes'
+    ]
   }
 };
 
