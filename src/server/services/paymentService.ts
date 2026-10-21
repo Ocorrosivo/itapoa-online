@@ -114,12 +114,13 @@ class PaymentService {
       return { subscriptionId, status: 'unknown' };
     }
     const payment: any = await response.json().catch(() => ({}));
-    if (!response.ok || !payment.id) {
-      const errDetail = payment?.message || (Array.isArray(payment?.cause) ? payment.cause.map((c: any) => c.description || c.code).join(', ') : '');
+      let errDetail = payment?.message || (Array.isArray(payment?.cause) ? payment.cause.map((c: any) => c.description || c.code).join(', ') : '');
       console.error(`[payment-card] Mercado Pago error (HTTP ${response.status}):`, errDetail);
+      if (errDetail === 'Unauthorized use of live credentials') {
+        errDetail = 'Credenciais de produção não autorizadas pelo Mercado Pago: complete a homologação no painel Mercado Pago Developers para habilitar cobranças em produção (ou utilize chaves TEST- para testes).';
+      }
       if (response.status >= 500) return { subscriptionId, status: 'unknown' };
       throw new PaymentError(response.status === 400 ? 400 : 422, errDetail || 'O Mercado Pago não conseguiu processar esta tentativa. Confira os dados ou tente novamente.');
-    }
     await pool.query(
       `INSERT INTO payment_logs (id, subscriptionId, amount, status, gateway_reference) VALUES (?, ?, ?, 'pending', ?)
        ON DUPLICATE KEY UPDATE gateway_reference = VALUES(gateway_reference)`,
@@ -231,8 +232,11 @@ class PaymentService {
       });
       mp = await resp.json().catch(() => ({}));
       if (!resp.ok) {
-        const errDetail = mp?.message || mp?.error || (Array.isArray(mp?.cause) ? mp.cause.map((c: any) => c.description || c.code).join(', ') : '');
+        let errDetail = mp?.message || mp?.error || (Array.isArray(mp?.cause) ? mp.cause.map((c: any) => c.description || c.code).join(', ') : '');
         console.error(`[payment-pix] Mercado Pago error (HTTP ${resp.status}):`, errDetail, JSON.stringify(mp));
+        if (errDetail === 'Unauthorized use of live credentials') {
+          errDetail = 'Credenciais de produção não autorizadas pelo Mercado Pago: complete a homologação no painel Mercado Pago Developers para habilitar cobranças em produção (ou utilize chaves TEST- para testes).';
+        }
         throw new PaymentError(422, errDetail || 'Falha ao criar cobrança Pix no gateway.');
       }
     } catch (err) {
