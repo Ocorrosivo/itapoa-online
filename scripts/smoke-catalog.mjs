@@ -36,6 +36,18 @@ try {
     : { status: 'ok', database: 'connected' });
 
   if (offline) {
+    const recovery = await request('/api/auth/recovery-status');
+    assert.equal(recovery.response.status, 200);
+    assert.deepEqual(recovery.body, { available: false });
+    assert.equal(recovery.response.headers.get('cache-control'), 'no-store');
+    for (const [path, body] of [
+      ['/api/auth/forgot-password', { email: 'offline@example.test' }],
+      ['/api/auth/reset-password', { token: 'a'.repeat(64), password: 'Test-only-password-123' }],
+    ]) {
+      const response = await fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      assert.equal(response.status, 503);
+      assert.ok(!JSON.stringify(await response.json()).includes('sql'));
+    }
     for (const path of ['/api/companies', '/api/categories', '/api/cities']) {
       const result = await request(path);
       assert.equal(result.response.status, 503, path);
@@ -60,9 +72,13 @@ try {
     assert.equal((await request('/api/companies?q=%27%20OR%201%3D1--')).body.length, 0);
   }
 
-  for (const path of ['/', '/empresas', '/empresa/mercado-central-itapoa']) {
+  for (const path of ['/', '/empresas', '/empresa/mercado-central-itapoa', '/esqueci-senha', '/redefinir-senha']) {
     const response = await fetch(base + path);
     assert.equal(response.status, 200, path);
+    if (path.endsWith('-senha')) {
+      assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+    }
     assert.ok((await response.text()).includes('id="root"'));
   }
   assert.equal((await request('/api/endpoint-inexistente')).response.status, 404);

@@ -38,7 +38,7 @@ async function setup(page: Page, ready = true) {
     await route.fulfill({ status: 200, json: body });
   });
   await page.goto(base + '/planos');
-  await page.getByRole('button', { name: 'Assinar Plano Gold' }).click();
+  await page.getByRole('button', { name: 'Assinar Gold VIP', exact: true }).click();
   await expect(page).toHaveURL(/\/checkout$/);
   await expect(page.getByRole('heading', { name: 'Finalize seu plano' })).toBeVisible();
   return writes;

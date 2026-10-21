@@ -8,6 +8,7 @@ import bcrypt from 'bcryptjs';
 import { pool } from '../mysql.js';
 import { UserRepository } from '../repositories/baseRepository.js';
 import { signToken, AuthenticatedUser } from '../middleware/auth.js';
+import { sessionVersion } from './sessionVersion.js';
 
 const BCRYPT_ROUNDS = 12;
 const MIN_PASSWORD_LENGTH = 8;
@@ -58,6 +59,9 @@ export class AuthService {
     }
 
     const row = await UserRepository.findRawBy('email', email);
+    // Capture the session version BEFORE checking the password. A simultaneous
+    // reset must never mint a new-version token from the old password snapshot.
+    const version = row ? await sessionVersion(String(row.id)) : 0;
 
     // Compare against a dummy hash when the user is absent to keep the timing
     // profile of both branches similar.
@@ -67,9 +71,11 @@ export class AuthService {
     if (!row || !row.password || !passwordMatches) {
       throw new AuthError(401, 'Credenciais inválidas.');
     }
+    const fresh = await UserRepository.findRawBy('id', String(row.id));
+    if (!fresh || fresh.password !== row.password) throw new AuthError(401, 'Credenciais inválidas.');
 
     const user = toPublicUser(row);
-    return { token: signToken({ id: user.id, email: user.email, role: user.role }), user };
+    return { token: signToken({ id: user.id, email: user.email, role: user.role, av: version }), user };
   }
 
   /**

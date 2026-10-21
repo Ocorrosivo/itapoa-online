@@ -49,4 +49,7 @@ O deploy troca apenas a imagem e preserva as variáveis e volumes configurados n
 
 Não reimportar seeds nem executar migrações no deploy. Mudanças de banco exigem autorização e backup separados.
 
+Recuperação real de senha: seguir `deployment/PASSWORD_RECOVERY.md`. SMTP e a migração
+aditiva exigem ativação explícita; não são configurados como efeito colateral do deploy.
+
 Para recuperar código, preferir `git revert <commit>` revisado e novo push, ou restaurar a imagem conhecida no Easypanel. Não resetar/force-push, recriar o serviço ou apagar volumes.

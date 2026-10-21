@@ -38,8 +38,10 @@ import {
 } from '../middleware/auth.js';
 import { checkConnection, isDatabaseUnavailable } from '../mysql.js';
 import { env } from '../config/env.js';
+import { passwordRecoveryRouter } from './passwordRecovery.js';
 
 export const apiRouter = Router();
+apiRouter.use('/auth', passwordRecoveryRouter);
 
 const ADMIN_ONLY = ['admin_master'];
 

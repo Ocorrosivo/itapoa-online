@@ -10,6 +10,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { pool } from '../mysql.js';
 import { env } from '../config/env.js';
+import { sessionVersion } from '../services/sessionVersion.js';
 
 export interface AuthenticatedUser {
   id: string;
@@ -29,7 +30,7 @@ declare global {
   }
 }
 
-export const signToken = (payload: { id: string; email: string; role: string }): string =>
+export const signToken = (payload: { id: string; email: string; role: string; av?: number }): string =>
   jwt.sign(payload, env.jwtSecret, { expiresIn: env.jwtExpiresIn } as jwt.SignOptions);
 
 /**
@@ -44,9 +45,12 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
     }
 
     const token = authHeader.slice('Bearer '.length).trim();
-    const decoded = jwt.verify(token, env.jwtSecret) as { id?: string };
+    const decoded = jwt.verify(token, env.jwtSecret) as { id?: string; av?: number };
     if (!decoded?.id) {
       return res.status(401).json({ error: 'Token inválido.' });
+    }
+    if ((decoded.av ?? 0) !== await sessionVersion(decoded.id)) {
+      return res.status(401).json({ error: 'Sessão encerrada. Entre novamente.' });
     }
 
     const [rows]: any = await pool.query(
@@ -79,8 +83,9 @@ export const optionalAuth = async (req: Request, _res: Response, next: NextFunct
 
   try {
     const token = authHeader.slice('Bearer '.length).trim();
-    const decoded = jwt.verify(token, env.jwtSecret) as { id?: string };
+    const decoded = jwt.verify(token, env.jwtSecret) as { id?: string; av?: number };
     if (!decoded?.id) return next();
+    if ((decoded.av ?? 0) !== await sessionVersion(decoded.id)) return next();
 
     const [rows]: any = await pool.query(
       'SELECT id, name, email, role, city FROM users WHERE id = ? LIMIT 1',

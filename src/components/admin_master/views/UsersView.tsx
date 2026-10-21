@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react';
 import { Users, Search, Plus, ShieldCheck, Lock, Unlock, Key, Trash2, Edit2, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { api } from '../../../lib/apiClient';
 
 export interface UserAccount {
   id: string;
@@ -124,8 +125,13 @@ export const UsersView: React.FC = () => {
     }
   };
 
-  const handleResetPassword = (email: string) => {
-    showFeedback(`E-mail de redefinição de senha enviado para ${email}.`);
+  const handleResetPassword = async (email: string) => {
+    try {
+      const result = await api.post<{ message: string }>('/api/auth/forgot-password', { email });
+      showFeedback(result.message);
+    } catch (error) {
+      showFeedback(error instanceof Error ? error.message : 'Não foi possível solicitar a recuperação.');
+    }
   };
 
   return (
