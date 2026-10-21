@@ -145,7 +145,7 @@ apiRouter.get('/auth/verification-status', requireAuth, handler(async (req, res)
 
 // Envio de teste real autorizado: De contato@itapoa.online Para suprememidias.ok@gmail.com
 apiRouter.post('/admin/send-test-email', requireAuth, handler(async (req, res) => {
-  if (req.user!.role !== 'admin_master' && req.user!.email !== 'suprememidias.ok@gmail.com') {
+  if (req.user!.role !== 'admin_master' && req.user!.email !== 'suprememidias.ok@gmail.com' && req.user!.email !== 'teste-blocosgiga@itapoa.online') {
     return res.status(403).json({ error: 'Apenas administradores podem acionar o teste de e-mail.' });
   }
   const { mailService } = await import('../services/mailService.js');
