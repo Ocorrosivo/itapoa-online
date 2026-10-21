@@ -194,12 +194,18 @@ class PaymentService {
           [companyId, planId, userId]
         );
         if (pending.length > 0) {
-          await conn.query('SELECT RELEASE_LOCK(?)', [lockKey]);
-          await conn.rollback();
-          conn.release();
           const reuse = await this.getActivePixForCompany(companyId, planId, userId);
-          if (reuse) return reuse;
-          throw new PaymentError(409, 'Já existe uma cobrança pendente para este plano. Aguarde a expiração ou use a recuperação.');
+          if (reuse) {
+            await conn.query('SELECT RELEASE_LOCK(?)', [lockKey]);
+            await conn.rollback();
+            conn.release();
+            return reuse;
+          }
+          // Cobrança no gateway não foi concluída ou já expirou: cancelar tentativa órfã e prosseguir com nova cobrança
+          await conn.query(
+            "UPDATE subscriptions SET status = 'canceled' WHERE companyId = ? AND planId = ? AND userId = ? AND status = 'pending' AND paymentMethod = 'pix'",
+            [companyId, planId, userId]
+          );
         }
 
         subscriptionId = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
