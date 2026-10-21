@@ -114,6 +114,7 @@ class PaymentService {
       return { subscriptionId, status: 'unknown' };
     }
     const payment: any = await response.json().catch(() => ({}));
+    if (!response.ok || !payment.id) {
       let errDetail = payment?.message || (Array.isArray(payment?.cause) ? payment.cause.map((c: any) => c.description || c.code).join(', ') : '');
       console.error(`[payment-card] Mercado Pago error (HTTP ${response.status}):`, errDetail);
       if (errDetail === 'Unauthorized use of live credentials') {
@@ -121,6 +122,7 @@ class PaymentService {
       }
       if (response.status >= 500) return { subscriptionId, status: 'unknown' };
       throw new PaymentError(response.status === 400 ? 400 : 422, errDetail || 'O Mercado Pago não conseguiu processar esta tentativa. Confira os dados ou tente novamente.');
+    }
     await pool.query(
       `INSERT INTO payment_logs (id, subscriptionId, amount, status, gateway_reference) VALUES (?, ?, ?, 'pending', ?)
        ON DUPLICATE KEY UPDATE gateway_reference = VALUES(gateway_reference)`,
