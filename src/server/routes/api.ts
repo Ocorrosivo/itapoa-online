@@ -647,13 +647,9 @@ apiRouter.post('/analytics/events', handler(async (req, res) => {
 
   // Incrementa contador consolidado em companies
   if (rawType === 'view') {
-    await pool.query('UPDATE companies SET views = views + 1 WHERE id = ?', [company_id]);
+    await pool.query('UPDATE companies SET views = views + 1 WHERE id = ?', [company_id]).catch(() => {});
   } else if (rawType === 'whatsapp') {
-    await pool.query('UPDATE companies SET clicksWhatsapp = clicksWhatsapp + 1 WHERE id = ?', [company_id]);
-  } else if (rawType === 'phone') {
-    await pool.query('UPDATE companies SET clicksPhone = clicksPhone + 1 WHERE id = ?', [company_id]);
-  } else if (rawType === 'route') {
-    await pool.query('UPDATE companies SET clicksRoute = clicksRoute + 1 WHERE id = ?', [company_id]);
+    await pool.query('UPDATE companies SET clicksWhatsapp = clicksWhatsapp + 1 WHERE id = ?', [company_id]).catch(() => {});
   }
 
   res.json({ success: true, eventId });
@@ -692,10 +688,16 @@ apiRouter.get('/companies/:id/analytics', requireAuth, requireCompanyParam('id')
 
   // Totais consolidados
   const [companyRows]: any = await pool.query(
-    'SELECT views, clicksWhatsapp, clicksPhone, clicksRoute FROM companies WHERE id = ? LIMIT 1',
+    'SELECT views, clicksWhatsapp FROM companies WHERE id = ? LIMIT 1',
     [companyId]
-  );
-  const totals = companyRows[0] || { views: 0, clicksWhatsapp: 0, clicksPhone: 0, clicksRoute: 0 };
+  ).catch(() => [[]]);
+  const cRow = companyRows[0] || {};
+  const totals = {
+    views: Number(cRow.views || 0),
+    clicksWhatsapp: Number(cRow.clicksWhatsapp || 0),
+    clicksPhone: 0,
+    clicksRoute: 0
+  };
 
   const dayMap = new Map<string, { views: number; whatsapp: number; phone: number; route: number }>();
   for (const r of dailyRows) {
