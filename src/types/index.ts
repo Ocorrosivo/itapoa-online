@@ -86,6 +86,8 @@ export interface Company {
   longitude: number;
   isSponsored: boolean;
   planLevel: PlanLevel;
+  access_grant_type?: 'bronze' | 'trial' | 'paid' | 'admin_grant';
+  trial_ends_at?: string | null;
   features: string[];
   products: ProductOrService[];
   faqs: FAQItem[];

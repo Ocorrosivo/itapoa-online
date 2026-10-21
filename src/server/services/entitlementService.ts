@@ -31,16 +31,25 @@ export interface PlanLimits {
 export interface PlanDefinition extends PlanLimits {
   id: string;
   name: string;
+  displayName?: string;
   price: number;
   billingCycle: 'monthly';
   version: number;
   description: string;
+  badge?: string;
+  buttonText?: string;
+  sortOrder?: number;
+  isRecommended?: boolean;
+  allowNewSubscriptions?: boolean;
+  trialDays?: number;
+  features?: string[];
 }
 
 export const CANONICAL_PLANS: Record<PlanTier, PlanDefinition> = {
   bronze: {
     id: 'plan_bronze',
     name: 'Bronze',
+    displayName: 'Bronze Gratuito',
     price: 0.00,
     billingCycle: 'monthly',
     version: 1,
@@ -52,11 +61,19 @@ export const CANONICAL_PLANS: Record<PlanTier, PlanDefinition> = {
     hasFullPresentation: false,
     hasAnalytics: true,
     priorityLevel: 1,
-    description: 'Perfil essencial no diretório de Itapoá com CRM e 3 fotos na galeria.'
+    badge: 'Gratuito',
+    buttonText: 'Começar Gratuitamente',
+    sortOrder: 1,
+    isRecommended: false,
+    allowNewSubscriptions: true,
+    trialDays: 0,
+    description: 'Perfil essencial no diretório de Itapoá com CRM e 3 fotos na galeria.',
+    features: ['Perfil básico', '3 fotos na galeria', 'CRM de leads', 'Métricas essenciais', 'Listagem no diretório']
   },
   gold_vip: {
     id: 'plan_gold_vip',
     name: 'Gold VIP',
+    displayName: 'Gold VIP',
     price: 49.90,
     billingCycle: 'monthly',
     version: 1,
@@ -68,11 +85,19 @@ export const CANONICAL_PLANS: Record<PlanTier, PlanDefinition> = {
     hasFullPresentation: true,
     hasAnalytics: true,
     priorityLevel: 2,
-    description: 'Apresentação completa, 15 fotos, 5 produtos, 1 promoção e destaque rotativo na Home.'
+    badge: 'Mais Popular',
+    buttonText: 'Assinar Gold VIP',
+    sortOrder: 2,
+    isRecommended: true,
+    allowNewSubscriptions: true,
+    trialDays: 0,
+    description: 'Apresentação completa, 15 fotos, 5 produtos, 1 promoção e destaque rotativo na Home.',
+    features: ['Apresentação completa', '15 fotos na galeria', '5 produtos ou serviços', '1 promoção/cupom', 'Destaque rotativo na Home', 'Selo VIP', 'CRM de leads']
   },
   diamond_extremo: {
     id: 'plan_diamond_extremo',
     name: 'Diamond',
+    displayName: 'Diamond',
     price: 99.90,
     billingCycle: 'monthly',
     version: 1,
@@ -84,7 +109,14 @@ export const CANONICAL_PLANS: Record<PlanTier, PlanDefinition> = {
     hasFullPresentation: true,
     hasAnalytics: true,
     priorityLevel: 3,
-    description: 'Topo das buscas, 30 fotos, 30 produtos, 3 promoções e mini-site de máxima visibilidade.'
+    badge: 'Máxima Exposição',
+    buttonText: 'Assinar Diamond',
+    sortOrder: 3,
+    isRecommended: false,
+    allowNewSubscriptions: true,
+    trialDays: 0,
+    description: 'Topo das buscas, 30 fotos, 30 produtos, 3 promoções e mini-site de máxima visibilidade.',
+    features: ['Todos os recursos Gold', '30 fotos na galeria', '30 produtos ou serviços', '3 promoções/cupons simultâneos', 'Topo das buscas', 'Destaque Diamante prioritário', 'CRM avançado', 'Mini-site exclusivo']
   }
 };
 
@@ -134,9 +166,55 @@ export interface CompanyEntitlements {
 
 export class EntitlementService {
   /**
-   * Retorna os planos canônicos com limites e preços versionados
+   * Retorna os planos do catálogo consultando o banco dinamicamente, com fallback para os canônicos.
+   * Permite que edições no painel administrativo reflitam imediatamente sem novo deploy.
    */
-  static getPlansCatalog(): PlanDefinition[] {
+  static async getPlansCatalog(): Promise<PlanDefinition[]> {
+    try {
+      const [rows]: any = await pool.query(
+        `SELECT * FROM plans WHERE is_active = 1 ORDER BY sort_order ASC, price ASC`
+      );
+      if (Array.isArray(rows) && rows.length > 0) {
+        return rows.map((r: any) => {
+          let parsedFeatures: string[] = [];
+          if (Array.isArray(r.features)) {
+            parsedFeatures = r.features;
+          } else if (typeof r.features === 'string') {
+            try {
+              parsedFeatures = JSON.parse(r.features);
+            } catch {
+              parsedFeatures = [r.features];
+            }
+          }
+          return {
+            id: String(r.id),
+            name: String(r.name),
+            displayName: r.display_name || String(r.name),
+            price: Number(r.price) || 0,
+            billingCycle: 'monthly',
+            version: Number(r.version) || 1,
+            description: r.description || '',
+            maxGalleryPhotos: Number(r.max_gallery_photos ?? 3),
+            maxProducts: Number(r.max_products ?? 0),
+            maxCoupons: Number(r.max_coupons ?? 0),
+            hasHomeHighlight: Boolean(r.has_home_highlight),
+            hasCrm: Boolean(r.has_crm),
+            hasFullPresentation: Boolean(r.has_full_presentation),
+            hasAnalytics: Boolean(r.has_analytics),
+            priorityLevel: Number(r.sort_order ?? 1),
+            badge: r.badge || undefined,
+            buttonText: r.button_text || undefined,
+            sortOrder: Number(r.sort_order ?? 0),
+            isRecommended: Boolean(r.is_recommended),
+            allowNewSubscriptions: r.allow_new_subscriptions !== undefined ? Boolean(r.allow_new_subscriptions) : true,
+            trialDays: Number(r.trial_days ?? 0),
+            features: parsedFeatures
+          };
+        });
+      }
+    } catch {
+      // Fallback gracioso para os planos padrão em caso de banco offline ou tabela inacessível
+    }
     return Object.values(CANONICAL_PLANS);
   }
 
@@ -149,7 +227,8 @@ export class EntitlementService {
   }
 
   /**
-   * Avalia a origem da concessão de acesso e os direitos efetivos de uma empresa
+   * Avalia a origem da concessão de acesso e os direitos efetivos de uma empresa.
+   * Regra estrita: a expiração de uma concessão administrativa NUNCA remove uma contratação paga válida.
    */
   static async getCompanyEntitlements(companyId: string): Promise<CompanyEntitlements> {
     // 1. Buscar dados da empresa
@@ -159,7 +238,6 @@ export class EntitlementService {
        FROM companies WHERE id = ? LIMIT 1`,
       [companyId]
     ).catch(async () => {
-      // Fallback caso colunas da migration ainda não existam no MySQL legado
       return await pool.query(
         `SELECT id, name, slug, logo, coverImage, isSponsored, planLevel
          FROM companies WHERE id = ? LIMIT 1`,
@@ -185,6 +263,39 @@ export class EntitlementService {
 
     const activeSub = subsRows && subsRows.length > 0 ? subsRows[0] : null;
 
+    // 2.1 Verificar concessão administrativa registrada em admin_plan_grants
+    const [grantRows]: any = await pool.query(
+      `SELECT id, granted_plan, start_date, end_date, reason, status
+       FROM admin_plan_grants
+       WHERE company_id = ? AND status = 'active'
+       ORDER BY created_at DESC LIMIT 1`,
+      [companyId]
+    ).catch(() => [[]]);
+
+    const activeGrant = grantRows && grantRows.length > 0 ? grantRows[0] : null;
+    const now = new Date();
+
+    // Se houver concessão ativa expirada pelo tempo:
+    let validAdminGrant = activeGrant;
+    if (activeGrant && new Date(activeGrant.end_date) <= now) {
+      validAdminGrant = null;
+      await pool.query(
+        `UPDATE admin_plan_grants SET status = 'expired' WHERE id = ?`,
+        [activeGrant.id]
+      ).catch(() => {});
+
+      // Expiração não pode remover outra contratação válida:
+      // Se tiver assinatura paga, retorna para o plano contratado pago; senão, bronze.
+      const fallbackPlan = activeSub ? normalizePlanTier(activeSub.planId) : 'bronze';
+      const fallbackGrantType = activeSub ? 'paid' : 'bronze';
+      await pool.query(
+        `UPDATE companies SET planLevel = ?, access_grant_type = ?, isSponsored = ? WHERE id = ?`,
+        [fallbackPlan, fallbackGrantType, activeSub ? 1 : 0, companyId]
+      ).catch(() => {});
+      company.planLevel = fallbackPlan;
+      company.access_grant_type = fallbackGrantType;
+    }
+
     // 3. Determinar o Grant Type (Origem da concessão)
     let grantType: AccessGrantType = 'bronze';
     let effectiveTier: PlanTier = 'bronze';
@@ -192,19 +303,23 @@ export class EntitlementService {
     let trialEndsAt: string | null = null;
     let isAdminGrant = false;
 
-    const now = new Date();
-    if (company.trial_ends_at && new Date(company.trial_ends_at) > now) {
+    if (validAdminGrant) {
+      // Concessão administrativa ativa
+      grantType = 'admin_grant';
+      isAdminGrant = true;
+      effectiveTier = normalizePlanTier(validAdminGrant.granted_plan);
+    } else if (company.trial_ends_at && new Date(company.trial_ends_at) > now) {
       grantType = 'trial';
       isTrial = true;
       trialEndsAt = new Date(company.trial_ends_at).toISOString();
       effectiveTier = normalizePlanTier(company.planLevel || 'gold_vip');
     } else if (activeSub) {
+      // Assinatura paga ativa preservada
       grantType = 'paid';
       effectiveTier = normalizePlanTier(activeSub.planId || company.planLevel);
-    } else if (Number(company.isSponsored) === 1 || company.access_grant_type === 'admin_grant') {
+    } else if (company.access_grant_type === 'admin_grant' || Number(company.isSponsored) === 1) {
       grantType = 'admin_grant';
       isAdminGrant = true;
-      // Concessão manual administrativa: respeita o planLevel concedido pelo admin
       effectiveTier = normalizePlanTier(company.planLevel);
     } else {
       grantType = 'bronze';
@@ -377,4 +492,305 @@ export class EntitlementService {
       planName: ent.planName
     };
   }
+
+  /**
+   * Concede Gold VIP ou Diamond promocional administrativamente.
+   * Não gera cobrança nem pagamento fictício.
+   */
+  static async grantAdminPlan(
+    companyId: string,
+    grantedPlan: string,
+    startDateStr: string,
+    endDateStr: string,
+    reason: string,
+    user?: { id?: string; email?: string }
+  ) {
+    const tier = normalizePlanTier(grantedPlan);
+    if (tier !== 'gold_vip' && tier !== 'diamond_extremo') {
+      throw new Error('Apenas os planos Gold VIP ou Diamond podem ser concedidos promocionalmente.');
+    }
+
+    const start = new Date(startDateStr);
+    const end = new Date(endDateStr);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      throw new Error('Datas de início e término inválidas.');
+    }
+    if (end <= start) {
+      throw new Error('A data de término deve ser posterior à data de início.');
+    }
+    if (!reason || reason.trim().length < 5) {
+      throw new Error('O motivo da concessão deve ter no mínimo 5 caracteres.');
+    }
+
+    // 1. Desativar concessões ativas anteriores
+    await pool.query(
+      `UPDATE admin_plan_grants 
+       SET status = 'revoked', revoked_at = NOW(), revoked_reason = 'Substituída por nova concessão'
+       WHERE company_id = ? AND status = 'active'`,
+      [companyId]
+    ).catch(() => {});
+
+    // 2. Inserir nova concessão
+    const grantId = `grant_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    await pool.query(
+      `INSERT INTO admin_plan_grants 
+       (id, company_id, granted_plan, start_date, end_date, reason, status, granted_by_user_id, granted_by_email)
+       VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+      [
+        grantId,
+        companyId,
+        tier,
+        start.toISOString().slice(0, 19).replace('T', ' '),
+        end.toISOString().slice(0, 19).replace('T', ' '),
+        reason.trim(),
+        user?.id || null,
+        user?.email || null
+      ]
+    );
+
+    // 3. Atualizar empresa (sem gerar pagamento ou registro de gateway falso)
+    await pool.query(
+      `UPDATE companies 
+       SET planLevel = ?, access_grant_type = 'admin_grant', isSponsored = 1 
+       WHERE id = ?`,
+      [tier, companyId]
+    );
+
+    return {
+      success: true,
+      grantId,
+      companyId,
+      grantedPlan: tier,
+      startDate: start.toISOString(),
+      endDate: end.toISOString()
+    };
+  }
+
+  /**
+   * Revoga a concessão promocional de uma empresa.
+   * Preserva qualquer contratação paga existente (não a remove).
+   */
+  static async revokeAdminPlan(
+    companyId: string,
+    reason?: string,
+    _user?: { id?: string; email?: string }
+  ) {
+    const revokeReason = reason?.trim() || 'Revogação manual pelo administrador';
+
+    // 1. Marcar concessões ativas como revogadas
+    await pool.query(
+      `UPDATE admin_plan_grants 
+       SET status = 'revoked', revoked_at = NOW(), revoked_reason = ?
+       WHERE company_id = ? AND status = 'active'`,
+      [revokeReason, companyId]
+    ).catch(() => {});
+
+    // 2. Checar se a empresa tem assinatura paga ativa para restaurar
+    const [subsRows]: any = await pool.query(
+      `SELECT id, planId FROM subscriptions WHERE companyId = ? AND status = 'active' ORDER BY createdAt DESC LIMIT 1`,
+      [companyId]
+    ).catch(() => [[]]);
+
+    const activeSub = subsRows && subsRows.length > 0 ? subsRows[0] : null;
+    const restoredPlan = activeSub ? normalizePlanTier(activeSub.planId) : 'bronze';
+    const restoredGrantType = activeSub ? 'paid' : 'bronze';
+
+    // 3. Restaurar plano da empresa
+    await pool.query(
+      `UPDATE companies 
+       SET planLevel = ?, access_grant_type = ?, isSponsored = ? 
+       WHERE id = ?`,
+      [restoredPlan, restoredGrantType, activeSub ? 1 : 0, companyId]
+    );
+
+    return {
+      success: true,
+      companyId,
+      restoredPlan,
+      restoredGrantType
+    };
+  }
+
+  /**
+   * Renova ou estende o prazo de uma concessão ativa
+   */
+  static async renewAdminPlan(
+    companyId: string,
+    newEndDateStr: string,
+    reason?: string,
+    _user?: { id?: string; email?: string }
+  ) {
+    const newEnd = new Date(newEndDateStr);
+    if (isNaN(newEnd.getTime()) || newEnd <= new Date()) {
+      throw new Error('A nova data de término deve ser válida e posterior ao momento atual.');
+    }
+
+    const renewalReason = reason?.trim() ? ` | Renovado: ${reason.trim()}` : ' | Prazo renovado';
+
+    const [result]: any = await pool.query(
+      `UPDATE admin_plan_grants 
+       SET end_date = ?, reason = CONCAT(reason, ?)
+       WHERE company_id = ? AND status = 'active'`,
+      [newEnd.toISOString().slice(0, 19).replace('T', ' '), renewalReason, companyId]
+    );
+
+    if (result.affectedRows === 0) {
+      throw new Error('Não há concessão ativa para ser renovada nesta empresa.');
+    }
+
+    return {
+      success: true,
+      companyId,
+      newEndDate: newEnd.toISOString()
+    };
+  }
+
+  /**
+   * Consulta histórico de concessões administrativas de uma empresa
+   */
+  static async getGrantsHistory(companyId: string) {
+    const [rows]: any = await pool.query(
+      `SELECT id, company_id, granted_plan, start_date, end_date, reason, status,
+              granted_by_user_id, granted_by_email, revoked_at, revoked_reason, created_at, updated_at
+       FROM admin_plan_grants
+       WHERE company_id = ?
+       ORDER BY created_at DESC`,
+      [companyId]
+    ).catch(() => [[]]);
+
+    return rows || [];
+  }
+
+  /**
+   * Atualização de planos pelo administrador com validação estrita e auditoria.
+   * Regra: Alterar texto comercial NUNCA concede permissões técnicas automaticamente.
+   */
+  static async updatePlan(
+    planId: string,
+    updates: Record<string, any>,
+    user?: { id?: string; email?: string },
+    ipAddress?: string
+  ) {
+    // 1. Buscar plano atual
+    const [rows]: any = await pool.query(
+      `SELECT * FROM plans WHERE id = ? LIMIT 1`,
+      [planId]
+    );
+    if (!rows || rows.length === 0) {
+      throw new Error(`Plano ${planId} não encontrado.`);
+    }
+    const current = rows[0];
+
+    // 2. Validações estritas de tipos
+    const price = updates.price !== undefined ? Math.max(0, Number(updates.price)) : Number(current.price);
+    const maxGalleryPhotos = updates.maxGalleryPhotos !== undefined
+      ? Math.max(0, parseInt(String(updates.maxGalleryPhotos), 10))
+      : Number(current.max_gallery_photos ?? 3);
+    const maxProducts = updates.maxProducts !== undefined
+      ? Math.max(0, parseInt(String(updates.maxProducts), 10))
+      : Number(current.max_products ?? 0);
+    const maxCoupons = updates.maxCoupons !== undefined
+      ? Math.max(0, parseInt(String(updates.maxCoupons), 10))
+      : Number(current.max_coupons ?? 0);
+
+    const hasHomeHighlight = updates.hasHomeHighlight !== undefined
+      ? (updates.hasHomeHighlight ? 1 : 0)
+      : Number(current.has_home_highlight ?? 0);
+    const hasCrm = updates.hasCrm !== undefined
+      ? (updates.hasCrm ? 1 : 0)
+      : Number(current.has_crm ?? 1);
+    const hasFullPresentation = updates.hasFullPresentation !== undefined
+      ? (updates.hasFullPresentation ? 1 : 0)
+      : Number(current.has_full_presentation ?? 0);
+    const hasAnalytics = updates.hasAnalytics !== undefined
+      ? (updates.hasAnalytics ? 1 : 0)
+      : Number(current.has_analytics ?? 1);
+
+    const displayName = updates.displayName ? String(updates.displayName).trim() : (current.display_name || current.name);
+    const description = updates.description !== undefined ? String(updates.description).trim() : current.description;
+    const badge = updates.badge !== undefined ? String(updates.badge).trim() : current.badge;
+    const buttonText = updates.buttonText !== undefined ? String(updates.buttonText).trim() : current.button_text;
+    const sortOrder = updates.sortOrder !== undefined ? parseInt(String(updates.sortOrder), 10) : Number(current.sort_order ?? 0);
+    const isRecommended = updates.isRecommended !== undefined ? (updates.isRecommended ? 1 : 0) : Number(current.is_recommended ?? 0);
+    const allowNewSubscriptions = updates.allowNewSubscriptions !== undefined
+      ? (updates.allowNewSubscriptions ? 1 : 0)
+      : Number(current.allow_new_subscriptions ?? 1);
+    const trialDays = updates.trialDays !== undefined ? Math.max(0, parseInt(String(updates.trialDays), 10)) : Number(current.trial_days ?? 0);
+
+    let featuresJson = current.features;
+    if (updates.features) {
+      const arr = Array.isArray(updates.features) ? updates.features : [String(updates.features)];
+      featuresJson = JSON.stringify(arr);
+    }
+
+    // 3. Montar log de auditoria
+    const changes: Record<string, { before: any; after: any }> = {};
+    if (Number(current.price) !== price) changes.price = { before: current.price, after: price };
+    if (Number(current.max_gallery_photos) !== maxGalleryPhotos) changes.maxGalleryPhotos = { before: current.max_gallery_photos, after: maxGalleryPhotos };
+    if (Number(current.max_products) !== maxProducts) changes.maxProducts = { before: current.max_products, after: maxProducts };
+    if (Number(current.max_coupons) !== maxCoupons) changes.maxCoupons = { before: current.max_coupons, after: maxCoupons };
+    if (current.display_name !== displayName) changes.displayName = { before: current.display_name, after: displayName };
+    if (current.description !== description) changes.description = { before: current.description, after: description };
+    if (current.badge !== badge) changes.badge = { before: current.badge, after: badge };
+    if (current.button_text !== buttonText) changes.buttonText = { before: current.button_text, after: buttonText };
+    if (current.is_recommended !== isRecommended) changes.isRecommended = { before: current.is_recommended, after: isRecommended };
+    if (current.allow_new_subscriptions !== allowNewSubscriptions) changes.allowNewSubscriptions = { before: current.allow_new_subscriptions, after: allowNewSubscriptions };
+    if (current.trial_days !== trialDays) changes.trialDays = { before: current.trial_days, after: trialDays };
+
+    // 4. Salvar na tabela plans
+    await pool.query(
+      `UPDATE plans SET
+         display_name = ?, description = ?, price = ?,
+         max_gallery_photos = ?, max_products = ?, max_coupons = ?,
+         has_home_highlight = ?, has_crm = ?, has_full_presentation = ?, has_analytics = ?,
+         badge = ?, button_text = ?, sort_order = ?, is_recommended = ?,
+         allow_new_subscriptions = ?, trial_days = ?, features = ?
+       WHERE id = ?`,
+      [
+        displayName, description, price,
+        maxGalleryPhotos, maxProducts, maxCoupons,
+        hasHomeHighlight, hasCrm, hasFullPresentation, hasAnalytics,
+        badge, buttonText, sortOrder, isRecommended,
+        allowNewSubscriptions, trialDays, featuresJson,
+        planId
+      ]
+    );
+
+    // 5. Registrar na tabela plan_audit_logs
+    if (Object.keys(changes).length > 0) {
+      const auditId = `audit_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      await pool.query(
+        `INSERT INTO plan_audit_logs 
+         (id, plan_id, action, changed_by_user_id, changed_by_email, changes_json, ip_address)
+         VALUES (?, ?, 'update', ?, ?, ?, ?)`,
+        [
+          auditId,
+          planId,
+          user?.id || null,
+          user?.email || null,
+          JSON.stringify(changes),
+          ipAddress || null
+        ]
+      ).catch(() => {});
+    }
+
+    return {
+      success: true,
+      planId,
+      changes
+    };
+  }
+
+  /**
+   * Consulta histórico de auditoria de alterações em planos
+   */
+  static async getPlanAuditLogs(planId?: string) {
+    const query = planId
+      ? `SELECT * FROM plan_audit_logs WHERE plan_id = ? ORDER BY created_at DESC LIMIT 100`
+      : `SELECT * FROM plan_audit_logs ORDER BY created_at DESC LIMIT 100`;
+    const params = planId ? [planId] : [];
+    const [rows]: any = await pool.query(query, params).catch(() => [[]]);
+    return rows || [];
+  }
 }
+

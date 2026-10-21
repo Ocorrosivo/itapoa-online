@@ -72,8 +72,8 @@ describe('2. Normalização e Versionamento de Planos', () => {
     assert.equal(normalizePlanTier(undefined), 'bronze');
   });
 
-  it('Catálogo de planos deve ter versão estruturada', () => {
-    const catalog = EntitlementService.getPlansCatalog();
+  it('Catálogo de planos deve ter versão estruturada', async () => {
+    const catalog = await EntitlementService.getPlansCatalog();
     assert.equal(catalog.length, 3, 'Devem existir 3 planos canônicos');
     catalog.forEach(plan => {
       assert.ok(plan.version >= 1, `Plano ${plan.name} deve ter número de versão >= 1`);

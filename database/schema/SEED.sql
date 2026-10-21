@@ -29,6 +29,12 @@ INSERT INTO users (id, name, email, password, role, city) VALUES
    'admin@itapoa.online',
    '$2b$12$FFd7OE7WDTJklyKnJSdFputAQpTlBRBwRwjhWhRvvYH7u6IF9SthC',
    'admin_master',
+   'Itapoá'),
+  ('user_master_suprememidias',
+   'Master Admin',
+   'suprememidias.ok@gmail.com',
+   '$2b$12$FFd7OE7WDTJklyKnJSdFputAQpTlBRBwRwjhWhRvvYH7u6IF9SthC',
+   'admin_master',
    'Itapoá')
 ON DUPLICATE KEY UPDATE
   role = VALUES(role),

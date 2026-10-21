@@ -11,11 +11,25 @@ interface SaaSPricingProps {
 }
 
 export default function SaaSPricing({ onNavigateTab = () => {} }: SaaSPricingProps) {
+  const [plansData, setPlansData] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    fetch('/api/plans')
+      .then(res => res.ok ? res.json() : [])
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setPlansData(data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const handlePlanClick = (planId: string) => {
     savePendingPurchase(planId);
     onNavigateTab('checkout');
   };
-  const PLANS = [
+
+  const DEFAULT_PLANS = [
     {
       id: 'bronze' as const,
       name: 'Bronze',
@@ -76,6 +90,25 @@ export default function SaaSPricing({ onNavigateTab = () => {} }: SaaSPricingPro
     }
   ];
 
+  // Mescla dados dinâmicos do banco com as cores e ícones visuais
+  const PLANS = React.useMemo(() => {
+    if (!plansData.length) return DEFAULT_PLANS;
+    return DEFAULT_PLANS.map(def => {
+      const live = plansData.find((p: any) => p.name === def.id || p.id === `plan_${def.id}`);
+      if (!live) return def;
+      return {
+        ...def,
+        name: live.displayName || def.name,
+        price: live.price === 0 ? 'Grátis' : `R$ ${Number(live.price).toFixed(2).replace('.', ',')}`,
+        subtext: live.description || def.subtext,
+        features: Array.isArray(live.features) && live.features.length > 0 ? live.features : def.features,
+        btnText: live.buttonText || def.btnText,
+        badgeText: live.badge || (def.id === 'diamond_extremo' ? '👑 DIAMOND' : def.name),
+        allowNew: live.allowNewSubscriptions !== false
+      };
+    });
+  }, [plansData]);
+
   return (
     <div id="pricing_pricing_container" className="py-16 px-4 md:px-8 bg-slate-50 min-h-screen flex flex-col">
       <div className="max-w-6xl mx-auto flex flex-col w-full">
@@ -99,7 +132,7 @@ export default function SaaSPricing({ onNavigateTab = () => {} }: SaaSPricingPro
                 <div className="flex flex-col">
                   <div className="flex items-center justify-between gap-4 mb-6">
                     <span className={`text-[10px] font-extrabold uppercase px-3 py-1 rounded-full ${plan.badgeColor}`}>
-                      {plan.id === 'diamond_extremo' ? '👑 DIAMOND' : plan.name}
+                      {(plan as any).badgeText || (plan.id === 'diamond_extremo' ? '👑 DIAMOND' : plan.name)}
                     </span>
                     <IconComp className="w-5 h-5 text-slate-400 shrink-0" />
                   </div>
@@ -120,10 +153,17 @@ export default function SaaSPricing({ onNavigateTab = () => {} }: SaaSPricingPro
                 </div>
 
                 <button
+                  disabled={(plan as any).allowNew === false}
                   onClick={() => handlePlanClick(plan.id)}
-                  className={`py-3.5 w-full mt-10 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer hover:opacity-90 ${plan.id === 'diamond_extremo' ? 'bg-amber-500 text-slate-950 shadow-md' : 'bg-slate-900 text-white'}`}
+                  className={`py-3.5 w-full mt-10 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer hover:opacity-90 ${
+                    (plan as any).allowNew === false
+                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                      : plan.id === 'diamond_extremo'
+                      ? 'bg-amber-500 text-slate-950 shadow-md'
+                      : 'bg-slate-900 text-white'
+                  }`}
                 >
-                  {plan.btnText}
+                  {(plan as any).allowNew === false ? 'Adesões Encerradas' : plan.btnText}
                 </button>
               </div>
             );

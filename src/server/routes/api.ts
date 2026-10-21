@@ -176,7 +176,7 @@ publicList('events', EventRepository);
 publicList('tourism', TourismPlaceRepository);
 // Public plans catalog — centralizado com benefícios e limites versionados
 apiRouter.get('/plans', handler(async (_req, res) => {
-  res.json(EntitlementService.getPlansCatalog());
+  res.json(await EntitlementService.getPlansCatalog());
 }));
 
 // ============================================================
@@ -501,7 +501,71 @@ const adminEntity = (path: string, repository: BaseRepository, idPrefix: string)
 };
 
 adminEntity('users', UserRepository, 'user');
-adminEntity('plans', PlanRepository, 'plan');
+// Rotas dedicadas de gestão de planos e benefícios com validação estrita e auditoria
+apiRouter.get('/admin/plans', requireAuth, requireRole(ADMIN_ONLY), handler(async (_req, res) => {
+  res.json(await EntitlementService.getPlansCatalog());
+}));
+
+apiRouter.put('/admin/plans/:id', requireAuth, requireRole(ADMIN_ONLY), handler(async (req, res) => {
+  const result = await EntitlementService.updatePlan(
+    req.params.id,
+    req.body ?? {},
+    req.user,
+    req.ip
+  );
+  res.json(result);
+}));
+
+apiRouter.get('/admin/plans-audit', requireAuth, requireRole(ADMIN_ONLY), handler(async (req, res) => {
+  const logs = await EntitlementService.getPlanAuditLogs(req.query.planId as string | undefined);
+  res.json(logs);
+}));
+
+// Rotas de Concessão Administrativa Promocional de Empresas
+apiRouter.post('/admin/companies/:id/grant', requireAuth, requireRole(ADMIN_ONLY), handler(async (req, res) => {
+  const { grantedPlan, startDate, endDate, reason } = req.body ?? {};
+  if (!grantedPlan || !startDate || !endDate || !reason) {
+    return res.status(400).json({ error: 'grantedPlan, startDate, endDate e reason são obrigatórios.' });
+  }
+  const result = await EntitlementService.grantAdminPlan(
+    req.params.id,
+    grantedPlan,
+    startDate,
+    endDate,
+    reason,
+    req.user
+  );
+  res.json(result);
+}));
+
+apiRouter.post('/admin/companies/:id/revoke-grant', requireAuth, requireRole(ADMIN_ONLY), handler(async (req, res) => {
+  const result = await EntitlementService.revokeAdminPlan(
+    req.params.id,
+    req.body?.reason,
+    req.user
+  );
+  res.json(result);
+}));
+
+apiRouter.post('/admin/companies/:id/renew-grant', requireAuth, requireRole(ADMIN_ONLY), handler(async (req, res) => {
+  const { endDate, reason } = req.body ?? {};
+  if (!endDate) {
+    return res.status(400).json({ error: 'endDate é obrigatório para renovar a concessão.' });
+  }
+  const result = await EntitlementService.renewAdminPlan(
+    req.params.id,
+    endDate,
+    reason,
+    req.user
+  );
+  res.json(result);
+}));
+
+apiRouter.get('/admin/companies/:id/grants-history', requireAuth, requireRole(ADMIN_ONLY), handler(async (req, res) => {
+  const history = await EntitlementService.getGrantsHistory(req.params.id);
+  res.json(history);
+}));
+
 adminEntity('coupons', CouponRepository, 'coupon');
 adminEntity('jobs', JobRepository, 'job');
 adminEntity('campaigns', SolidarityCampaignRepository, 'camp');
