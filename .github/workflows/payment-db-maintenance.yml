@@ -93,6 +93,7 @@ jobs:
             set -eu
             container=$(docker ps --filter 'label=com.docker.swarm.service.name=itapoa_itapoa-app' --format '{{.ID}}')
             test -n "$container"
+            docker service inspect itapoa_itapoa-app --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'
             docker exec -i "$container" node - <<'NODE'
             const nodemailer=require('nodemailer');
             const mysql=require('mysql2/promise');
@@ -103,10 +104,14 @@ jobs:
                 const [users]=await db.query('SELECT id,password FROM users WHERE LOWER(email)=? LIMIT 1',['blocosgiga@gmail.com']);
                 const account=users[0];
                 const [companies]=await db.query('SELECT id FROM companies WHERE id=? OR slug=? LIMIT 1',['checkout_001bff79bf5f66d7d5b12c00','checkout_001bff79bf5f66d7d5b12c00']);
-                let companyLinkedUsers=0,companyLinkedEmailMatches=false;
+                let companyLinkedUsers=0,companyLinkedEmailMatches=false,companyLinkedAdministrators=0,companyGmailMailboxMatches=false;
                 if(companies[0]){
                   const [bindings]=await db.query('SELECT COUNT(*) n,COALESCE(SUM(LOWER(TRIM(u.email))=?),0) matchesTarget FROM companies_users cu JOIN users u ON u.id=cu.user_id WHERE cu.company_id=?',['blocosgiga@gmail.com',companies[0].id]);
                   companyLinkedUsers=Number(bindings[0].n);companyLinkedEmailMatches=Number(bindings[0].matchesTarget)>0;
+                  const [owners]=await db.query('SELECT u.email,u.role FROM companies_users cu JOIN users u ON u.id=cu.user_id WHERE cu.company_id=?',[companies[0].id]);
+                  const mailbox=value=>{const [local,domain]=String(value).trim().toLowerCase().split('@');return ['gmail.com','googlemail.com'].includes(domain)?local.split('+')[0].replace(/\./g,'')+'@gmail.com':String(value).trim().toLowerCase();};
+                  companyLinkedAdministrators=owners.filter(owner=>['admin','admin_master'].includes(owner.role)).length;
+                  companyGmailMailboxMatches=owners.some(owner=>mailbox(owner.email)===mailbox('blocosgiga@gmail.com'));
                 }
                 let schemaReady=true,recentRequest=false,unexpiredRequest=false;
                 try {
@@ -114,7 +119,7 @@ jobs:
                   await db.query('SELECT user_id,version FROM user_auth_state LIMIT 0');
                   if(account){const [tokens]=await db.query('SELECT created_at>DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 60 SECOND) recent,expires_at>UTC_TIMESTAMP(3) AND used_at IS NULL unexpired FROM password_reset_tokens WHERE user_id=?',[account.id]);recentRequest=!!tokens[0]?.recent;unexpiredRequest=!!tokens[0]?.unexpired;}
                 } catch {schemaReady=false;}
-                console.log(JSON.stringify({accountExists:!!account,passwordLoginEligible:!!account&&/^\$2[aby]\$/.test(account.password||''),companyExists:!!companies[0],companyLinkedUsers,companyLinkedEmailMatches,recoverySchemaReady:schemaReady,recentRequest,unexpiredRequest}));
+                console.log(JSON.stringify({accountExists:!!account,passwordLoginEligible:!!account&&/^\$2[aby]\$/.test(account.password||''),companyExists:!!companies[0],companyLinkedUsers,companyLinkedEmailMatches,companyLinkedAdministrators,companyGmailMailboxMatches,recoverySchemaReady:schemaReady,recentRequest,unexpiredRequest}));
               }finally{await db.end();}
               const host=(e.SMTP_HOST||'smtp.hostinger.com').trim();
               const port=Number(e.SMTP_PORT||465);
