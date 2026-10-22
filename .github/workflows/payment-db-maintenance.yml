@@ -77,3 +77,34 @@ jobs:
             test "$(git -C "$source_dir" rev-parse HEAD)" = '${{ github.sha }}'
             bash -n "$source_dir/scripts/payment-db-maintenance.sh"
             GITHUB_RUN_ID="$MAINTENANCE_RUN_ID" bash "$source_dir/scripts/payment-db-maintenance.sh" "$source_dir"
+  inspect-smtp:
+    if: inputs.confirmation == 'inspect-smtp'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify current application SMTP without sending email
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          command_timeout: 2m
+          script: |
+            set -eu
+            container=$(docker ps --filter 'label=com.docker.swarm.service.name=itapoa_itapoa-app' --format '{{.ID}}')
+            test -n "$container"
+            docker exec -i "$container" node - <<'NODE'
+            const nodemailer=require('nodemailer');
+            (async()=>{
+              const e=process.env;
+              const host=(e.SMTP_HOST||'smtp.hostinger.com').trim();
+              const port=Number(e.SMTP_PORT||465);
+              const user=(e.SMTP_USER||e.SMTP_USERNAME||'contato@itapoa.online').trim();
+              const from=(e.SMTP_FROM||e.EMAIL_FROM||'contato@itapoa.online').trim();
+              const pass=e.SMTP_PASSWORD||e.SMTP_PASS;
+              console.log(JSON.stringify({host,port,user,from,passwordPresent:!!pass,explicitRecoveryFieldsPresent:!!(e.SMTP_HOST?.trim()&&e.SMTP_USER?.trim()&&(e.SMTP_FROM||e.EMAIL_FROM)?.trim()),appUrl:e.APP_URL}));
+              if(!pass||![465,587].includes(port))throw Object.assign(new Error('missing_configuration'),{code:'CONFIG_MISSING'});
+              const transport=nodemailer.createTransport({host,port,secure:port===465,requireTLS:port===587,auth:{user,pass},tls:{rejectUnauthorized:true,minVersion:'TLSv1.2'},connectionTimeout:10000,greetingTimeout:10000,socketTimeout:15000,logger:false,debug:false});
+              try{await transport.verify();console.log('SMTP_CONNECTION_AND_AUTHENTICATION=OK; NO_EMAIL_SENT');}finally{transport.close();}
+            })().catch(e=>{console.error(JSON.stringify({smtpVerified:false,code:e.code||'SMTP_FAILURE',command:e.command||null,responseCode:e.responseCode||null}));process.exitCode=1;});
+            NODE
