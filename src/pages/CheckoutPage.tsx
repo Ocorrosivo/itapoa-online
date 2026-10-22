@@ -671,40 +671,98 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
 
                     {/* SESSÃO DO PIX PENDENTE (Quando um Pix foi gerado) */}
                     {subscriptionId && pix && (
-                      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 sm:p-8 space-y-6">
-                        <div className="text-center">
-                          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 mb-2">
-                            <Clock size={14} /> Aguardando pagamento
+                      <div className="relative overflow-hidden bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-900/5 space-y-6">
+                        {/* Indicador superior de acabamento gradiente */}
+                        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600" />
+
+                        {/* Cabeçalho com indicador de pulso em tempo real */}
+                        <div className="text-center space-y-2 pt-1">
+                          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-200/70 shadow-sm">
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </span>
+                            Aguardando pagamento
                           </div>
-                          <h2 className="text-xl sm:text-2xl font-black text-slate-900">Pague com Pix Oficial</h2>
-                          <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                            Abra o aplicativo do seu banco, escolha a opção Pix e aponte a câmera para o QR Code abaixo:
+                          <h2 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight">
+                            Pague com Pix Oficial
+                          </h2>
+                          <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
+                            Abra o app do seu banco, aponte a câmera para o QR Code abaixo ou copie a chave para ativação instantânea da sua assinatura.
                           </p>
                         </div>
 
-                        {/* Imagem do QR Code Oficial */}
+                        {/* 3 Passos Guiados */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 py-1">
+                          <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                            <div className="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 font-black text-xs shadow-xs">
+                              1
+                            </div>
+                            <span className="text-xs font-semibold text-slate-700 leading-tight">
+                              Abra o app do seu banco
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                            <div className="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 font-black text-xs shadow-xs">
+                              2
+                            </div>
+                            <span className="text-xs font-semibold text-slate-700 leading-tight">
+                              Escaneie ou copie a chave
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                            <div className="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 font-black text-xs shadow-xs">
+                              3
+                            </div>
+                            <span className="text-xs font-semibold text-slate-700 leading-tight">
+                              Confirmação automática
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Moldura do QR Code Oficial com guias de foco */}
                         {pix.qrCodeBase64 && (
-                          <div className="bg-white p-4 rounded-2xl border border-slate-200 inline-block mx-auto max-w-[240px] shadow-sm flex flex-col items-center">
-                            <img
-                              src={`data:image/png;base64,${pix.qrCodeBase64}`}
-                              alt="QR Code Pix do Mercado Pago"
-                              className="w-48 h-48 sm:w-52 sm:h-52 object-contain"
-                            />
-                            <span className="text-[10px] text-slate-400 mt-2 font-mono">Mercado Pago Oficial</span>
+                          <div className="flex flex-col items-center justify-center pt-1">
+                            <div className="relative group bg-gradient-to-b from-slate-50 to-white p-5 rounded-3xl border-2 border-slate-200/90 shadow-md flex flex-col items-center transition hover:border-emerald-400">
+                              {/* Marcadores de canto estilo mira de scanner */}
+                              <div className="absolute top-2.5 left-2.5 w-4 h-4 border-t-2 border-l-2 border-emerald-500 rounded-tl-lg" />
+                              <div className="absolute top-2.5 right-2.5 w-4 h-4 border-t-2 border-r-2 border-emerald-500 rounded-tr-lg" />
+                              <div className="absolute bottom-2.5 left-2.5 w-4 h-4 border-b-2 border-l-2 border-emerald-500 rounded-bl-lg" />
+                              <div className="absolute bottom-2.5 right-2.5 w-4 h-4 border-b-2 border-r-2 border-emerald-500 rounded-br-lg" />
+
+                              <div className="bg-white p-3 rounded-2xl shadow-inner border border-slate-100">
+                                <img
+                                  src={`data:image/png;base64,${pix.qrCodeBase64}`}
+                                  alt="QR Code Pix do Mercado Pago"
+                                  className="w-48 h-48 sm:w-56 sm:h-56 object-contain"
+                                />
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-3 text-[11px] font-semibold text-slate-500">
+                                <ShieldCheck size={14} className="text-emerald-600" />
+                                <span>Mercado Pago Oficial • Banco Central do Brasil</span>
+                              </div>
+                            </div>
                           </div>
                         )}
 
                         {/* Código Pix Copia e Cola */}
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                            Pix Copia e Cola
-                          </label>
+                        <div className="space-y-2 pt-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                              <Copy size={13} className="text-slate-500" /> Pix Copia e Cola
+                            </label>
+                            <span className="text-[11px] font-medium text-slate-500">
+                              {copied ? 'Código copiado!' : 'Clique para copiar'}
+                            </span>
+                          </div>
+
                           <div className="flex flex-col sm:flex-row gap-2">
                             <input
                               type="text"
                               readOnly
                               value={pix.qrCode}
-                              className="w-full px-3 py-2.5 text-xs font-mono bg-white border border-slate-300 rounded-xl text-slate-800 select-all"
+                              onClick={(e) => (e.target as HTMLInputElement).select()}
+                              className="w-full px-4 py-3 text-xs font-mono bg-slate-50/70 border border-slate-300 rounded-xl text-slate-800 select-all focus:outline-none focus:ring-2 focus:ring-emerald-500 transition shadow-inner"
                             />
                             <button
                               type="button"
@@ -717,38 +775,49 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                                   setError('Selecione e copie o texto manualmente.');
                                 }
                               }}
-                              className="shrink-0 flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition"
+                              className={`shrink-0 flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-xs font-bold transition shadow-sm ${
+                                copied
+                                  ? 'bg-emerald-600 text-white ring-2 ring-emerald-400'
+                                  : 'bg-slate-950 text-white hover:bg-slate-800'
+                              }`}
                             >
-                              {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                              {copied ? 'Copiado!' : 'Copiar código'}
+                              {copied ? <Check size={16} className="text-white" /> : <Copy size={16} />}
+                              {copied ? 'Código Pix copiado!' : 'Copiar código Pix'}
                             </button>
                           </div>
                         </div>
 
-                        {/* Validade e status */}
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-200 text-xs text-slate-500">
-                          <span className="flex items-center gap-1.5">
-                            <Clock size={14} className="text-amber-600" />
-                            {timeLeft !== null && timeLeft > 0 ? (
-                              <>
-                                Expira em:{' '}
-                                <strong className="font-mono text-slate-900">
-                                  {Math.floor(timeLeft / 60)}m {timeLeft % 60}s
-                                </strong>
-                              </>
-                            ) : (
-                              'Código expirado'
-                            )}
-                          </span>
+                        {/* Validade e status de reconciliação */}
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-200 text-xs">
+                          <div className="flex items-center gap-2.5 text-slate-600">
+                            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-200/60 shadow-xs">
+                              <Clock size={16} />
+                            </div>
+                            <div>
+                              <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Tempo de validade</div>
+                              <div className="font-mono font-bold text-slate-900 text-sm">
+                                {timeLeft !== null && timeLeft > 0 ? (
+                                  <>
+                                    Expira em:{' '}
+                                    <strong className="text-slate-950">
+                                      {Math.floor(timeLeft / 60)}m {timeLeft % 60}s
+                                    </strong>
+                                  </>
+                                ) : (
+                                  <span className="text-red-600 font-sans text-xs">Código expirado</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
 
                           <button
                             type="button"
                             onClick={handleCheckStatusNow}
                             disabled={checkingStatus}
-                            className="inline-flex items-center gap-1.5 text-slate-700 hover:text-slate-950 font-bold underline"
+                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition disabled:opacity-60"
                           >
-                            <RefreshCw size={12} className={checkingStatus ? 'animate-spin' : ''} />
-                            {checkingStatus ? 'Consultando…' : 'Verificar pagamento agora'}
+                            <RefreshCw size={13} className={checkingStatus ? 'animate-spin text-emerald-600' : 'text-slate-600'} />
+                            {checkingStatus ? 'Consultando provedor…' : 'Verificar pagamento agora'}
                           </button>
                         </div>
                       </div>
@@ -777,25 +846,37 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
 
                         {/* Aba Pix */}
                         <div className={method === 'pix' ? 'block' : 'hidden'} aria-hidden={method !== 'pix'}>
-                          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center space-y-4">
-                            <div className="w-12 h-12 bg-red-100 text-[#C8102E] rounded-xl flex items-center justify-center mx-auto">
-                              <QrCode size={24} />
+                          <div className="bg-gradient-to-b from-slate-50 to-white border border-slate-200/90 rounded-3xl p-6 sm:p-8 text-center space-y-5 shadow-sm">
+                            <div className="w-14 h-14 bg-emerald-100 text-emerald-800 rounded-2xl flex items-center justify-center mx-auto shadow-xs border border-emerald-200/60">
+                              <QrCode size={28} />
                             </div>
-                            <div>
-                              <h3 className="text-base font-bold text-slate-900">Ativação instantânea via Pix</h3>
-                              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
-                                Clique no botão abaixo para gerar o QR Code oficial do Mercado Pago. O valor será creditado e seu plano liberado automaticamente.
+
+                            <div className="space-y-1.5">
+                              <h3 className="text-xl font-black text-slate-950 tracking-tight">Ativação instantânea via Pix</h3>
+                              <p className="text-xs sm:text-sm text-slate-500 max-w-sm mx-auto leading-relaxed">
+                                Clique no botão abaixo para gerar o QR Code oficial do Mercado Pago. Seu plano é liberado no mesmo segundo após a transferência.
                               </p>
                             </div>
+
+                            <div className="flex flex-wrap items-center justify-center gap-2 pt-1 pb-1">
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700">
+                                <CheckCircle2 size={13} className="text-emerald-600" /> Sem renovação automática
+                              </span>
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700">
+                                <Sparkles size={13} className="text-amber-500" /> Liberação em segundos
+                              </span>
+                            </div>
+
                             <button
                               type="button"
                               disabled={busy || !gateway?.pixEnabled}
                               onClick={generatePix}
-                              className="w-full py-4 px-6 rounded-xl bg-slate-950 text-white font-bold hover:bg-slate-800 transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+                              className="w-full py-4 px-6 rounded-2xl bg-slate-950 text-white font-bold hover:bg-slate-800 transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
                             >
                               {busy && <Loader2 size={18} className="animate-spin" />}
                               {busy ? 'Gerando QR Code Pix…' : 'Gerar QR Code Pix'}
                             </button>
+
                             {!gateway?.pixEnabled && (
                               <p className="text-xs text-amber-700">
                                 Pagamento via Pix em configuração no gateway.
