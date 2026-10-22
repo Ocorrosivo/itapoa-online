@@ -1,0 +1,45 @@
+name: Payment database maintenance (manual)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: easypanel-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Inspect payment database without changing it
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          command_timeout: 3m
+          script: |
+            set -eu
+            container=$(docker ps --filter 'label=com.docker.swarm.service.name=itapoa_itapoa-app' --format '{{.ID}}' | head -n 1)
+            test -n "$container"
+            docker service inspect itapoa_itapoa-app --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'
+            docker ps --format '{{.Names}} {{.Image}}'
+            command -v mysqldump || command -v mariadb-dump || true
+            df -h /var/lib/docker
+            docker exec -i "$container" node - <<'NODE'
+            const mysql=require('mysql2/promise');
+            (async()=>{
+              const db=await mysql.createConnection({host:process.env.DB_HOST,port:Number(process.env.DB_PORT||3306),user:process.env.DB_USER,password:process.env.DB_PASSWORD,database:process.env.DB_NAME});
+              try {
+                const [identity]=await db.query('SELECT DATABASE() db, VERSION() version');
+                const [tables]=await db.query('SELECT TABLE_NAME name, ENGINE engine FROM information_schema.tables WHERE TABLE_SCHEMA=DATABASE() ORDER BY TABLE_NAME');
+                const [columns]=await db.query("SELECT TABLE_NAME name,COLUMN_NAME col FROM information_schema.columns WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('gateway_payment_state','webhook_events','plans') ORDER BY TABLE_NAME,ORDINAL_POSITION");
+                const counts={};for(const t of ['users','companies','subscriptions','payment_logs']) counts[t]=(await db.query('SELECT COUNT(*) n FROM `'+t+'`'))[0][0].n;
+                console.log(JSON.stringify({identity,host:process.env.DB_HOST,tables,columns,counts}));
+              } finally {await db.end();}
+            })().catch(e=>{console.error('Inspection failed:',e.code||'unknown');process.exitCode=1;});
+            NODE
