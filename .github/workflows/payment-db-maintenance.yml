@@ -95,8 +95,21 @@ jobs:
             test -n "$container"
             docker exec -i "$container" node - <<'NODE'
             const nodemailer=require('nodemailer');
+            const mysql=require('mysql2/promise');
             (async()=>{
               const e=process.env;
+              const db=await mysql.createConnection({host:e.DB_HOST,port:Number(e.DB_PORT||3306),user:e.DB_USER,password:e.DB_PASSWORD,database:e.DB_NAME});
+              try {
+                const [users]=await db.query('SELECT id,password FROM users WHERE LOWER(email)=? LIMIT 1',['blocosgiga@gmail.com']);
+                const account=users[0];
+                let schemaReady=true,recentRequest=false,unexpiredRequest=false;
+                try {
+                  await db.query('SELECT user_id,token_hash,password_fingerprint,expires_at,created_at,used_at FROM password_reset_tokens LIMIT 0');
+                  await db.query('SELECT user_id,version FROM user_auth_state LIMIT 0');
+                  if(account){const [tokens]=await db.query('SELECT created_at>DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 60 SECOND) recent,expires_at>UTC_TIMESTAMP(3) AND used_at IS NULL unexpired FROM password_reset_tokens WHERE user_id=?',[account.id]);recentRequest=!!tokens[0]?.recent;unexpiredRequest=!!tokens[0]?.unexpired;}
+                } catch {schemaReady=false;}
+                console.log(JSON.stringify({accountExists:!!account,passwordLoginEligible:!!account&&/^\$2[aby]\$/.test(account.password||''),recoverySchemaReady:schemaReady,recentRequest,unexpiredRequest}));
+              }finally{await db.end();}
               const host=(e.SMTP_HOST||'smtp.hostinger.com').trim();
               const port=Number(e.SMTP_PORT||465);
               const user=(e.SMTP_USER||e.SMTP_USERNAME||'contato@itapoa.online').trim();
