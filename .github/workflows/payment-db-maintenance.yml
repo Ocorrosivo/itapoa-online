@@ -2,6 +2,11 @@ name: Payment database maintenance (manual)
 
 on:
   workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Leave empty for inspection. Explicit authorization: backup-and-migrate-itapoa'
+        required: false
+        type: string
 
 concurrency:
   group: easypanel-deploy
@@ -12,6 +17,7 @@ permissions:
 
 jobs:
   inspect:
+    if: inputs.confirmation == ''
     runs-on: ubuntu-24.04
     steps:
       - name: Inspect payment database without changing it
@@ -43,3 +49,31 @@ jobs:
               } finally {await db.end();}
             })().catch(e=>{console.error('Inspection failed:',e.code||'unknown');process.exitCode=1;});
             NODE
+  backup-and-migrate:
+    if: inputs.confirmation == 'backup-and-migrate-itapoa'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Backup, isolated restore and additive migration
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          PAYMENT_MAINTENANCE_CONFIRM: ${{ inputs.confirmation }}
+          MAINTENANCE_RUN_ID: ${{ github.run_id }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          envs: PAYMENT_MAINTENANCE_CONFIRM,MAINTENANCE_RUN_ID
+          command_timeout: 10m
+          script: |
+            set -eu
+            umask 077
+            test "$PAYMENT_MAINTENANCE_CONFIRM" = backup-and-migrate-itapoa
+            source_dir=$(mktemp -d /tmp/itapoa-payment-maintenance.XXXXXXXX)
+            git -C "$source_dir" init --quiet
+            git -C "$source_dir" remote add origin https://github.com/Ocorrosivo/itapoa-online.git
+            git -C "$source_dir" fetch --quiet --depth 1 origin '${{ github.sha }}'
+            git -C "$source_dir" checkout --quiet --detach FETCH_HEAD
+            test "$(git -C "$source_dir" rev-parse HEAD)" = '${{ github.sha }}'
+            bash -n "$source_dir/scripts/payment-db-maintenance.sh"
+            GITHUB_RUN_ID="$MAINTENANCE_RUN_ID" bash "$source_dir/scripts/payment-db-maintenance.sh" "$source_dir"

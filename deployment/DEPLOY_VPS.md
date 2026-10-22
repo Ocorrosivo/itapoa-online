@@ -49,6 +49,24 @@ O deploy troca apenas a imagem e preserva as variáveis e volumes configurados n
 
 Não reimportar seeds nem executar migrações no deploy. Mudanças de banco exigem autorização e backup separados.
 
+### Manutenção autorizada do banco de pagamentos
+
+O workflow manual `payment-db-maintenance.yml` inspeciona sem escrever por padrão.
+Somente após autorização explícita, executar com `confirmation=backup-and-migrate-itapoa`.
+Ele usa o banco interno identificado pelo serviço atual, salva dump consistente e
+configuração do serviço em `/var/backups/itapoa/payment-<UTC>-<run-id>` (diretório
+700, arquivos 600), confere SHA-256, restaura em container sem rede/portas/volumes
+de produção e compara os dados. A migração é testada duas vezes nessa cópia.
+O container de teste é descartado; o backup privado é preservado na VPS.
+Não publicar dumps ou a configuração do serviço como artifacts do GitHub.
+
+`20261022_payment_production_prerequisites.sql` contém somente os pré-requisitos
+aditivos de pagamentos ausentes no banco legado (dez colunas e três tabelas).
+Não executa seeds, DML, alteração de preços, senha master ou status financeiros.
+Compara hashes dos valores de todas as colunas preexistentes antes/depois.
+Essa rotina é separada do deploy e não é executada por push.
+Não restaurar o dump sobre produção após novas vendas sem análise e autorização.
+
 Recuperação real de senha: seguir `deployment/PASSWORD_RECOVERY.md`. SMTP e a migração
 aditiva exigem ativação explícita; não são configurados como efeito colateral do deploy.
 
