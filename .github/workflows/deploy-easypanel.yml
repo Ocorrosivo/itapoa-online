@@ -12,6 +12,17 @@ concurrency:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    services:
+      payment-test-db:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: payment-local-only
+          MARIADB_ROOT_HOST: '%'
+        ports:
+          - 43316:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=3s --health-retries=20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,6 +61,11 @@ jobs:
           node --import tsx --test tests/unit/password-recovery.test.ts
           node --import tsx --test tests/unit/email-verification.test.ts
 
+      - name: Payment backend and browser integration (isolated database, synthetic gateway)
+        run: |
+          npx playwright install --with-deps chromium
+          node --import tsx --test tests/integration/payment-backend.test.ts tests/integration/payment-checkout-browser.test.ts
+
       - name: Deploy and verify on VPS
         uses: appleboy/ssh-action@v1.2.0
         env:
@@ -84,6 +100,21 @@ jobs:
             ACTUAL_SHA=$(git -C "$BUILD_DIR" rev-parse HEAD)
             test "$ACTUAL_SHA" = "$EXPECTED_SHA" || { echo "Commit mismatch: $ACTUAL_SHA != $EXPECTED_SHA"; exit 1; }
             echo "[deploy] Building $ACTUAL_SHA"
+            # Read-only gate: deployment must never create/migrate payment tables.
+            payment_container=$(docker ps --filter 'label=com.docker.swarm.service.name=itapoa_itapoa-app' --format '{{.ID}}' | head -n 1)
+            test -n "$payment_container"
+            docker exec -i "$payment_container" node - <<'NODE'
+            const mysql = require('mysql2/promise');
+            (async () => {
+              const db=await mysql.createConnection({host:process.env.DB_HOST,port:Number(process.env.DB_PORT||3306),user:process.env.DB_USER,password:process.env.DB_PASSWORD,database:process.env.DB_NAME});
+              try {
+                await db.query('SELECT payment_id, subscription_id, remote_updated_at, activated_at, expires_at FROM gateway_payment_state LIMIT 0');
+                await db.query('SELECT gateway_event_id, attempts, status FROM webhook_events LIMIT 0');
+                await db.query('SELECT version, is_active, allow_new_subscriptions FROM plans LIMIT 0');
+                console.log('Payment schema preflight: OK');
+              } finally { await db.end(); }
+            })().catch(()=>{console.error('Payment schema not ready. Apply the reviewed migration only after explicit backup/authorization. No deployment performed.');process.exitCode=1;});
+            NODE
             docker build --pull --build-arg RELEASE_SHA="$EXPECTED_SHA" -t "$IMAGE" "$BUILD_DIR"
 
             # Secrets are delivered through encrypted GitHub secrets, never committed or printed.

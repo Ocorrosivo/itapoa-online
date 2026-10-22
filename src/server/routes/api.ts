@@ -54,8 +54,7 @@ const fail = (res: Response, error: unknown) => {
     return res.status(503).json({ error: 'Banco de dados temporariamente indisponível.' });
   }
   if (error instanceof AuthError || error instanceof ServiceError || error instanceof EngagementError || error instanceof PaymentError) {
-    const status = (error as any).status === 502 ? 422 : (error as any).status;
-    return res.status(status).json({ error: error.message });
+    return res.status(error.status).json({ error: error.message });
   }
   console.error('[api]', error instanceof Error ? error.message : error);
   return res.status(500).json({ error: 'Erro interno no servidor.' });
@@ -514,13 +513,26 @@ apiRouter.post('/payments/pix', requireAuth, requireCompanyAccess, handler(async
   res.json(await paymentService.createPixPayment(req.user!.id, companyId, planId, payerEmail, payerName, payerDoc, requestId));
 }));
 
+// Resume card checkout after a reload without replaying an SDK token or charging again.
+apiRouter.get('/payments/attempt/active', requireAuth, attachCompanyScope, handler(async (req, res) => {
+  const companyId = String(req.query.companyId ?? ''), planId = String(req.query.planId ?? '');
+  if (!companyId || !planId) return res.status(400).json({ error: 'Empresa e plano obrigatórios.' });
+  if (req.user!.role !== 'admin_master' && !(req.companyIds ?? []).includes(companyId)) return res.status(403).json({ error: 'Acesso negado.' });
+  const [rows]: any = await (await import('../mysql.js')).pool.query(`SELECT s.id AS subscriptionId, s.status, s.companyId, s.planId, s.paymentMethod
+    FROM subscriptions s WHERE s.companyId=? AND s.planId=?
+    AND (s.paymentMethod='credit_card' OR (s.paymentMethod='pix' AND NOT EXISTS (SELECT 1 FROM payment_logs pl WHERE pl.subscriptionId=s.id)))
+    AND (s.status='pending' OR (s.status='active' AND (s.nextBillingDate IS NULL OR s.nextBillingDate > UTC_TIMESTAMP()) AND s.createdAt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 MINUTE)))
+    ORDER BY s.createdAt DESC LIMIT 1`, [companyId, planId]);
+  res.json(rows[0] || null);
+}));
+
 // Recover a valid PIX attempt after a reload without creating a duplicate charge.
 apiRouter.get('/payments/pix/active', requireAuth, attachCompanyScope, handler(async (req, res) => {
   const companyId = String(req.query.companyId ?? req.query.company_id ?? '');
   const planId = String(req.query.planId ?? '');
   if (!companyId || !planId) return res.status(400).json({ error: 'companyId e planId obrigatórios.' });
   const owned = req.companyIds ?? [];
-  if (owned.length > 0 && !owned.includes(companyId) && req.user!.role !== 'admin_master') {
+  if (!owned.includes(companyId) && req.user!.role !== 'admin_master') {
     return res.status(403).json({ error: 'Acesso negado a esta empresa.' });
   }
   const active = await paymentService.getActivePixForCompany(companyId, planId, req.user!.id);
@@ -534,7 +546,7 @@ apiRouter.get('/payments/subscription/:id/status', requireAuth, handler(async (r
   const subId = String(req.params.id || '');
   if (!subId) return res.status(400).json({ error: 'subscriptionId obrigatório.' });
   const [rows]: any = await (await import('../mysql.js')).pool.query(
-    'SELECT status, planId, companyId FROM subscriptions WHERE id = ? LIMIT 1',
+    "SELECT CASE WHEN status='active' AND nextBillingDate <= UTC_TIMESTAMP() THEN 'expired' ELSE status END AS status, planId, companyId FROM subscriptions WHERE id = ? LIMIT 1",
     [subId]
   );
   if (rows.length === 0) return res.status(404).json({ error: 'Assinatura não encontrada.' });

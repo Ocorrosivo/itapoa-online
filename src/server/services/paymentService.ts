@@ -5,23 +5,21 @@
  * Real Mercado Pago integration. The backend is the sole payment authority:
  *  - PIX charges are created by calling the Mercado Pago REST API directly;
  *  - the QR code returned to the client comes from Mercado Pago, never fabricated;
- *  - subscription activation happens ONLY from the verified webhook, never from
- *    a client-reported status.
+ *  - activation uses one verified settlement path for webhooks/reconciliation,
+ *    never a client-reported status.
  *
- * The access token is read from the environment (MERCADOPAGO_ACCESS_TOKEN) and,
- * failing that, from the payment_config row — it is never sent to the client.
+ * Credentials in payment_config take precedence over environment fallback.
+ * The access token is never sent to the client.
  */
 
 import crypto from 'crypto';
 import { pool } from '../mysql.js';
+import { PaymentError } from './paymentError.js';
+import { assertGatewayPayment, mercadoPagoGet, paymentCents, settlePayment } from './paymentSettlement.js';
+export { PaymentError } from './paymentError.js';
 
 const MP_API = 'https://api.mercadopago.com';
 
-export class PaymentError extends Error {
-  constructor(public status: number, message: string) {
-    super(message);
-  }
-}
 
 interface PlanRow {
   id: string;
@@ -51,19 +49,42 @@ class PaymentService {
     return { publicKey, pixEnabled: ready, cardEnabled: ready && Boolean(publicKey) };
   }
 
-  async assertGatewayReady() {
+  async assertGatewayReady(db: any = pool) {
     if (process.env.NODE_ENV === 'production' && !this.webhookSecret()) {
       throw new PaymentError(503, 'Pagamentos indisponíveis: configuração de confirmação pendente.');
     }
-    return this.accessToken();
+    return this.accessToken(db);
   }
 
   /** Only SDK-tokenized card data is accepted. Price and ownership never come from the browser. */
-  /** Only SDK-tokenized card data is accepted. Price and ownership never come from the browser. */
+  private async withCreationLock<T>(companyId: string, planId: string, action: (db: any) => Promise<T>): Promise<T> {
+    const db = await pool.getConnection();
+    const key = 'itapoa:pay:' + crypto.createHash('sha256').update(companyId + ':' + planId).digest('hex').slice(0, 48);
+    let locked = false, reusable = true;
+    try {
+      const [rows]: any = await db.query('SELECT GET_LOCK(?, 5) AS acquired', [key]);
+      if (Number(rows[0]?.acquired) !== 1) throw new PaymentError(409, 'Uma tentativa está sendo processada. Aguarde antes de tentar novamente.');
+      locked = true;
+      return await action(db);
+    } finally {
+      if (locked) {
+        try { await db.query('SELECT RELEASE_LOCK(?)', [key]); }
+        catch { db.destroy(); reusable = false; }
+      }
+      if (reusable) db.release();
+    }
+  }
+
   async createCardPayment(userId: string, companyId: string, planId: string, input: Record<string, any>, appUrl: string) {
-    const plan = await this.getPlan(planId);
+    return this.withCreationLock(companyId, planId, db => this.createCardPaymentLocked(userId, companyId, planId, input, appUrl, db));
+  }
+
+  private async createCardPaymentLocked(userId: string, companyId: string, planId: string, input: Record<string, any>, appUrl: string, db: any) {
+    const [activePlan]: any = await db.query("SELECT id FROM subscriptions WHERE companyId=? AND planId=? AND status='active' AND (nextBillingDate IS NULL OR nextBillingDate > UTC_TIMESTAMP()) LIMIT 1", [companyId, planId]);
+    if (activePlan.length) throw new PaymentError(409, 'Este plano já está ativo. Nenhuma nova cobrança foi criada.');
+    const plan = await this.getPlan(planId, db);
     if (plan.price <= 0) throw new PaymentError(400, 'Este plano não requer pagamento.');
-    const token = await this.assertGatewayReady();
+    const token = await this.assertGatewayReady(db);
     const requestId = typeof input.requestId === 'string' ? input.requestId : '';
     const form = input.formData ?? {};
     const payer = form.payer ?? {};
@@ -80,19 +101,27 @@ class PaymentService {
         !(docType === 'CPF' ? /^\d{11}$/ : /^\d{14}$/).test(docNumber)) {
       throw new PaymentError(400, 'Confira os dados do pagamento.');
     }
+    const [pending]: any = await db.query("SELECT id, userId, paymentMethod FROM subscriptions WHERE companyId=? AND planId=? AND status='pending' ORDER BY createdAt DESC LIMIT 1", [companyId, planId]);
+    if (pending[0]) {
+      if (pending[0].userId !== userId || pending[0].paymentMethod !== 'credit_card') throw new PaymentError(409, 'Há outro pagamento em andamento para este plano. Retome a tentativa existente.');
+      // Do not replay a card token/body after an unknown outcome. Reconcile first.
+      return { subscriptionId: pending[0].id, status: 'unknown' };
+    }
     const subscriptionId = `card_${crypto.createHash('sha256').update(`${userId}:${requestId}`).digest('hex')}`;
-    await pool.query(
+    const [usedAttempt]: any = await db.query('SELECT id FROM subscriptions WHERE id=?', [subscriptionId]);
+    if (usedAttempt.length) throw new PaymentError(409, 'Esta tentativa já foi utilizada. Consulte seu status antes de iniciar outra.');
+    await db.query(
       `INSERT IGNORE INTO subscriptions (id, userId, companyId, planId, status, amount, paymentMethod, payment_type, contracted_price, plan_version, nextBillingDate)
-       VALUES (?, ?, ?, ?, 'pending', ?, 'credit_card', 'subscription', ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, 'pending', ?, 'credit_card', 'onetime_card', ?, ?, ?)`,
       [subscriptionId, userId, companyId, planId, plan.price, plan.price, plan.version || 1, new Date(Date.now() + 30 * 86400000)]
     ).catch(async () => {
-      return await pool.query(
+      return await db.query(
         `INSERT IGNORE INTO subscriptions (id, userId, companyId, planId, status, amount, paymentMethod, nextBillingDate)
          VALUES (?, ?, ?, ?, 'pending', ?, 'credit_card', ?)`,
         [subscriptionId, userId, companyId, planId, plan.price, new Date(Date.now() + 30 * 86400000)]
       );
     });
-    const [rows]: any = await pool.query('SELECT userId, companyId, planId, amount FROM subscriptions WHERE id = ?', [subscriptionId]);
+    const [rows]: any = await db.query('SELECT userId, companyId, planId, amount FROM subscriptions WHERE id = ?', [subscriptionId]);
     const sub = rows[0];
     if (!sub || sub.userId !== userId || sub.companyId !== companyId || sub.planId !== planId || Number(sub.amount) !== plan.price) {
       throw new PaymentError(409, 'Esta tentativa pertence a outra compra. Inicie uma nova tentativa.');
@@ -107,6 +136,7 @@ class PaymentService {
           ...(form.issuer_id ? { issuer_id: String(form.issuer_id) } : {}),
           installments: form.installments, transaction_amount: plan.price,
           description: `Plano ${plan.name} — Itapoá Online`, external_reference: subscriptionId,
+          metadata: { company_id: companyId, user_id: userId, plan_id: planId },
           notification_url: `${appUrl.replace(/\/$/, '')}/api/webhooks/mercadopago`,
           payer: { email, identification: { type: docType, number: docNumber } }
         })
@@ -116,22 +146,26 @@ class PaymentService {
       return { subscriptionId, status: 'unknown' };
     }
     const payment: any = await response.json().catch(() => ({}));
+    if (response.ok && !payment.id) return { subscriptionId, status: 'unknown' };
     if (!response.ok || !payment.id) {
-      const errDetail = payment?.message || (Array.isArray(payment?.cause) ? payment.cause.map((c: any) => c.description || c.code).join(', ') : '');
-      console.error(`[payment-card] Mercado Pago error (HTTP ${response.status}):`, errDetail);
-      if (response.status >= 500) return { subscriptionId, status: 'unknown' };
-      throw new PaymentError(response.status === 400 ? 400 : 422, errDetail || 'O Mercado Pago não conseguiu processar esta tentativa. Confira os dados ou tente novamente.');
+      console.error('[payment-card] gateway_request_failed', response.status);
+      if (response.status >= 500 || [409, 429].includes(response.status)) return { subscriptionId, status: 'unknown' };
+      await db.query("UPDATE subscriptions SET status='canceled' WHERE id=? AND status='pending'", [subscriptionId]);
+      throw new PaymentError(response.status === 400 ? 400 : 422, 'O Mercado Pago não conseguiu processar esta tentativa. Confira os dados ou tente novamente.');
     }
-    await pool.query(
+    await db.query(
       `INSERT INTO payment_logs (id, subscriptionId, amount, status, gateway_reference) VALUES (?, ?, ?, 'pending', ?)
        ON DUPLICATE KEY UPDATE gateway_reference = VALUES(gateway_reference)`,
-      [`pay_${crypto.randomUUID()}`, subscriptionId, plan.price, String(payment.id)]
+      [`pay_mp_${String(payment.id)}`, subscriptionId, plan.price, String(payment.id)]
     );
-    // Even an approved gateway response does not activate a plan. Only the verified webhook does.
+    if (['rejected', 'cancelled'].includes(payment.status)) {
+      await db.query("UPDATE subscriptions SET status='canceled' WHERE id=? AND status='pending'", [subscriptionId]);
+    }
+    // Approval is applied only by the shared validated settlement transaction.
     return { paymentId: String(payment.id), subscriptionId, status: String(payment.status) };
   }
-  private async accessToken(): Promise<string> {
-    const [rows]: any = await pool.query(
+  private async accessToken(db: any = pool): Promise<string> {
+    const [rows]: any = await db.query(
       'SELECT accessToken FROM payment_config WHERE id = ? LIMIT 1',
       ['payment']
     );
@@ -148,81 +182,77 @@ class PaymentService {
     return process.env.MERCADOPAGO_WEBHOOK_SECRET?.trim() || null;
   }
 
-  private async getPlan(planId: string): Promise<PlanRow> {
-    const [rows]: any = await pool.query(
-      'SELECT id, name, price, version FROM plans WHERE id = ? LIMIT 1',
+  private async getPlan(planId: string, db: any = pool): Promise<PlanRow> {
+    const [rows]: any = await db.query(
+      'SELECT id, name, price, version, is_active, allow_new_subscriptions FROM plans WHERE id = ? LIMIT 1',
       [planId]
-    ).catch(async () => {
-      return await pool.query(
-        'SELECT id, name, price, 1 as version FROM plans WHERE id = ? LIMIT 1',
-        [planId]
-      );
-    });
+    );
     if (rows.length === 0) throw new PaymentError(404, 'Plano não encontrado.');
-    return { id: rows[0].id, name: rows[0].name, price: Number(rows[0].price), version: Number(rows[0].version) || 1 };
+    if (rows[0].is_active === 0 || rows[0].allow_new_subscriptions === 0) throw new PaymentError(409, 'Este plano não está disponível para contratação.');
+    const price = Number(rows[0].price) === 0 ? 0 : paymentCents(rows[0].price) / 100;
+    if (price > 0 && !['plan_gold_vip','plan_diamond_extremo'].includes(rows[0].id)) throw new PaymentError(409, 'Plano pago não reconhecido.');
+    return { id: rows[0].id, name: rows[0].name, price, version: Number(rows[0].version) || 1 };
   }
 
-  async createPixPayment(
+  async createPixPayment(userId: string, companyId: string, planId: string, payerEmail: string,
+    payerName?: string, payerDoc?: { type?: string; number?: string }, requestId?: string): Promise<CreatedPix> {
+    return this.withCreationLock(companyId, planId, db => this.createPixPaymentLocked(userId, companyId, planId, payerEmail, payerName, payerDoc, requestId, db));
+  }
+
+  private async createPixPaymentLocked(
     userId: string,
     companyId: string,
     planId: string,
     payerEmail: string,
-    payerName?: string,
-    payerDoc?: { type?: string; number?: string },
-    requestId?: string
+    payerName: string | undefined,
+    payerDoc: { type?: string; number?: string } | undefined,
+    requestId: string | undefined,
+    db: any
   ): Promise<CreatedPix> {
-    await this.assertGatewayReady();
-    const plan = await this.getPlan(planId);
+    if (typeof payerEmail !== 'string' || payerEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payerEmail)) throw new PaymentError(400, 'Informe um e-mail válido para o pagamento.');
+    await this.assertGatewayReady(db);
+    const [activePlan]: any = await db.query("SELECT id FROM subscriptions WHERE companyId=? AND planId=? AND status='active' AND (nextBillingDate IS NULL OR nextBillingDate > UTC_TIMESTAMP()) LIMIT 1", [companyId, planId]);
+    if (activePlan.length) throw new PaymentError(409, 'Este plano já está ativo. Nenhuma nova cobrança foi criada.');
+    const plan = await this.getPlan(planId, db);
     if (plan.price <= 0) {
       throw new PaymentError(400, 'Este plano não requer pagamento.');
     }
 
-    const existing = await this.getActivePixForCompany(companyId, planId, userId);
+    const [other]: any = await db.query("SELECT id FROM subscriptions WHERE companyId=? AND planId=? AND status='pending' AND paymentMethod != 'pix' LIMIT 1", [companyId, planId]);
+    if (other.length) throw new PaymentError(409, 'Há outro pagamento em andamento. Retome a tentativa existente.');
+    const existing = await this.getActivePixForCompany(companyId, planId, userId, db);
     if (existing) return existing;
 
-    const token = await this.accessToken();
+    const token = await this.accessToken(db);
 
-    // subscriptionId determinístico e seguro contra concorrência entre abas diferentes:
-    // Se já houver uma tentativa pendente criada para a mesma empresa/plano/usuário nos últimos 30 min,
-    // reaproveitar o subscriptionId existente em vez de criar um segundo id conflitante
-    let subscriptionId: string;
-    const [existingPending]: any = await pool.query(
-      `SELECT id, createdAt FROM subscriptions
-        WHERE companyId = ? AND planId = ? AND userId = ? AND status = 'pending' AND paymentMethod = 'pix'
-        ORDER BY createdAt DESC LIMIT 1`,
-      [companyId, planId, userId]
-    ).catch(() => [[]]);
-
-    const activePending = existingPending?.[0];
-    const isRecent = activePending?.createdAt
-      ? (Date.now() - new Date(activePending.createdAt).getTime()) < 30 * 60 * 1000
-      : false;
-
-    if (activePending?.id && isRecent) {
-      subscriptionId = activePending.id;
-    } else {
-      // Cancela qualquer tentativa pendente anterior expirada ou obsoleta com outro ID
-      await pool.query(
-        "UPDATE subscriptions SET status = 'canceled' WHERE companyId = ? AND planId = ? AND userId = ? AND status = 'pending' AND paymentMethod = 'pix'",
-        [companyId, planId, userId]
-      ).catch(() => {});
-
-      const normReqId = typeof requestId === 'string' && /^[a-f0-9-]{8,64}$/i.test(requestId.trim())
-        ? requestId.trim()
-        : null;
-      subscriptionId = normReqId
-        ? `pix_${crypto.createHash('sha256').update(`${userId}:${companyId}:${planId}:${normReqId}`).digest('hex')}`
-        : `pix_${crypto.createHash('sha256').update(`${userId}:${companyId}:${planId}:${Date.now()}`).digest('hex')}`;
+    const [pending]: any = await db.query("SELECT id FROM subscriptions WHERE companyId=? AND planId=? AND status='pending' AND paymentMethod='pix' ORDER BY createdAt DESC LIMIT 1", [companyId, planId]);
+    if (pending[0]) {
+      const [logs]: any = await db.query('SELECT gateway_reference FROM payment_logs WHERE subscriptionId=? LIMIT 1', [pending[0].id]);
+      if (!logs[0]?.gateway_reference) throw new PaymentError(409, 'Existe uma tentativa sem confirmação. Aguarde a reconciliação; não gere outra cobrança.');
+      const previous = await mercadoPagoGet('/v1/payments/' + encodeURIComponent(logs[0].gateway_reference), token);
+      assertGatewayPayment(previous, String(logs[0].gateway_reference), token, await mercadoPagoGet('/users/me', token), pending[0].id);
+      if (previous.external_reference !== pending[0].id || previous.currency_id !== 'BRL' || paymentCents(previous.transaction_amount) !== paymentCents(plan.price)) {
+        throw new PaymentError(422, 'A cobrança anterior requer conferência. Nenhuma nova cobrança foi criada.');
+      }
+      const expired = previous.status === 'pending' && typeof previous.date_of_expiration === 'string' && new Date(previous.date_of_expiration).getTime() <= Date.now();
+      if (!expired && !['rejected','cancelled','refunded','charged_back'].includes(previous.status)) {
+        throw new PaymentError(409, 'A cobrança anterior ainda requer confirmação. Consulte seu status antes de tentar novamente.');
+      }
+      await db.query("UPDATE subscriptions SET status='canceled' WHERE id=? AND status='pending'", [pending[0].id]);
     }
+    const normReqId = typeof requestId === 'string' && /^[a-f0-9-]{8,64}$/i.test(requestId.trim()) ? requestId.trim() : crypto.randomUUID();
+    const subscriptionId = 'pix_' + crypto.createHash('sha256').update(userId + ':' + companyId + ':' + planId + ':' + normReqId).digest('hex');
+    const [used]: any = await db.query('SELECT id FROM subscriptions WHERE id=?', [subscriptionId]);
+    if (used.length) throw new PaymentError(409, 'Esta tentativa já foi utilizada. Inicie uma nova tentativa após confirmar o encerramento da anterior.');
     const nextBilling = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-    await pool.query(
+    await db.query(
       `INSERT IGNORE INTO subscriptions
          (id, userId, companyId, planId, status, amount, paymentMethod, payment_type, contracted_price, plan_version, nextBillingDate)
        VALUES (?, ?, ?, ?, 'pending', ?, 'pix', 'onetime_pix', ?, ?, ?)`,
       [subscriptionId, userId, companyId, planId, plan.price, plan.price, plan.version || 1, nextBilling]
     ).catch(async () => {
-      return await pool.query(
+      return await db.query(
         `INSERT IGNORE INTO subscriptions
            (id, userId, companyId, planId, status, amount, paymentMethod, nextBillingDate)
          VALUES (?, ?, ?, ?, 'pending', ?, 'pix', ?)`,
@@ -230,7 +260,7 @@ class PaymentService {
       );
     });
 
-    const [subRows]: any = await pool.query(
+    const [subRows]: any = await db.query(
       'SELECT userId, companyId, planId, amount FROM subscriptions WHERE id = ?',
       [subscriptionId]
     );
@@ -240,13 +270,14 @@ class PaymentService {
     }
 
     // Se já houver um registro de gateway para esta tentativa determinística, reutilizar
-    const [existingLogs]: any = await pool.query(
+    const [existingLogs]: any = await db.query(
       'SELECT gateway_reference FROM payment_logs WHERE subscriptionId = ? LIMIT 1',
       [subscriptionId]
     );
     if (existingLogs.length > 0 && existingLogs[0].gateway_reference) {
-      const reuse = await this.getActivePixForCompany(companyId, planId, userId);
+      const reuse = await this.getActivePixForCompany(companyId, planId, userId, db);
       if (reuse) return reuse;
+      throw new PaymentError(409, 'Esta cobrança já foi emitida. Consulte seu status antes de iniciar outra.');
     }
 
     const idempotencyKey = `${subscriptionId}`;
@@ -268,6 +299,7 @@ class PaymentService {
       external_reference: subscriptionId,
       date_of_expiration: dateOfExpiration,
       notification_url: `${appUrl}/api/webhooks/mercadopago`,
+      metadata: { company_id: companyId, user_id: userId, plan_id: planId },
       payer: {
         email: payerEmail,
         first_name: firstName,
@@ -279,7 +311,7 @@ class PaymentService {
     let mp: any;
     try {
       const resp = await fetch(`${MP_API}/v1/payments`, {
-        method: 'POST',
+        method: 'POST', signal: AbortSignal.timeout(15000),
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -289,14 +321,15 @@ class PaymentService {
       });
       mp = await resp.json().catch(() => ({}));
       if (!resp.ok) {
-        const errDetail = mp?.message || mp?.error || (Array.isArray(mp?.cause) ? mp.cause.map((c: any) => c.description || c.code).join(', ') : '');
-        console.error(`[payment-pix] Mercado Pago error (HTTP ${resp.status}):`, errDetail, JSON.stringify(mp));
-        throw new PaymentError(422, errDetail || 'Falha ao criar cobrança Pix no gateway.');
+        console.error('[payment-pix] gateway_request_failed', resp.status);
+        if (resp.status >= 500 || [409,429].includes(resp.status)) throw new PaymentError(502, 'Resultado da emissão ainda não confirmado. Aguarde a reconciliação antes de tentar novamente.');
+        throw new PaymentError(422, 'Não foi possível emitir o Pix. Confira os dados e tente novamente.');
       }
+      if (!/^\d+$/.test(String(mp.id))) throw new PaymentError(502, 'Resultado da emissão ainda não confirmado. Aguarde a reconciliação.');
     } catch (err) {
       if (err instanceof PaymentError) {
-        try {
-          await pool.query('UPDATE subscriptions SET status = ? WHERE id = ? AND status = ?', ['canceled', subscriptionId, 'pending']);
+        if (err.status >= 400 && err.status < 500) try {
+          await db.query('UPDATE subscriptions SET status = ? WHERE id = ? AND status = ?', ['canceled', subscriptionId, 'pending']);
         } catch {}
         throw err;
       }
@@ -307,11 +340,11 @@ class PaymentService {
     const gatewayId = String(mp.id);
     const tx = mp.point_of_interaction?.transaction_data ?? {};
 
-    await pool.query(
+    await db.query(
       `INSERT INTO payment_logs (id, subscriptionId, amount, status, gateway_reference)
        VALUES (?, ?, ?, 'pending', ?)
        ON DUPLICATE KEY UPDATE gateway_reference = VALUES(gateway_reference)`,
-      [`pay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, subscriptionId, plan.price, gatewayId]
+      [`pay_mp_${gatewayId}`, subscriptionId, plan.price, gatewayId]
     );
 
     return {
@@ -324,222 +357,37 @@ class PaymentService {
     };
   }
 
-  async createCheckoutPreference(
-    userId: string,
-    companyId: string,
-    planId: string,
-    payerEmail: string,
-    appUrl: string
-  ): Promise<{ initPoint: string; subscriptionId: string }> {
-    const plan = await this.getPlan(planId);
-    if (plan.price <= 0) throw new PaymentError(400, 'Este plano não requer pagamento.');
-
-    const token = await this.accessToken();
-    const subscriptionId = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const nextBilling = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-    await pool.query(
-      `INSERT INTO subscriptions
-         (id, userId, companyId, planId, status, amount, paymentMethod, payment_type, contracted_price, plan_version, nextBillingDate)
-       VALUES (?, ?, ?, ?, 'pending', ?, 'credit_card', 'subscription', ?, ?, ?)`,
-      [subscriptionId, userId, companyId, planId, plan.price, plan.price, plan.version || 1, nextBilling]
-    ).catch(async () => {
-      return await pool.query(
-        `INSERT INTO subscriptions
-           (id, userId, companyId, planId, status, amount, paymentMethod, nextBillingDate)
-         VALUES (?, ?, ?, ?, 'pending', ?, 'credit_card', ?)`,
-        [subscriptionId, userId, companyId, planId, plan.price, nextBilling]
-      );
-    });
-
-    const base = appUrl.replace(/\/$/, '');
-    const body = {
-      items: [
-        {
-          title: `Assinatura ${plan.name} — Guia Comercial Itapoá`,
-          quantity: 1,
-          currency_id: 'BRL',
-          unit_price: Number(plan.price.toFixed(2))
-        }
-      ],
-      payer: { email: payerEmail },
-      external_reference: subscriptionId,
-      notification_url: `${base}/api/webhooks/mercadopago`,
-      back_urls: {
-        success: `${base}/painel?payment=success`,
-        failure: `${base}/painel?payment=failure`,
-        pending: `${base}/painel?payment=pending`
-      },
-      auto_return: 'approved'
-    };
-
-    let mp: any;
-    try {
-      const resp = await fetch(`${MP_API}/checkout/preferences`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'X-Idempotency-Key': subscriptionId
-        },
-        body: JSON.stringify(body)
-      });
-      mp = await resp.json();
-      if (!resp.ok) throw new PaymentError(502, mp?.message || 'Falha ao criar checkout.');
-    } catch (err) {
-      if (err instanceof PaymentError) throw err;
-      throw new PaymentError(502, 'Gateway de pagamento indisponível.');
-    }
-
-    return { initPoint: mp.init_point, subscriptionId };
+  async createCheckoutPreference(_userId: string, _companyId: string, _planId: string, _payerEmail: string, _appUrl: string): Promise<{initPoint: string; subscriptionId: string}> {
+    // Legacy redirect flow has no persistent attempt contract and is not used by
+    // CheckoutPage. Do not expose a second, non-idempotent charging path.
+    throw new PaymentError(410, 'Checkout externo descontinuado. Utilize a página de checkout com cartão ou Pix.');
   }
 
-  verifyWebhookSignature(
-    signatureHeader: string | undefined,
-    requestId: string | undefined,
-    dataId: string | undefined
-  ): boolean {
+  verifyWebhookSignature(signatureHeader: string | undefined, requestId: string | undefined, dataId: string | undefined): boolean {
     const secret = this.webhookSecret();
-    if (!secret) {
-      return process.env.NODE_ENV !== 'production';
-    }
-    if (!signatureHeader || !dataId) return false;
-
-    const parts = Object.fromEntries(
-      signatureHeader.split(',').map(kv => {
-        const [k, v] = kv.split('=');
-        return [k?.trim(), v?.trim()];
-      })
-    );
-    const ts = parts['ts'];
-    const v1 = parts['v1'];
-    if (!ts || !v1) return false;
-
-    const tsNum = Number(ts);
-    if (!Number.isFinite(tsNum)) return false;
-    const nowSec = Math.floor(Date.now() / 1000);
-    const tsSec = tsNum > 1e12 ? Math.floor(tsNum / 1000) : tsNum;
-    if (Math.abs(nowSec - tsSec) > 300) return false;
-
-    const manifest = `id:${dataId};request-id:${requestId ?? ''};ts:${ts};`;
-    const expected = crypto.createHmac('sha256', secret).update(manifest).digest('hex');
-
-    try {
-      return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(v1));
-    } catch {
-      return false;
-    }
+    if (!secret || !signatureHeader || !requestId || !dataId || signatureHeader.length > 1024 ||
+        requestId.length > 128 || /[\r\n;]/.test(requestId) || !/^[a-z0-9_-]{1,128}$/i.test(dataId)) return false;
+    const parts = signatureHeader.split(',').map(part => part.trim().split('='));
+    if (parts.some(part => part.length !== 2)) return false;
+    const timestamps = parts.filter(([key]) => key === 'ts');
+    const signatures = parts.filter(([key]) => key === 'v1').map(([, value]) => value);
+    if (timestamps.length !== 1 || !signatures.length) return false;
+    const ts = timestamps[0][1];
+    if (!/^\d{10}(\d{3})?$/.test(ts || '')) return false;
+    const seconds = ts.length === 13 ? Number(ts) / 1000 : Number(ts);
+    if (Math.abs(Date.now() / 1000 - seconds) > 300) return false;
+    const manifest = 'id:' + dataId.toLowerCase() + ';request-id:' + requestId + ';ts:' + ts + ';';
+    const expected = crypto.createHmac('sha256', secret).update(manifest).digest();
+    return signatures.some(value => /^[a-f0-9]{64}$/i.test(value || '') &&
+      crypto.timingSafeEqual(expected, Buffer.from(value, 'hex')));
   }
 
-  async handlePaymentNotification(paymentId: string): Promise<void> {
-    const token = await this.accessToken();
-
-    let mp: any;
-    try {
-      const resp = await fetch(`${MP_API}/v1/payments/${encodeURIComponent(paymentId)}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!resp.ok) return;
-      mp = await resp.json();
-    } catch {
-      throw new PaymentError(502, 'Falha ao consultar o pagamento no gateway.');
-    }
-
-    const subscriptionId = mp.external_reference;
-    const status = mp.status;
-    if (!subscriptionId) return;
-
-    if (mp.currency_id && mp.currency_id !== 'BRL') return;
-
-    const [subRows]: any = await pool.query(
-      'SELECT id, status, amount, planId, companyId FROM subscriptions WHERE id = ? LIMIT 1',
-      [subscriptionId]
-    );
-    if (subRows.length === 0) return;
-    const sub = subRows[0];
-    if (sub.status === 'active') return;
-
-    const expectedAmount = Number(sub.amount);
-    const paidAmount = Number(mp.transaction_amount);
-    if (Number.isFinite(expectedAmount) && Number.isFinite(paidAmount) && status === 'approved' && Math.abs(paidAmount - expectedAmount) > 0.01) {
-      console.warn(`[webhook] amount mismatch sub=${subscriptionId} expected=${expectedAmount} got=${paidAmount}`);
-      return;
-    }
-
-    const logStatus = status === 'approved' ? 'paid' : status === 'rejected' ? 'failed' : status === 'refunded' || status === 'charged_back' ? 'refunded' : 'pending';
-
-    await pool.query(
-      `INSERT INTO payment_logs (id, subscriptionId, amount, status, gateway_reference)
-       VALUES (?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE status = VALUES(status)`,
-      [
-        `pay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        subscriptionId,
-        Number(mp.transaction_amount) || 0,
-        logStatus,
-        String(mp.id)
-      ]
-    );
-
-    const conn2 = await pool.getConnection();
-    try {
-      await conn2.beginTransaction();
-      const [cur]: any = await conn2.query('SELECT status FROM subscriptions WHERE id = ? FOR UPDATE', [subscriptionId]);
-      const curStatus = cur[0]?.status;
-      if (curStatus === 'active' && status !== 'refunded' && status !== 'charged_back') {
-        await conn2.rollback();
-        conn2.release();
-        return;
-      }
-
-      if (status === 'approved') {
-        const nextBilling = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        await conn2.query('UPDATE subscriptions SET status = ?, nextBillingDate = ? WHERE id = ?', ['active', nextBilling, subscriptionId]);
-        const [subscriptions]: any = await conn2.query(
-          `SELECT s.companyId, p.name AS planName FROM subscriptions s INNER JOIN plans p ON p.id = s.planId WHERE s.id = ? LIMIT 1`,
-          [subscriptionId]
-        );
-        const paid = subscriptions[0];
-        if (paid?.companyId && paid?.planName) {
-          const sponsored = paid.planName === 'gold_vip' || paid.planName === 'diamond_extremo';
-          await conn2.query(
-            `UPDATE companies 
-             SET planLevel = ?, access_grant_type = 'paid', has_used_trial = 1, isSponsored = ? 
-             WHERE id = ?`,
-            [paid.planName, sponsored ? 1 : 0, paid.companyId]
-          ).catch(async () => {
-            return await conn2.query(
-              'UPDATE companies SET planLevel = ?, isSponsored = ? WHERE id = ?',
-              [paid.planName, sponsored ? 1 : 0, paid.companyId]
-            );
-          });
-        }
-      } else if (status === 'rejected' || status === 'cancelled') {
-        if (curStatus === 'pending') await conn2.query('UPDATE subscriptions SET status = ? WHERE id = ?', ['canceled', subscriptionId]);
-      } else if (status === 'refunded' || status === 'charged_back') {
-        await conn2.query('UPDATE subscriptions SET status = ? WHERE id = ?', ['canceled', subscriptionId]);
-        const [comp]: any = await conn2.query('SELECT companyId FROM subscriptions WHERE id = ? LIMIT 1', [subscriptionId]);
-        if (comp[0]?.companyId) {
-          const [otherActive]: any = await conn2.query(
-            'SELECT id FROM subscriptions WHERE companyId = ? AND status = ? AND id != ? LIMIT 1',
-            [comp[0].companyId, 'active', subscriptionId]
-          );
-          if (otherActive.length === 0) {
-            await conn2.query('UPDATE companies SET planLevel = ?, isSponsored = ? WHERE id = ?', ['bronze', 0, comp[0].companyId]);
-          }
-        }
-      }
-      await conn2.commit();
-      conn2.release();
-    } catch (e) {
-      try { await conn2.rollback(); } catch {}
-      try { conn2.release(); } catch {}
-      throw e;
-    }
+  async handlePaymentNotification(paymentId: string) {
+    return settlePayment(paymentId, await this.accessToken());
   }
 
-  async getActivePixForCompany(companyId: string, planId: string, userId: string): Promise<CreatedPix | null> {
-    const [subs]: any = await pool.query(
+  async getActivePixForCompany(companyId: string, planId: string, userId: string, db: any = pool): Promise<CreatedPix | null> {
+    const [subs]: any = await db.query(
       `SELECT s.id, s.amount, s.planId AS subPlanId, pl.gateway_reference, pl.createdAt
          FROM subscriptions s
          INNER JOIN payment_logs pl ON pl.subscriptionId = s.id
@@ -551,18 +399,19 @@ class PaymentService {
     const row = subs[0];
     if (String(row.subPlanId) !== String(planId)) return null;
     try {
-      const token = await this.accessToken();
+      const token = await this.accessToken(db);
       const resp = await fetch(`${MP_API}/v1/payments/${encodeURIComponent(String(row.gateway_reference))}`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000)
       });
       if (!resp.ok) return null;
       const mp: any = await resp.json();
+      assertGatewayPayment(mp, String(row.gateway_reference), token, await mercadoPagoGet('/users/me', token), String(row.id));
       if (mp.status !== 'pending' && mp.status !== 'in_process') return null;
-      if (mp.currency_id && mp.currency_id !== 'BRL') return null;
-      if (mp.external_reference && String(mp.external_reference) !== String(row.id)) return null;
+      if (mp.currency_id !== 'BRL') return null;
+      if (String(mp.external_reference) !== String(row.id) || String(mp.id) !== String(row.gateway_reference)) return null;
       const expected = Number(row.amount);
       const got = Number(mp.transaction_amount);
-      if (Number.isFinite(expected) && Number.isFinite(got) && Math.abs(expected - got) > 0.01) return null;
+      if (paymentCents(mp.transaction_amount) !== paymentCents(row.amount)) return null;
       const expIso: string | null = mp.date_of_expiration ?? null;
       if (expIso) {
         const expMs = new Date(expIso).getTime();
@@ -600,72 +449,21 @@ class PaymentService {
    * Reconcilia uma cobrança/assinatura pendente consultando o Mercado Pago de forma idempotente.
    * Evita duplicidade de liberação e resolve atrasos ou falhas na entrega do webhook.
    */
-  async reconcilePayment(subscriptionId: string): Promise<{
-    status: string;
-    reconciled: boolean;
-    message: string;
-  }> {
-    const [subRows]: any = await pool.query(
-      'SELECT id, status, planId, companyId, amount, paymentMethod FROM subscriptions WHERE id = ? LIMIT 1',
-      [subscriptionId]
-    );
-    if (subRows.length === 0) {
-      throw new PaymentError(404, 'Assinatura / Cobrança não encontrada.');
+  async reconcilePayment(subscriptionId: string) {
+    const [rows]: any = await pool.query('SELECT status FROM subscriptions WHERE id = ? LIMIT 1', [subscriptionId]);
+    if (!rows.length) throw new PaymentError(404, 'Assinatura / Cobrança não encontrada.');
+    const [logs]: any = await pool.query('SELECT gateway_reference FROM payment_logs WHERE subscriptionId = ? ORDER BY createdAt DESC LIMIT 1', [subscriptionId]);
+    if (!logs[0]?.gateway_reference) {
+      const token = await this.accessToken();
+      // A timeout may happen after the provider created a charge but before its
+      // ID was saved. Search read-only by our server-owned external reference.
+      const search = await mercadoPagoGet('/v1/payments/search?external_reference=' + encodeURIComponent(subscriptionId), token);
+      const matches = Array.isArray(search.results) ? search.results.filter((payment: any) => payment.external_reference === subscriptionId) : [];
+      if (matches.length > 1) throw new PaymentError(409, 'Mais de um pagamento encontrado. Aguarde a conferência do suporte.');
+      if (matches.length === 1) return settlePayment(String(matches[0].id), token, subscriptionId);
+      return { status: rows[0].status, reconciled: false, message: 'Aguardando identificação do pagamento no gateway. Não inicie outra cobrança.' };
     }
-    const sub = subRows[0];
-    if (sub.status === 'active') {
-      return { status: 'active', reconciled: true, message: 'Cobrança já confirmada e plano ativo.' };
-    }
-
-    const [logs]: any = await pool.query(
-      'SELECT gateway_reference FROM payment_logs WHERE subscriptionId = ? ORDER BY createdAt DESC LIMIT 1',
-      [subscriptionId]
-    );
-    const paymentId = logs[0]?.gateway_reference;
-    if (!paymentId) {
-      return { status: sub.status, reconciled: false, message: 'Nenhum registro de pagamento associado no gateway.' };
-    }
-
-    const token = await this.accessToken();
-    let mp: any;
-    try {
-      const resp = await fetch(`${MP_API}/v1/payments/${encodeURIComponent(paymentId)}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!resp.ok) {
-        return { status: sub.status, reconciled: false, message: 'Gateway não retornou status atualizado.' };
-      }
-      mp = await resp.json();
-    } catch {
-      return { status: sub.status, reconciled: false, message: 'Falha de comunicação com o Mercado Pago.' };
-    }
-
-    if (mp.external_reference && String(mp.external_reference) !== String(subscriptionId)) {
-      return { status: sub.status, reconciled: false, message: 'Referência do pagamento não confere com o pedido.' };
-    }
-    if (mp.currency_id && mp.currency_id !== 'BRL') {
-      return { status: sub.status, reconciled: false, message: 'Moeda do pagamento inválida.' };
-    }
-    const expectedAmount = Number(sub.amount);
-    const paidAmount = Number(mp.transaction_amount);
-    if (Number.isFinite(expectedAmount) && Number.isFinite(paidAmount) && Math.abs(paidAmount - expectedAmount) > 0.01) {
-      return { status: sub.status, reconciled: false, message: 'Valor pago diverge do valor contratado do plano.' };
-    }
-
-    if (mp.status === 'approved') {
-      await this.handlePaymentNotification(paymentId);
-      return { status: 'active', reconciled: true, message: 'Pagamento confirmado e plano ativado com sucesso!' };
-    }
-
-    return {
-      status: mp.status || sub.status,
-      reconciled: false,
-      message: mp.status === 'in_process'
-        ? 'Pagamento em análise pelo Mercado Pago.'
-        : mp.status === 'pending'
-        ? 'Pagamento pendente de compensação pelo Mercado Pago.'
-        : `Status atual no Mercado Pago: ${mp.status || 'pendente'}`
-    };
+    return settlePayment(String(logs[0].gateway_reference), await this.accessToken(), subscriptionId);
   }
 }
 

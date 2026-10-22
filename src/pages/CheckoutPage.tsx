@@ -190,6 +190,20 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
     };
   }, [isAuthenticated, plan, companyChoice]);
 
+  // Resume the server-owned card attempt; never replay card details on reload.
+  useEffect(() => {
+    if (!isAuthenticated || !plan || !companyChoice || pix || subscriptionId) return;
+    let active = true;
+    api.get<{ subscriptionId: string; status: string; paymentMethod: string } | null>(`/api/payments/attempt/active?companyId=${encodeURIComponent(companyChoice)}&planId=${encodeURIComponent(plan.id)}`)
+      .then(attempt => {
+        if (!active || !attempt?.subscriptionId) return;
+        setSubscriptionId(attempt.subscriptionId); setMethod(attempt.paymentMethod === 'pix' ? 'pix' : 'card');
+        setCheckoutState(attempt.status === 'active' ? 'approved' : 'processing');
+        if (attempt.status === 'active') clearPendingPurchase();
+      }).catch(() => { /* Preserve the selected purchase during a transient failure. */ });
+    return () => { active = false; };
+  }, [isAuthenticated, plan, companyChoice, pix, subscriptionId]);
+
   // 5. Polling contínuo do status da assinatura enquanto estiver pendente
   useEffect(() => {
     if (!subscriptionId || checkoutState === 'approved') return;
@@ -206,6 +220,8 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
         } else if (status === 'canceled' || status === 'rejected') {
           setCheckoutState('rejected');
           setError('Pagamento não concluído. Você pode tentar novamente com outro cartão ou via Pix.');
+        } else if (status === 'expired') {
+          setCheckoutState('expired'); setError('O período contratado terminou. Você pode iniciar uma nova contratação.');
         }
       } catch {
         // Falhas transitórias de rede não alteram estado
@@ -353,11 +369,9 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
       }
 
       setSubscriptionId(result.subscriptionId);
-      // Se já vier aprovado do gateway, aguardamos confirmação do webhook / polling
-      if (result.status === 'approved') {
-        setCheckoutState('approved');
-        clearPendingPurchase();
-      }
+      // Gateway approval alone is not proof of activation. Only the backend
+      // status poll/reconciliation may show success after the DB transaction.
+      setCheckoutState('processing');
     } catch (e: any) {
       setError(e?.message || 'Não foi possível processar o pagamento com cartão.');
       if (checkoutState !== 'approved') {
@@ -380,7 +394,12 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
         setCheckoutState('approved');
         clearPendingPurchase();
       } else {
-        setError('O pagamento ainda consta como pendente no Mercado Pago. O processamento bancário pode levar alguns instantes.');
+        if (res.status === 'canceled' || res.status === 'rejected') setCheckoutState('rejected');
+        if (method === 'pix' && !pix && companyChoice && plan) {
+          const recovered = await BillingService.getActivePix(companyChoice, plan.id);
+          if (recovered?.qrCode) { setPix(recovered); setCheckoutState('pending_pix'); }
+        }
+        setError(res.message || 'Ainda não foi possível confirmar a ativação. Aguarde antes de tentar outra cobrança.');
       }
     } catch {
       setError('Ainda aguardando a compensação bancária oficial.');
@@ -760,6 +779,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                             <input
                               type="text"
                               readOnly
+                              aria-label="Pix Copia e Cola"
                               value={pix.qrCode}
                               onClick={(e) => (e.target as HTMLInputElement).select()}
                               className="w-full px-4 py-3 text-xs font-mono bg-slate-50/70 border border-slate-300 rounded-xl text-slate-800 select-all focus:outline-none focus:ring-2 focus:ring-emerald-500 transition shadow-inner"
@@ -823,6 +843,21 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                       </div>
                     )}
 
+                    {subscriptionId && !pix && (
+                      <div role="status" className="rounded-2xl border border-slate-200 bg-slate-50 p-5 space-y-3">
+                        <h2 className="font-bold text-slate-900">Aguardando confirmação do pagamento</h2>
+                        <p className="text-sm text-slate-600">A ativação depende da confirmação do Mercado Pago e do processamento no servidor. Não refaça a cobrança enquanto esta tentativa estiver em análise.</p>
+                        <button type="button" onClick={handleCheckStatusNow} disabled={checkingStatus} className="rounded-xl bg-slate-900 text-white px-4 py-3 font-bold disabled:opacity-50">
+                          {checkingStatus ? 'Verificando…' : 'Verificar pagamento agora'}
+                        </button>
+                        {checkoutState === 'rejected' && <button type="button" className="block underline text-sm" onClick={() => {
+                          setSubscriptionId(''); setCheckoutState('ready'); setError('');
+                          if (attemptKey.current) sessionStorage.removeItem(attemptKey.current);
+                          requestId.current = crypto.randomUUID();
+                        }}>Iniciar nova tentativa após recusa</button>}
+                      </div>
+                    )}
+
                     {/* CONTEÚDO QUANDO NÃO HÁ PIX PENDENTE */}
                     {!subscriptionId && (
                       <>
@@ -854,7 +889,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                             <div className="space-y-1.5">
                               <h3 className="text-xl font-black text-slate-950 tracking-tight">Ativação instantânea via Pix</h3>
                               <p className="text-xs sm:text-sm text-slate-500 max-w-sm mx-auto leading-relaxed">
-                                Clique no botão abaixo para gerar o QR Code oficial do Mercado Pago. Seu plano é liberado no mesmo segundo após a transferência.
+                                Clique no botão abaixo para gerar o QR Code oficial do Mercado Pago. Seu plano será liberado após a confirmação do pagamento pelo provedor e processamento no servidor.
                               </p>
                             </div>
 

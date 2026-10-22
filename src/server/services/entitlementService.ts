@@ -294,14 +294,14 @@ export class EntitlementService {
     const [subsRows]: any = await pool.query(
       `SELECT id, planId, status, amount, paymentMethod, payment_type, contracted_price, nextBillingDate, createdAt
        FROM subscriptions
-       WHERE companyId = ? AND status = 'active'
+       WHERE companyId = ? AND status = 'active' AND (nextBillingDate IS NULL OR nextBillingDate > UTC_TIMESTAMP())
        ORDER BY createdAt DESC LIMIT 1`,
       [companyId]
     ).catch(async () => {
       return await pool.query(
         `SELECT id, planId, status, amount, paymentMethod, NULL as payment_type, amount as contracted_price, nextBillingDate, createdAt
          FROM subscriptions
-         WHERE companyId = ? AND status = 'active'
+         WHERE companyId = ? AND status = 'active' AND (nextBillingDate IS NULL OR nextBillingDate > UTC_TIMESTAMP())
          ORDER BY createdAt DESC LIMIT 1`,
         [companyId]
       ).catch(() => [[]]);
@@ -375,6 +375,10 @@ export class EntitlementService {
       // Assinatura paga ativa preservada
       grantType = 'paid';
       effectiveTier = normalizePlanTier(activeSub.planId || company.planLevel);
+    } else if (company.access_grant_type === 'paid') {
+      // A cached paid badge is not an administrative grant after the contract expires.
+      grantType = 'bronze';
+      effectiveTier = 'bronze';
     } else if (company.access_grant_type === 'admin_grant' || Number(company.isSponsored) === 1) {
       grantType = 'admin_grant';
       isAdminGrant = true;

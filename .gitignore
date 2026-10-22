@@ -12,6 +12,7 @@ coverage/
 *.rar
 playwright-report/
 test-results/
+.test-runtime/
 playwright/.cache/
 .claude/
 skills-lock.json

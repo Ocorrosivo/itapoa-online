@@ -1,10 +1,22 @@
-import { test } from 'node:test';
+import { test, beforeEach, afterEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { checkoutContact } from '../../src/server/services/checkoutService.js';
 import { paymentService } from '../../src/server/services/paymentService.js';
 import { pool } from '../../src/server/mysql.js';
 import { companyService } from '../../src/server/services/companyService.js';
 import { CompanyRepository } from '../../src/server/repositories/companyRepository.js';
+
+// Unit tests mock the SQL boundary. Real locking/concurrency is covered separately
+// by tests/integration/payment-backend.test.ts against a disposable MariaDB.
+const originalConnection = pool.getConnection;
+beforeEach(() => {
+  (pool as any).getConnection = async () => ({
+    query: (sql: string, values: any[]) => sql.includes('GET_LOCK') ? Promise.resolve([[{ acquired: 1 }]]) : sql.includes('RELEASE_LOCK') ? Promise.resolve([[]]) : (pool as any).query(sql, values),
+    release() {}, destroy() {},
+  });
+});
+afterEach(() => { pool.getConnection = originalConnection; });
+after(async () => { await pool.end(); });
 
 test('contact validation accepts only minimal valid contact data', () => {
   assert.deepEqual(checkoutContact({ name: ' Maria ', email: 'MARIA@example.test', phone: '(47) 99999-0000', amount: 0 }), {
@@ -30,7 +42,7 @@ test('card amount is server-owned, tokenized and idempotent; response never acti
   const fetch = globalThis.fetch;
   const oldToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
   const oldSecret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
-  process.env.MERCADOPAGO_ACCESS_TOKEN = 'test-only-token';
+  process.env.MERCADOPAGO_ACCESS_TOKEN = 'TEST-unit-fixture';
   process.env.MERCADOPAGO_WEBHOOK_SECRET = 'test-only-secret';
   const requests: { headers: any; body: any }[] = [];
   const sql: string[] = [];
@@ -66,24 +78,28 @@ test('card amount is server-owned, tokenized and idempotent; response never acti
     globalThis.fetch = fetch;
     if (oldToken === undefined) delete process.env.MERCADOPAGO_ACCESS_TOKEN; else process.env.MERCADOPAGO_ACCESS_TOKEN = oldToken;
     if (oldSecret === undefined) delete process.env.MERCADOPAGO_WEBHOOK_SECRET; else process.env.MERCADOPAGO_WEBHOOK_SECRET = oldSecret;
-    await pool.end();
   }
 });
 
-test('pix idempotency: reuses pending subscription across tabs with different requestIds and recovers safely', async () => {
+test('pix request contract reuses a stored pending attempt (SQL/gateway unit stubs)', async () => {
   const query = pool.query;
   const fetch = globalThis.fetch;
   const oldToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
   const oldSecret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
-  process.env.MERCADOPAGO_ACCESS_TOKEN = 'test-only-token';
+  process.env.MERCADOPAGO_ACCESS_TOKEN = 'TEST-unit-fixture';
   process.env.MERCADOPAGO_WEBHOOK_SECRET = 'test-only-secret';
 
   const mockSubscriptions: Record<string, any> = {};
   const idempotencyKeysSent: string[] = [];
+  let externalReference = '';
 
   (pool as any).query = async (statement: string, params: any[] = []) => {
     if (statement.includes('FROM plans')) {
       return [[{ id: 'plan_gold_vip', name: 'gold_vip', price: 49.9, version: 1 }]];
+    }
+    if (statement.includes('INNER JOIN payment_logs')) {
+      const sub: any = Object.values(mockSubscriptions)[0];
+      return [sub ? [{ id: sub.id, amount: sub.amount, subPlanId: sub.planId, gateway_reference: '99991', createdAt: sub.createdAt }] : []];
     }
     if (statement.includes('SELECT id, createdAt FROM subscriptions')) {
       const match = Object.values(mockSubscriptions).find(
@@ -123,10 +139,18 @@ test('pix idempotency: reuses pending subscription across tabs with different re
   };
 
   globalThis.fetch = async (_url, init) => {
-    idempotencyKeysSent.push(String(init?.headers && (init.headers as any)['X-Idempotency-Key']));
+    if (String(_url).endsWith('/users/me')) return Response.json({ id: 777777777 });
+    if (init?.method === 'POST') {
+      idempotencyKeysSent.push(String(init?.headers && (init.headers as any)['X-Idempotency-Key']));
+      externalReference = JSON.parse(String(init.body)).external_reference;
+    }
     return new Response(JSON.stringify({
       id: 99991,
       status: 'pending',
+      external_reference: externalReference,
+      transaction_amount: 49.90, currency_id: 'BRL',
+      collector_id: 777777777, live_mode: false,
+      date_of_expiration: new Date(Date.now()+1800000).toISOString(),
       point_of_interaction: {
         transaction_data: {
           qr_code: 'pix-test-payload-code',
@@ -151,13 +175,12 @@ test('pix idempotency: reuses pending subscription across tabs with different re
 
     // Ambas as abas convergem para o mesmo subscriptionId e idempotency key
     assert.equal(tab1.subscriptionId, tab2.subscriptionId);
-    assert.equal(idempotencyKeysSent[0], idempotencyKeysSent[1]);
+    assert.equal(idempotencyKeysSent.length, 1, 'recovery must not issue another gateway POST');
   } finally {
     (pool as any).query = query;
     globalThis.fetch = fetch;
     if (oldToken === undefined) delete process.env.MERCADOPAGO_ACCESS_TOKEN; else process.env.MERCADOPAGO_ACCESS_TOKEN = oldToken;
     if (oldSecret === undefined) delete process.env.MERCADOPAGO_WEBHOOK_SECRET; else process.env.MERCADOPAGO_WEBHOOK_SECRET = oldSecret;
-    await pool.end();
   }
 });
 
