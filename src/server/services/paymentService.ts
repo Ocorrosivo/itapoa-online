@@ -42,8 +42,10 @@ interface CreatedPix {
 class PaymentService {
   async gatewayConfig() {
     const [rows]: any = await pool.query('SELECT publicKey, accessToken FROM payment_config WHERE id = ? LIMIT 1', ['payment']);
-    const publicKey = process.env.MERCADOPAGO_PUBLIC_KEY?.trim() || rows[0]?.publicKey?.trim() || '';
-    const accessTokenConfigured = Boolean(process.env.MERCADOPAGO_ACCESS_TOKEN?.trim() || rows[0]?.accessToken?.trim());
+    const dbPublicKey = rows[0]?.publicKey?.trim();
+    const publicKey = dbPublicKey || process.env.MERCADOPAGO_PUBLIC_KEY?.trim() || '';
+    const dbAccessToken = rows[0]?.accessToken?.trim();
+    const accessTokenConfigured = Boolean(dbAccessToken || process.env.MERCADOPAGO_ACCESS_TOKEN?.trim());
     const webhookConfigured = Boolean(this.webhookSecret());
     const ready = accessTokenConfigured && (process.env.NODE_ENV !== 'production' || webhookConfigured);
     return { publicKey, pixEnabled: ready, cardEnabled: ready && Boolean(publicKey) };
@@ -129,18 +131,17 @@ class PaymentService {
     return { paymentId: String(payment.id), subscriptionId, status: String(payment.status) };
   }
   private async accessToken(): Promise<string> {
-    const fromEnv = process.env.MERCADOPAGO_ACCESS_TOKEN?.trim();
-    if (fromEnv) return fromEnv;
-
     const [rows]: any = await pool.query(
       'SELECT accessToken FROM payment_config WHERE id = ? LIMIT 1',
       ['payment']
     );
-    const token = rows[0]?.accessToken?.trim();
-    if (!token) {
-      throw new PaymentError(503, 'Gateway de pagamento não configurado.');
-    }
-    return token;
+    const dbToken = rows[0]?.accessToken?.trim();
+    if (dbToken) return dbToken;
+
+    const fromEnv = process.env.MERCADOPAGO_ACCESS_TOKEN?.trim();
+    if (fromEnv) return fromEnv;
+
+    throw new PaymentError(503, 'Gateway de pagamento não configurado.');
   }
 
   private webhookSecret(): string | null {
