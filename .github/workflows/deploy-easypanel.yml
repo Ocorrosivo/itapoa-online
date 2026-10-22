@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   build-and-deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       payment-test-db:
         image: mariadb:11.4
@@ -61,9 +61,13 @@ jobs:
           node --import tsx --test tests/unit/password-recovery.test.ts
           node --import tsx --test tests/unit/email-verification.test.ts
 
+      - name: Install payment test browser
+        timeout-minutes: 10
+        run: npx playwright install --with-deps chromium
+
       - name: Payment backend and browser integration (isolated database, synthetic gateway)
+        timeout-minutes: 5
         run: |
-          npx playwright install --with-deps chromium
           node --import tsx --test tests/integration/payment-backend.test.ts tests/integration/payment-checkout-browser.test.ts
 
       - name: Deploy and verify on VPS
