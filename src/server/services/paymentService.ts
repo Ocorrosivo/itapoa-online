@@ -640,6 +640,18 @@ class PaymentService {
       return { status: sub.status, reconciled: false, message: 'Falha de comunicação com o Mercado Pago.' };
     }
 
+    if (mp.external_reference && String(mp.external_reference) !== String(subscriptionId)) {
+      return { status: sub.status, reconciled: false, message: 'Referência do pagamento não confere com o pedido.' };
+    }
+    if (mp.currency_id && mp.currency_id !== 'BRL') {
+      return { status: sub.status, reconciled: false, message: 'Moeda do pagamento inválida.' };
+    }
+    const expectedAmount = Number(sub.amount);
+    const paidAmount = Number(mp.transaction_amount);
+    if (Number.isFinite(expectedAmount) && Number.isFinite(paidAmount) && Math.abs(paidAmount - expectedAmount) > 0.01) {
+      return { status: sub.status, reconciled: false, message: 'Valor pago diverge do valor contratado do plano.' };
+    }
+
     if (mp.status === 'approved') {
       await this.handlePaymentNotification(paymentId);
       return { status: 'active', reconciled: true, message: 'Pagamento confirmado e plano ativado com sucesso!' };
@@ -648,7 +660,11 @@ class PaymentService {
     return {
       status: mp.status || sub.status,
       reconciled: false,
-      message: `Status atual no Mercado Pago: ${mp.status || 'pendente'}`
+      message: mp.status === 'in_process'
+        ? 'Pagamento em análise pelo Mercado Pago.'
+        : mp.status === 'pending'
+        ? 'Pagamento pendente de compensação pelo Mercado Pago.'
+        : `Status atual no Mercado Pago: ${mp.status || 'pendente'}`
     };
   }
 }
