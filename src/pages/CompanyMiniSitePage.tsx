@@ -50,7 +50,8 @@ const normalizeCompany = (raw: any): Company => {
 
 export const CompanyMiniSitePage: React.FC<CompanyMiniSitePageProps> = ({
   slug,
-  onBack
+  onBack,
+  onNavigateCompany
 }) => {
   const { companies, cities, categories, favorites, toggleFavorite } = useCompany();
   const { user } = useAuth();
@@ -133,6 +134,8 @@ export const CompanyMiniSitePage: React.FC<CompanyMiniSitePageProps> = ({
       company={company}
       cities={cities}
       categories={categories}
+      companies={companies}
+      onNavigateCompany={onNavigateCompany}
       currentUserId={user?.id || 'visitor'}
       isFavorited={isFav}
       onToggleFavorite={() => toggleFavorite(company.id)}
