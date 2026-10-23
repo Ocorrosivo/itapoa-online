@@ -266,24 +266,25 @@ export default function CompanyDetailSection({
   return (
     <div id="company_detail_container" className="relative w-full min-h-screen bg-slate-50 pb-20">
       
-      {/* 1. CABEÇALHO PANORÂMICO PREMIUM (Para todas as empresas) */}
-      <div className="max-w-7xl mx-auto px-4 md:px-8 pt-6">
-        <section
-          id="detail_cover_header"
-          className="relative w-full min-h-[340px] sm:min-h-[380px] md:min-h-[420px] rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-slate-950 flex flex-col justify-between p-6 sm:p-8 md:p-10"
-        >
-          {/* Background Image: Capa da empresa OU Foto aérea panorâmica de Itapoá */}
-          <div
-            className="absolute inset-0 bg-cover bg-center transition-all duration-700"
-            style={{
-              backgroundImage: `url('${company.coverImage || '/hero-itapoa.jpg'}')`,
-            }}
-            aria-hidden="true"
-          />
+      {/* 1. CABEÇALHO PANORÂMICO PREMIUM (Conexão contínua com a barra superior, sem faixa branca) */}
+      <div className="w-full bg-[#0A0915] border-b border-slate-800/80 pt-2 sm:pt-4 pb-8 sm:pb-10 shadow-xl">
+        <div className="max-w-7xl mx-auto px-4 md:px-8">
+          <section
+            id="detail_cover_header"
+            className="group relative w-full min-h-[340px] sm:min-h-[380px] md:min-h-[430px] rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-slate-950 flex flex-col justify-between p-6 sm:p-8 md:p-10"
+          >
+            {/* Background Image: Capa da empresa - Nítida, iluminada e vívida */}
+            <div
+              className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-[1.02]"
+              style={{
+                backgroundImage: `url('${company.coverImage || '/hero-itapoa.jpg'}')`,
+              }}
+              aria-hidden="true"
+            />
 
-          {/* Gradientes de alto contraste para máxima legibilidade */}
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/70 to-slate-950/40 pointer-events-none" />
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/50 to-transparent pointer-events-none" />
+            {/* Gradientes equilibrados: foto clara e bem visível, escurecendo apenas a base onde ficam os textos */}
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/25 to-transparent pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-transparent pointer-events-none" />
 
           {/* Top Bar Actions */}
           <div className="relative z-10 flex items-center justify-between gap-3">
@@ -416,6 +417,7 @@ export default function CompanyDetailSection({
           </div>
         </section>
       </div>
+    </div>
 
       {/* 2. BARRA DE NAVEGAÇÃO DE ABAS */}
       <div className="max-w-7xl mx-auto px-4 md:px-8 mt-8">
@@ -497,59 +499,6 @@ export default function CompanyDetailSection({
                         <span>{feat}</span>
                       </span>
                     ))}
-                  </div>
-                </div>
-
-                {/* Cards de Informações Práticas de Atendimento (Preenche os espaços perfeitamente) */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="p-5 bg-white border border-slate-200/90 rounded-2xl shadow-sm flex flex-col justify-between space-y-3">
-                    <div className="flex items-center gap-2.5 text-xs font-black uppercase tracking-wider text-slate-500">
-                      <Clock className="w-4 h-4 text-[#C8102E]" />
-                      <span>HORÁRIOS</span>
-                    </div>
-                    <div>
-                      <span className="text-sm font-bold text-slate-900 block">Atendimento</span>
-                      <span className="text-xs text-slate-600 mt-0.5 block">{company.hours || 'Segunda a Sábado'}</span>
-                    </div>
-                    <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg w-max border border-emerald-200">
-                      Canal Ativo
-                    </span>
-                  </div>
-
-                  <div className="p-5 bg-white border border-slate-200/90 rounded-2xl shadow-sm flex flex-col justify-between space-y-3">
-                    <div className="flex items-center gap-2.5 text-xs font-black uppercase tracking-wider text-slate-500">
-                      <MapPin className="w-4 h-4 text-[#C8102E]" />
-                      <span>LOCALIZAÇÃO</span>
-                    </div>
-                    <div>
-                      <span className="text-sm font-bold text-slate-900 block truncate">{currentCity?.name || 'Itapoá - SC'}</span>
-                      <span className="text-xs text-slate-600 mt-0.5 block line-clamp-2">{company.address || 'Município de Itapoá, SC'}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleRouteClick}
-                      className="text-[11px] font-bold text-[#C8102E] hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>Traçar Rota</span> →
-                    </button>
-                  </div>
-
-                  <div className="p-5 bg-white border border-slate-200/90 rounded-2xl shadow-sm flex flex-col justify-between space-y-3">
-                    <div className="flex items-center gap-2.5 text-xs font-black uppercase tracking-wider text-slate-500">
-                      <Phone className="w-4 h-4 text-[#C8102E]" />
-                      <span>CANAIS DIGITAIS</span>
-                    </div>
-                    <div>
-                      <span className="text-sm font-bold text-slate-900 block">WhatsApp Oficial</span>
-                      <span className="text-xs text-slate-600 mt-0.5 block">{company.whatsapp || company.phone || 'Disponível online'}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleLeadWhatsAppClick}
-                      className="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg w-max border border-emerald-200 transition cursor-pointer"
-                    >
-                      Abrir Conversa
-                    </button>
                   </div>
                 </div>
 
