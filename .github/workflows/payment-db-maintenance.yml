@@ -16,6 +16,34 @@ permissions:
   contents: read
 
 jobs:
+  inspect-controller:
+    if: inputs.confirmation == 'inspect-controller'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Inspect saved Easypanel configuration metadata only
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          command_timeout: 2m
+          script: |
+            set -eu
+            docker service inspect easypanel --format '{{json .Spec.TaskTemplate.ContainerSpec.Mounts}}'
+            app=$(docker ps --filter 'label=com.docker.swarm.service.name=itapoa_itapoa-app' --format '{{.ID}}' | head -n 1)
+            image=$(docker inspect "$app" --format '{{.Image}}')
+            docker run --rm -i --network none --mount type=bind,source=/etc/easypanel,target=/control,readonly "$image" node - <<'NODE'
+            const fs=require('fs'),path=require('path');
+            for(const directory of ['/control','/control/projects/itapoa','/control/projects/itapoa/itapoa-app']){
+              if(!fs.existsSync(directory))continue;
+              console.log(JSON.stringify({directory,entries:fs.readdirSync(directory)}));
+              for(const name of fs.readdirSync(directory).filter(n=>n.endsWith('.json'))){
+                const file=path.join(directory,name);if(!fs.statSync(file).isFile())continue;
+                try{const data=JSON.parse(fs.readFileSync(file,'utf8'));console.log(JSON.stringify({file,keys:Object.keys(data)}));}catch{}
+              }
+            }
+            NODE
   create-verified-backup:
     if: inputs.confirmation == 'create-verified-backup'
     runs-on: ubuntu-24.04
