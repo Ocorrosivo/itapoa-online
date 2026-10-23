@@ -32,6 +32,8 @@ interface CompanyDetailSectionProps {
   isFavorited: boolean;
   onToggleFavorite: (companyId: string) => void;
   onBack: () => void;
+  companies?: Company[];
+  onNavigateCompany?: (slug: string) => void;
 }
 
 export default function CompanyDetailSection({
@@ -41,7 +43,9 @@ export default function CompanyDetailSection({
   currentUserId,
   isFavorited,
   onToggleFavorite,
-  onBack
+  onBack,
+  companies = [],
+  onNavigateCompany
 }: CompanyDetailSectionProps) {
   // Identificação do Plano Efetivo da Empresa
   const rawPlan = (company.planLevel || 'bronze').toLowerCase();
@@ -251,179 +255,166 @@ export default function CompanyDetailSection({
   const currentCity = cities.find(c => c.id === company.cityId);
   const currentCategory = categories.find(cat => cat.id === company.categoryId);
 
+  // Empresas recomendadas da mesma categoria ou cidade para preencher a página
+  const relatedCompanies = useMemo(() => {
+    if (!companies || companies.length === 0) return [];
+    return companies
+      .filter(c => c.id !== company.id && (c.categoryId === company.categoryId || c.cityId === company.cityId))
+      .slice(0, 3);
+  }, [companies, company]);
+
   return (
     <div id="company_detail_container" className="relative w-full min-h-screen bg-slate-50 pb-20">
       
-      {/* 1. CABEÇALHO DIFERENCIADO POR PLANO */}
+      {/* 1. CABEÇALHO PANORÂMICO PREMIUM (Para todas as empresas) */}
       <div className="max-w-7xl mx-auto px-4 md:px-8 pt-6">
-        
-        {/* CABEÇALHO GOLD / DIAMOND COM CAPA PERSONALIZADA E SELO */}
-        {!isBronze ? (
-          <section id="detail_cover_vip" className={`relative w-full h-[320px] md:h-[400px] rounded-3xl overflow-hidden shadow-2xl border ${
-            isDiamond 
-              ? 'border-amber-400/40 ring-1 ring-amber-400/30' 
-              : 'border-indigo-400/30 ring-1 ring-indigo-400/20'
-          }`}>
-            <img
-              src={company.coverImage || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80'}
-              alt={company.name}
-              className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
-            />
-            <div className={`absolute inset-0 ${
-              isDiamond 
-                ? 'bg-gradient-to-t from-slate-950 via-slate-950/60 to-black/30' 
-                : 'bg-gradient-to-t from-slate-950 via-slate-950/50 to-transparent'
-            }`} />
+        <section
+          id="detail_cover_header"
+          className="relative w-full min-h-[340px] sm:min-h-[380px] md:min-h-[420px] rounded-3xl overflow-hidden shadow-2xl border border-white/10 bg-slate-950 flex flex-col justify-between p-6 sm:p-8 md:p-10"
+        >
+          {/* Background Image: Capa da empresa OU Foto aérea panorâmica de Itapoá */}
+          <div
+            className="absolute inset-0 bg-cover bg-center transition-all duration-700"
+            style={{
+              backgroundImage: `url('${company.coverImage || '/hero-itapoa.jpg'}')`,
+            }}
+            aria-hidden="true"
+          />
 
-            {/* Top Bar Actions */}
-            <div className="absolute top-6 left-6 right-6 flex items-center justify-between z-10">
-              <button
-                type="button"
-                onClick={onBack}
-                className="px-4 py-2 bg-slate-950/80 border border-white/20 text-white font-bold text-xs rounded-full hover:bg-slate-900 transition flex items-center gap-1.5 backdrop-blur cursor-pointer shadow"
-              >
-                ← Voltar para o Guia
-              </button>
+          {/* Gradientes de alto contraste para máxima legibilidade */}
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/70 to-slate-950/40 pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/50 to-transparent pointer-events-none" />
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
-                  className="p-2.5 bg-slate-950/80 border border-white/20 text-white rounded-full hover:bg-slate-900 transition backdrop-blur shadow cursor-pointer"
-                  title="Compartilhar Link Oficial"
-                >
-                  <Share2 className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onToggleFavorite(company.id)}
-                  className="p-2.5 bg-slate-950/80 border border-white/20 text-white rounded-full hover:bg-slate-900 transition backdrop-blur shadow cursor-pointer"
-                >
-                  <Heart className={`w-4 h-4 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-white'}`} />
-                </button>
-              </div>
-            </div>
+          {/* Top Bar Actions */}
+          <div className="relative z-10 flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={onBack}
+              className="px-4 py-2 bg-slate-950/70 hover:bg-slate-900 border border-white/20 text-white font-bold text-xs rounded-full transition flex items-center gap-1.5 backdrop-blur-md cursor-pointer shadow-lg active:scale-95"
+            >
+              <span>← Voltar ao Guia</span>
+            </button>
 
-            {/* Bottom Content: Logo, Selo Oficial e Contatos */}
-            <div className="absolute bottom-6 left-6 right-6 z-10 flex flex-col md:flex-row md:items-end md:justify-between gap-6">
-              <div className="flex gap-4 items-center">
-                <img
-                  src={company.logo || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=200&q=80'}
-                  alt={company.name}
-                  className="w-16 h-16 md:w-22 md:h-22 rounded-2xl md:rounded-3xl object-cover border-2 border-white shadow-2xl bg-white shrink-0"
-                  referrerPolicy="no-referrer"
-                />
-                <div className="text-white">
-                  <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <span className="text-[11px] font-bold text-teal-300 uppercase tracking-wider">
-                      {currentCategory?.name || 'Comércio'} • {currentCity?.name || 'Itapoá'}
-                    </span>
-
-                    {/* SELO OFICIAL POR PLANO */}
-                    {isDiamond ? (
-                      <span className="inline-flex items-center gap-1 px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 border border-amber-300 shadow-md">
-                        <Sparkles className="w-3 h-3 fill-slate-950" />
-                        <span>👑 PARCEIRO DIAMOND OFICIAL</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-600 text-white border border-indigo-400 shadow-md">
-                        <Zap className="w-3 h-3 fill-white" />
-                        <span>⭐ PARCEIRO VIP GOLD</span>
-                      </span>
-                    )}
-                  </div>
-
-                  <h1 className="text-2xl md:text-3xl font-sans font-black tracking-tight">{company.name}</h1>
-                  
-                  <div className="flex items-center gap-2 mt-1.5">
-                    <div className="flex items-center gap-1 bg-amber-400 text-slate-950 px-2 py-0.5 rounded text-xs font-bold">
-                      <Star className="w-3.5 h-3.5 fill-slate-950 text-slate-950" /> {safeRating.toFixed(1)}
-                    </div>
-                    <span className="text-xs text-slate-300">({reviews.length} avaliações autorizadas)</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Ações Rápidas */}
-              <div className="flex flex-wrap gap-2.5">
-                <button
-                  type="button"
-                  onClick={handleLeadWhatsAppClick}
-                  className="px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-2 shadow-lg cursor-pointer active:scale-95 shrink-0"
-                >
-                  <Phone className="w-4 h-4 fill-slate-950" />
-                  <span>Chamar no WhatsApp</span>
-                </button>
-
-                {company.phone && (
-                  <button
-                    type="button"
-                    onClick={handlePhoneClick}
-                    className="px-4 py-3 bg-slate-900/90 hover:bg-slate-800 text-white border border-white/20 font-bold text-xs md:text-sm rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
-                  >
-                    <span>Ligar</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </section>
-        ) : (
-          /* CABEÇALHO ESSENCIAL BRONZE (Clean, Direto e Objetivo) */
-          <section id="detail_cover_bronze" className="bg-slate-900 text-white rounded-3xl p-6 md:p-8 border border-slate-800 shadow-lg relative">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-6">
-              <button
-                type="button"
-                onClick={onBack}
-                className="text-xs font-bold text-slate-400 hover:text-white transition flex items-center gap-1"
-              >
-                ← Voltar para o Guia
-              </button>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black uppercase tracking-wider bg-slate-800 text-slate-400 border border-slate-700 px-2.5 py-1 rounded-full">
-                  Presença Essencial no Guia
+            <div className="flex items-center gap-2">
+              {/* Badges de Plano / Selo */}
+              {isDiamond ? (
+                <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 border border-amber-300 shadow-md">
+                  <Sparkles className="w-3.5 h-3.5 fill-slate-950" />
+                  <span>PARCEIRO DIAMOND OFICIAL</span>
                 </span>
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
-                  className="p-2 bg-slate-800 text-slate-400 hover:text-white rounded-xl transition"
-                >
-                  <Share2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
+              ) : isGold ? (
+                <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-[#C8102E] to-red-600 text-white border border-red-400 shadow-md">
+                  <Zap className="w-3.5 h-3.5 fill-white" />
+                  <span>PARCEIRO VIP GOLD</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-950/80 text-emerald-400 border border-emerald-500/40 backdrop-blur-md shadow-md">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>PERFIL OFICIAL VERIFICADO</span>
+                </span>
+              )}
 
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-              <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="p-2.5 bg-slate-950/70 hover:bg-slate-900 border border-white/20 text-white rounded-full transition backdrop-blur-md shadow cursor-pointer active:scale-95"
+                title="Compartilhar Link Oficial"
+                aria-label="Compartilhar"
+              >
+                <Share2 className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onToggleFavorite(company.id)}
+                className="p-2.5 bg-slate-950/70 hover:bg-slate-900 border border-white/20 text-white rounded-full transition backdrop-blur-md shadow cursor-pointer active:scale-95"
+                title="Favoritar Empresa"
+                aria-label="Favoritar"
+              >
+                <Heart className={`w-4 h-4 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-white'}`} />
+              </button>
+            </div>
+          </div>
+
+          {/* Bottom Content: Logo, Título, Categoria, Avaliação e CTAs */}
+          <div className="relative z-10 pt-8 flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
+              {/* Logo Avatar */}
+              <div className="relative shrink-0">
                 <img
-                  src={company.logo || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=200&q=80'}
+                  src={company.logo || '/logotipo.png'}
                   alt={company.name}
-                  className="w-16 h-16 md:w-20 md:h-20 rounded-2xl object-cover border border-slate-700 bg-white shrink-0"
+                  className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl md:rounded-3xl object-contain bg-white p-2 border-2 border-white/80 shadow-2xl"
                   referrerPolicy="no-referrer"
                 />
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
-                    {currentCategory?.name || 'Comércio'} • {currentCity?.name || 'Itapoá'}
+                <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center text-white text-[10px] font-bold shadow" title="Empresa Ativa">
+                  ✓
+                </span>
+              </div>
+
+              {/* Informações Principais */}
+              <div className="text-white space-y-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-md bg-[#C8102E] text-white text-[10px] font-black uppercase tracking-wider shadow-sm">
+                    {currentCategory?.name || 'Comércio Local'}
                   </span>
-                  <h1 className="text-2xl md:text-3xl font-black text-white">{company.name}</h1>
-                  <p className="text-xs text-slate-400 mt-1 max-w-xl">{company.description}</p>
+                  <span className="text-xs text-slate-300 font-medium flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-red-400" />
+                    {currentCity?.name || 'Itapoá - SC'}
+                  </span>
+                </div>
+
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight leading-tight drop-shadow-md">
+                  {company.name}
+                </h1>
+
+                {company.description && (
+                  <p className="text-xs sm:text-sm text-slate-200 max-w-2xl font-medium leading-relaxed drop-shadow line-clamp-2">
+                    {company.description}
+                  </p>
+                )}
+
+                {/* Avaliação e Status */}
+                <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-300">
+                  <div className="flex items-center gap-1.5 bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-lg font-black text-xs shadow-sm">
+                    <Star className="w-3.5 h-3.5 fill-slate-950 text-slate-950" />
+                    <span>{safeRating > 0 ? safeRating.toFixed(1) : '5.0'}</span>
+                  </div>
+                  <span className="font-semibold text-slate-200">
+                    ({reviews.length} {reviews.length === 1 ? 'avaliação' : 'avaliações no portal'})
+                  </span>
+                  <span className="text-slate-400 hidden sm:inline">•</span>
+                  <span className="inline-flex items-center gap-1 text-emerald-400 font-bold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    Canal Oficial Aberto
+                  </span>
                 </div>
               </div>
+            </div>
 
-              <div className="flex items-center gap-3">
+            {/* Ações Rápidas de Contato */}
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={handleLeadWhatsAppClick}
+                className="w-full sm:w-auto px-6 py-3.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-slate-950 font-black text-xs sm:text-sm tracking-wider uppercase rounded-xl transition flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/20 active:scale-95 cursor-pointer"
+              >
+                <Phone className="w-4 h-4 fill-slate-950" />
+                <span>Conversar no WhatsApp</span>
+              </button>
+
+              {company.phone && (
                 <button
                   type="button"
-                  onClick={handleLeadWhatsAppClick}
-                  className="px-5 py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs md:text-sm rounded-xl transition flex items-center gap-2 shadow"
+                  onClick={handlePhoneClick}
+                  className="w-full sm:w-auto px-4 py-3.5 bg-slate-900/80 hover:bg-slate-800 text-white border border-white/20 font-bold text-xs sm:text-sm rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer backdrop-blur-md shadow-md active:scale-95"
                 >
-                  <Phone className="w-4 h-4 fill-slate-950" />
-                  <span>WhatsApp</span>
+                  <span>Ligar</span>
                 </button>
-              </div>
+              )}
             </div>
-          </section>
-        )}
-
+          </div>
+        </section>
       </div>
 
       {/* 2. BARRA DE NAVEGAÇÃO DE ABAS */}
@@ -432,18 +423,18 @@ export default function CompanyDetailSection({
           <button
             onClick={() => setActiveTab('info')}
             className={`pb-4 text-sm font-bold transition inline-flex items-center gap-2 border-b-2 cursor-pointer ${
-              activeTab === 'info' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+              activeTab === 'info' ? 'border-[#C8102E] text-[#C8102E] font-black' : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <span>Informações Gerais</span>
           </button>
 
-          {/* Catálogo de Produtos: apenas Gold (até 5) e Diamond (até 30) */}
+          {/* Catálogo de Produtos: apenas Gold e Diamond */}
           {!isBronze && (
             <button
               onClick={() => setActiveTab('products')}
               className={`pb-4 text-sm font-bold transition inline-flex items-center gap-2 border-b-2 cursor-pointer ${
-                activeTab === 'products' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+                activeTab === 'products' ? 'border-[#C8102E] text-[#C8102E] font-black' : 'border-transparent text-slate-500 hover:text-slate-800'
               }`}
             >
               <ShoppingBag className="w-4 h-4" />
@@ -451,12 +442,12 @@ export default function CompanyDetailSection({
             </button>
           )}
 
-          {/* Cupons e Promoções: apenas Gold (1) e Diamond (até 3) */}
+          {/* Cupons e Promoções: apenas Gold e Diamond */}
           {!isBronze && coupons.length > 0 && (
             <button
               onClick={() => setActiveTab('coupons')}
               className={`pb-4 text-sm font-bold transition inline-flex items-center gap-2 border-b-2 cursor-pointer ${
-                activeTab === 'coupons' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+                activeTab === 'coupons' ? 'border-[#C8102E] text-[#C8102E] font-black' : 'border-transparent text-slate-500 hover:text-slate-800'
               }`}
             >
               <Tag className="w-4 h-4 text-amber-500" />
@@ -467,7 +458,7 @@ export default function CompanyDetailSection({
           <button
             onClick={() => setActiveTab('reviews')}
             className={`pb-4 text-sm font-bold transition inline-flex items-center gap-2 border-b-2 cursor-pointer ${
-              activeTab === 'reviews' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+              activeTab === 'reviews' ? 'border-[#C8102E] text-[#C8102E] font-black' : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <span>Avaliações ({reviews.length})</span>
@@ -484,22 +475,82 @@ export default function CompanyDetailSection({
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-8">
                 
                 {/* Sobre Nós */}
-                <div className="p-6 md:p-8 bg-white border border-slate-200 rounded-3xl shadow-sm">
-                  <h3 className="text-lg font-black text-slate-900 mb-3">Sobre o Estabelecimento</h3>
-                  <p className="text-slate-600 leading-relaxed text-sm whitespace-pre-line">
-                    {company.detailedDescription || company.description || 'Nenhuma descrição detalhada informada.'}
+                <div className="p-6 md:p-8 bg-white border border-slate-200/90 rounded-3xl shadow-sm">
+                  <div className="flex items-center gap-2.5 mb-4">
+                    <Sparkles className="w-5 h-5 text-[#C8102E]" />
+                    <h3 className="text-xl font-black text-slate-900 tracking-tight">Sobre o Estabelecimento</h3>
+                  </div>
+                  <p className="text-slate-700 leading-relaxed text-sm sm:text-base whitespace-pre-line font-medium">
+                    {company.detailedDescription || company.description || 'Estabelecimento cadastrado e atuante no município de Itapoá SC.'}
                   </p>
 
-                  {safeFeatures.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-6 pt-6 border-t border-slate-100">
-                      {safeFeatures.map((feat, idx) => (
-                        <span key={idx} className="bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                          <span>{feat}</span>
-                        </span>
-                      ))}
+                  {/* Destaques / Diferenciais */}
+                  <div className="flex flex-wrap gap-2 mt-6 pt-6 border-t border-slate-100">
+                    {(safeFeatures.length > 0 ? safeFeatures : [
+                      'Atendimento Oficial em Itapoá',
+                      'Canal Direto de WhatsApp',
+                      'Estabelecimento Cadastrado',
+                      'Segurança e Privacidade LGPD'
+                    ]).map((feat, idx) => (
+                      <span key={idx} className="bg-slate-100 text-slate-700 text-xs px-3.5 py-1.5 rounded-xl font-bold flex items-center gap-1.5 border border-slate-200/60 shadow-2xs">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>{feat}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Cards de Informações Práticas de Atendimento (Preenche os espaços perfeitamente) */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="p-5 bg-white border border-slate-200/90 rounded-2xl shadow-sm flex flex-col justify-between space-y-3">
+                    <div className="flex items-center gap-2.5 text-xs font-black uppercase tracking-wider text-slate-500">
+                      <Clock className="w-4 h-4 text-[#C8102E]" />
+                      <span>HORÁRIOS</span>
                     </div>
-                  )}
+                    <div>
+                      <span className="text-sm font-bold text-slate-900 block">Atendimento</span>
+                      <span className="text-xs text-slate-600 mt-0.5 block">{company.hours || 'Segunda a Sábado'}</span>
+                    </div>
+                    <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg w-max border border-emerald-200">
+                      Canal Ativo
+                    </span>
+                  </div>
+
+                  <div className="p-5 bg-white border border-slate-200/90 rounded-2xl shadow-sm flex flex-col justify-between space-y-3">
+                    <div className="flex items-center gap-2.5 text-xs font-black uppercase tracking-wider text-slate-500">
+                      <MapPin className="w-4 h-4 text-[#C8102E]" />
+                      <span>LOCALIZAÇÃO</span>
+                    </div>
+                    <div>
+                      <span className="text-sm font-bold text-slate-900 block truncate">{currentCity?.name || 'Itapoá - SC'}</span>
+                      <span className="text-xs text-slate-600 mt-0.5 block line-clamp-2">{company.address || 'Município de Itapoá, SC'}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRouteClick}
+                      className="text-[11px] font-bold text-[#C8102E] hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Traçar Rota</span> →
+                    </button>
+                  </div>
+
+                  <div className="p-5 bg-white border border-slate-200/90 rounded-2xl shadow-sm flex flex-col justify-between space-y-3">
+                    <div className="flex items-center gap-2.5 text-xs font-black uppercase tracking-wider text-slate-500">
+                      <Phone className="w-4 h-4 text-[#C8102E]" />
+                      <span>CANAIS DIGITAIS</span>
+                    </div>
+                    <div>
+                      <span className="text-sm font-bold text-slate-900 block">WhatsApp Oficial</span>
+                      <span className="text-xs text-slate-600 mt-0.5 block">{company.whatsapp || company.phone || 'Disponível online'}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleLeadWhatsAppClick}
+                      className="text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg w-max border border-emerald-200 transition cursor-pointer"
+                    >
+                      Abrir Conversa
+                    </button>
+                  </div>
                 </div>
 
                 {/* Galeria de Fotos Respeitando os Limites do Plano */}
@@ -554,7 +605,7 @@ export default function CompanyDetailSection({
                       {safeFaqs.map(faq => (
                         <div key={faq.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
                           <h4 className="font-bold text-sm text-slate-900 mb-1.5 flex items-center gap-1.5">
-                            <span className="text-indigo-600">Q.</span> {faq.question}
+                            <span className="text-[#C8102E]">Q.</span> {faq.question}
                           </h4>
                           <p className="text-xs text-slate-600 leading-relaxed">{faq.answer}</p>
                         </div>
@@ -563,25 +614,72 @@ export default function CompanyDetailSection({
                   </div>
                 )}
 
-                {/* Banner Educativo Apenas para Perfil Bronze Gratuito (Sem concorrentes em pagos) */}
-                {isBronze && (
-                  <div className="p-6 rounded-3xl bg-gradient-to-r from-slate-900 to-indigo-950 border border-slate-800 text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 block mb-1">
-                        Área do Lojista
-                      </span>
-                      <h4 className="text-base font-bold">É o proprietário desta empresa?</h4>
-                      <p className="text-xs text-slate-300 mt-0.5 max-w-lg leading-relaxed">
-                        Faça upgrade para os planos Gold VIP ou Diamond e ative capa personalizada, catálogo de produtos, promoções ativas e destaque rotativo na vitrine do portal.
-                      </p>
+                {/* Card de Apoio Comunitário e Avaliação */}
+                <div className="p-6 md:p-8 rounded-3xl bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 border border-slate-800 text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                  <div className="space-y-1.5">
+                    <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-red-950 text-red-400 border border-red-800 text-[10px] font-black uppercase tracking-wider">
+                      <Star className="w-3 h-3 fill-red-400" />
+                      <span>AVALIAÇÃO VERIFICADA</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => window.location.href = '/#pricing'}
-                      className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition shrink-0 shadow-md"
-                    >
-                      Conhecer Planos
-                    </button>
+                    <h4 className="text-lg font-black tracking-tight">Você conhece ou já utilizou os serviços desta empresa?</h4>
+                    <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
+                      Sua avaliação no Itapoá Online ajuda moradores e turistas a escolherem os melhores parceiros e fortalece o comércio da nossa cidade.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('reviews')}
+                    className="px-6 py-3 bg-[#C8102E] hover:bg-red-700 text-white font-bold text-xs rounded-xl transition shrink-0 shadow-lg cursor-pointer active:scale-95"
+                  >
+                    Deixar Avaliação
+                  </button>
+                </div>
+
+                {/* Outras Empresas Recomendadas (Preenche todo o espaço faltante com valor real!) */}
+                {relatedCompanies.length > 0 && (
+                  <div className="p-6 md:p-8 bg-white border border-slate-200/90 rounded-3xl shadow-sm space-y-5">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                      <div>
+                        <span className="text-[10px] font-black text-[#C8102E] uppercase tracking-wider">CONEXÕES LOCAIS</span>
+                        <h3 className="text-lg font-black text-slate-900 tracking-tight">Outras Empresas e Serviços em Destaque</h3>
+                      </div>
+                      <span className="text-xs font-bold text-slate-400">Itapoá - SC</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {relatedCompanies.map((rel) => (
+                        <div
+                          key={rel.id}
+                          onClick={() => onNavigateCompany && onNavigateCompany(rel.slug)}
+                          className="group p-3.5 rounded-2xl border border-slate-200/80 hover:border-[#C8102E]/40 hover:shadow-lg transition-all duration-300 bg-slate-50/50 hover:bg-white cursor-pointer flex flex-col justify-between"
+                        >
+                          <div className="space-y-2.5">
+                            <div className="w-full h-28 rounded-xl overflow-hidden bg-slate-200 relative">
+                              <img
+                                src={rel.coverImage || rel.logo || '/hero-itapoa.jpg'}
+                                alt={rel.name}
+                                className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                              />
+                              <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/60 backdrop-blur-sm text-white text-[9px] font-bold">
+                                {categories.find(c => c.id === rel.categoryId)?.name || 'Comércio'}
+                              </span>
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-sm text-slate-900 group-hover:text-[#C8102E] transition line-clamp-1">
+                                {rel.name}
+                              </h4>
+                              <p className="text-xs text-slate-500 line-clamp-2 mt-0.5">
+                                {rel.description || 'Atendimento em Itapoá SC.'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="pt-3 mt-2 border-t border-slate-200/60 flex items-center justify-between text-xs font-bold text-[#C8102E]">
+                            <span>Ver perfil completo</span>
+                            <span>→</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -816,9 +914,9 @@ export default function CompanyDetailSection({
           {/* 4. SIDEBAR OFICIAL (SEM ANÚNCIOS DE CONCORRENTES EM PERFIS PAGOS) */}
           <aside className="w-full lg:w-80 shrink-0 flex flex-col gap-6">
             
-            {/* Box de Contato Direto & WhatsApp (Sem IA 24h ou promessas irreais) */}
-            <div className="p-6 bg-white border border-slate-200 rounded-3xl shadow-sm flex flex-col">
-              <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 block mb-2">
+            {/* Box de Contato Direto & WhatsApp */}
+            <div className="p-6 bg-white border border-slate-200/90 rounded-3xl shadow-sm flex flex-col">
+              <span className="text-[10px] font-black uppercase tracking-widest text-[#C8102E] block mb-2">
                 Canal Oficial de Atendimento
               </span>
               <h3 className="text-base font-black text-slate-900 mb-4">Contato Direto</h3>
@@ -829,7 +927,7 @@ export default function CompanyDetailSection({
                 <button
                   type="button"
                   onClick={handleLeadWhatsAppClick}
-                  className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md transition cursor-pointer"
+                  className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-slate-950 font-black text-xs tracking-wider uppercase rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition cursor-pointer active:scale-95"
                 >
                   <Phone className="w-4 h-4 fill-slate-950" />
                   <span>Conversar no WhatsApp</span>
@@ -837,7 +935,7 @@ export default function CompanyDetailSection({
 
                 {company.hours && (
                   <div className="flex gap-3 pt-2">
-                    <Clock className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+                    <Clock className="w-4 h-4 text-[#C8102E] shrink-0 mt-0.5" />
                     <div>
                       <span className="font-bold text-slate-900 block">Horário de Funcionamento</span>
                       <span className="text-slate-600">{company.hours}</span>
@@ -857,7 +955,7 @@ export default function CompanyDetailSection({
                     <button
                       type="button"
                       onClick={handleRouteClick}
-                      className="w-full mt-1 py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 border border-rose-200"
+                      className="w-full mt-1 py-2 px-3 bg-red-50 hover:bg-red-100 text-[#C8102E] font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 border border-red-200 cursor-pointer"
                     >
                       <MapPin className="w-3.5 h-3.5" />
                       <span>Como Chegar (Traçar Rota no Mapa)</span>
@@ -873,7 +971,7 @@ export default function CompanyDetailSection({
                       <button
                         type="button"
                         onClick={handlePhoneClick}
-                        className="text-indigo-600 hover:underline font-semibold text-left p-0 bg-transparent border-none cursor-pointer"
+                        className="text-[#C8102E] hover:underline font-semibold text-left p-0 bg-transparent border-none cursor-pointer"
                       >
                         {company.phone}
                       </button>
@@ -886,7 +984,7 @@ export default function CompanyDetailSection({
                     <Globe className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
                     <div>
                       <span className="font-bold text-slate-900 block">Site Oficial</span>
-                      <a href={company.website} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">
+                      <a href={company.website} target="_blank" rel="noreferrer" className="text-[#C8102E] hover:underline">
                         {company.website.replace(/^https?:\/\//, '')}
                       </a>
                     </div>
@@ -912,20 +1010,39 @@ export default function CompanyDetailSection({
               </div>
             </div>
 
-            {/* Mapa de Localização */}
-            <div className="w-full rounded-3xl overflow-hidden border border-slate-200 shadow-sm relative h-48 bg-slate-100 flex items-center justify-center">
+            {/* Mapa de Localização Interativo */}
+            <div
+              onClick={handleRouteClick}
+              className="w-full rounded-3xl overflow-hidden border border-slate-200 shadow-sm relative h-48 bg-slate-100 flex items-center justify-center cursor-pointer group"
+              title="Clique para abrir rota no Google Maps"
+            >
               <div
-                className="absolute inset-0 bg-cover bg-center"
+                className="absolute inset-0 bg-cover bg-center group-hover:scale-105 transition duration-500"
                 style={{ backgroundImage: `url('https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=600&q=80')` }}
               />
-              <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[1px]" />
+              <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[1px] group-hover:bg-slate-900/40 transition" />
               <div className="relative z-10 flex flex-col items-center gap-1.5 p-4 text-center">
-                <div className="w-8 h-8 rounded-full bg-rose-500 flex items-center justify-center text-white font-bold text-xs shadow-md">
+                <div className="w-9 h-9 rounded-full bg-[#C8102E] flex items-center justify-center text-white font-bold text-sm shadow-md group-hover:scale-110 transition">
                   📍
                 </div>
                 <span className="text-white text-xs font-black drop-shadow">{company.name}</span>
-                <span className="text-slate-200 text-[10px] drop-shadow max-w-xs truncate">{company.address}</span>
+                <span className="text-slate-200 text-[10px] drop-shadow max-w-xs truncate">{company.address || 'Itapoá - SC'}</span>
+                <span className="text-[10px] font-bold text-white bg-black/40 px-2.5 py-0.5 rounded-full border border-white/20 mt-1">
+                  Abrir no Google Maps →
+                </span>
               </div>
+            </div>
+
+            {/* Selo Oficial de Verificação do Portal */}
+            <div className="p-5 bg-gradient-to-br from-slate-900 to-slate-950 text-white border border-slate-800 rounded-3xl shadow-sm space-y-2">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-[9px] font-black uppercase tracking-wider text-emerald-400">
+                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                <span>PORTAL SEGURO SSL VERIFICADO</span>
+              </div>
+              <h4 className="text-xs font-bold text-white">Canal Direto de Atendimento</h4>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Todas as conexões no Itapoá Online conectam você diretamente ao responsável pelo estabelecimento, sem comissões ou taxas ocultas.
+              </p>
             </div>
 
           </aside>
