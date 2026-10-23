@@ -40,6 +40,15 @@ jobs:
               find /var/backups/itapoa -maxdepth 2 -type f -name '*sha256*' -print
             fi
             for tool in rclone restic borg; do command -v "$tool" || true; done
+            # Legacy paths are inspected only to locate recoverable uploads.
+            for legacy in /opt/itapoa/app/uploads /opt/itapoa/uploads; do
+              if [ -d "$legacy" ]; then
+                printf 'legacy_upload_directory=%s files=' "$legacy"
+                find "$legacy" -type f | wc -l
+              fi
+            done
+            find /tmp -maxdepth 1 -type f \( -name 'itapoa_uploads_*.tar.gz' -o -name 'itapoa_dump_*.sql*' -o -name 'checksums.txt' \) -printf 'legacy_backup=%f bytes=%s\n'
+            docker volume ls --format '{{.Name}}' | grep -i itapoa || true
             docker exec -i "$container" node - <<'NODE'
             const mysql=require('mysql2/promise'),fs=require('fs'),path=require('path'),crypto=require('crypto');
             (async()=>{
