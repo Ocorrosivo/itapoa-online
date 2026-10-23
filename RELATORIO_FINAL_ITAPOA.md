@@ -65,7 +65,7 @@ Há bloqueios de armazenamento/backups e configuração financeira em produção
 
 - `npm run lint`: exit 0; `npm run build`: exit 0.
 - `node --import tsx --test tests/unit/*.test.ts tests/integration/*.test.ts`:
-  **122 testes aprovados, 12 suítes, zero falhas e zero ignorados**.
+  **123 testes aprovados, 12 suítes, zero falhas e zero ignorados**.
 - Integração usa MariaDB local isolado e rotas HTTP reais, incluindo concorrência,
   rollback, isolamento, upload físico, leitura do arquivo e recuperação/login.
 - SDK/API Mercado Pago e entrega SMTP são simulados nesses testes. Quatro casos
@@ -129,6 +129,9 @@ Branch: `codex/auditoria-geral`.
 - `5e27ab6`: uploads, galeria, privilégios, isolamento e suporte.
 - `51e60ca`: CI de PR e bloqueio de deploy sem persistência.
 - Commit posterior de documentação registra este relatório, sem novo código.
+- `232112c`: integração da limpeza atual da main, revisada sem conflitos.
+- `17377bf`: cadastro sem elevação de privilégio, isolamento SMTP dos testes e
+  pré-verificação de administrador explicitamente configurado antes de deploy.
 
 Push realizado somente na branch de auditoria. A verificação inicial de produção
 identificou `1382af0`; publicações paralelas posteriores não são desta auditoria.

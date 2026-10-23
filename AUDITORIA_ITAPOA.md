@@ -79,7 +79,7 @@ troca de senha e login não comprovada, sem nova solicitação nesta execução.
 - CI ampliado; deploy recusa armazenamento efêmero e PR não executa SSH/deploy.
 - `npm run lint` e `npm run build`: exit 0.
 - `node --import tsx --test tests/unit/*.test.ts tests/integration/*.test.ts`:
-  122 testes, 12 suítes, 122 pass, zero falhas/skip. MariaDB local real; SDK/API
+  123 testes, 12 suítes, 123 pass, zero falhas/skip. MariaDB local real; SDK/API
   financeira e envio de e-mail simulados; quatro cenários usam navegador real.
 - `npm audit`: zero vulnerabilidades conhecidas reportadas nesta execução.
 
@@ -103,7 +103,7 @@ de recuperação, troca de senha de cliente ou recriação de container nesta et
 ## Complemento de verificação
 
 Smoke com MySQL offline passou; Playwright de recuperação passou nos quatro
-casos. Total desta etapa: 122 testes Node/integrados + 4 Playwright separados.
+casos. Total desta etapa: 123 testes Node/integrados + 4 Playwright separados.
 Consultas públicas de saúde, planos, categorias, cidades, busca Mercado/Pousada/
 itapoa e disponibilidade da recuperação responderam HTTP 200.
 Inspeção 39906490025 não localizou uploads nos caminhos legados consultados;
