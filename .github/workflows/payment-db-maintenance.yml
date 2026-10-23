@@ -51,7 +51,7 @@ jobs:
             test "$before" != "$after"
             test "$image_before" = "$(docker service inspect "$service" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')"
             test "$env_before" = "$(docker service inspect "$service" --format '{{json .Spec.TaskTemplate.ContainerSpec.Env}}' | sha256sum | cut -d' ' -f1)"
-            docker exec -e CHECK_FILE="$file" -e EXPECTED_HASH="$file_hash" "$after" node - <<'NODE'
+            docker exec -i -e CHECK_FILE="$file" -e EXPECTED_HASH="$file_hash" "$after" node - <<'NODE'
             const fs=require('fs'),path=require('path'),crypto=require('crypto');
             (async()=>{
               const file=path.join('/app/uploads',process.env.CHECK_FILE);
