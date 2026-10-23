@@ -136,12 +136,10 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
     const formData = new FormData();
     formData.append('file', file);
 
-    const token = localStorage.getItem('auth_token');
     const companyIdParam = company?.id ? `?companyId=${encodeURIComponent(company.id)}` : '';
-    const res = await fetch(`/api/upload${companyIdParam}`, {
+    const res = await apiFetch(`/api/upload${companyIdParam}`, {
       method: 'POST',
       headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(company?.id ? { 'x-company-id': company.id } : {})
       },
       body: formData

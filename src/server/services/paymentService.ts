@@ -103,16 +103,9 @@ class PaymentService {
     }
     const [pending]: any = await db.query("SELECT id, userId, paymentMethod, createdAt, TIMESTAMPDIFF(SECOND, createdAt, UTC_TIMESTAMP()) AS ageSeconds FROM subscriptions WHERE companyId=? AND planId=? AND status='pending' ORDER BY createdAt DESC LIMIT 1", [companyId, planId]);
     if (pending[0]) {
-      const isExpired = pending[0].ageSeconds != null ? Number(pending[0].ageSeconds) >= 300 : (Date.now() - new Date(pending[0].createdAt).getTime() >= 300000);
-      if (isExpired) {
-        await db.query("UPDATE subscriptions SET status='canceled' WHERE id=? AND status='pending'", [pending[0].id]);
-      } else {
-        if (pending[0].userId !== userId || pending[0].paymentMethod !== 'credit_card') throw new PaymentError(409, 'Há outro pagamento em andamento para este plano. Retome a tentativa existente.');
-        // Do not replay a card token/body after an unknown outcome. Reconcile first.
-        const createdMs = new Date(pending[0].createdAt).getTime();
-        const expiresAt = new Date(createdMs + 5 * 60 * 1000).toISOString();
-        return { subscriptionId: pending[0].id, status: 'unknown', expiresAt };
-      }
+      if (pending[0].userId !== userId || pending[0].paymentMethod !== 'credit_card') throw new PaymentError(409, 'Há outro pagamento em andamento para este plano. Retome a tentativa existente.');
+      // Age is not evidence that a remote charge failed. Never replay a token.
+      return { subscriptionId: pending[0].id, status: 'unknown' };
     }
     const subscriptionId = `card_${crypto.createHash('sha256').update(`${userId}:${requestId}`).digest('hex')}`;
     const [usedAttempt]: any = await db.query('SELECT id FROM subscriptions WHERE id=?', [subscriptionId]);
@@ -150,13 +143,13 @@ class PaymentService {
       });
     } catch {
       // Unknown outcome: preserve this attempt and wait for its webhook. Never invite a second charge.
-      return { subscriptionId, status: 'unknown', expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString() };
+      return { subscriptionId, status: 'unknown' };
     }
     const payment: any = await response.json().catch(() => ({}));
-    if (response.ok && !payment.id) return { subscriptionId, status: 'unknown', expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString() };
+    if (response.ok && !payment.id) return { subscriptionId, status: 'unknown' };
     if (!response.ok || !payment.id) {
       console.error('[payment-card] gateway_request_failed', response.status);
-      if (response.status >= 500 || [409, 429].includes(response.status)) return { subscriptionId, status: 'unknown', expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString() };
+      if (response.status >= 500 || [409, 429].includes(response.status)) return { subscriptionId, status: 'unknown' };
       await db.query("UPDATE subscriptions SET status='canceled' WHERE id=? AND status='pending'", [subscriptionId]);
       throw new PaymentError(response.status === 400 ? 400 : 422, 'O Mercado Pago não conseguiu processar esta tentativa. Confira os dados ou tente novamente.');
     }
@@ -169,7 +162,7 @@ class PaymentService {
       await db.query("UPDATE subscriptions SET status='canceled' WHERE id=? AND status='pending'", [subscriptionId]);
     }
     // Approval is applied only by the shared validated settlement transaction.
-    return { paymentId: String(payment.id), subscriptionId, status: String(payment.status), expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString() };
+    return { paymentId: String(payment.id), subscriptionId, status: String(payment.status) };
   }
   private async accessToken(db: any = pool): Promise<string> {
     const [rows]: any = await db.query(
@@ -234,10 +227,6 @@ class PaymentService {
 
     const [pending]: any = await db.query("SELECT id, createdAt, TIMESTAMPDIFF(SECOND, createdAt, UTC_TIMESTAMP()) AS ageSeconds FROM subscriptions WHERE companyId=? AND planId=? AND status='pending' AND paymentMethod='pix' ORDER BY createdAt DESC LIMIT 1", [companyId, planId]);
     if (pending[0]) {
-      const isExpired = pending[0].ageSeconds != null ? Number(pending[0].ageSeconds) >= 300 : (Date.now() - new Date(pending[0].createdAt).getTime() >= 300000);
-      if (isExpired) {
-        await db.query("UPDATE subscriptions SET status='canceled' WHERE id=? AND status='pending'", [pending[0].id]);
-      } else {
         const [logs]: any = await db.query('SELECT gateway_reference FROM payment_logs WHERE subscriptionId=? LIMIT 1', [pending[0].id]);
         if (!logs[0]?.gateway_reference) throw new PaymentError(409, 'Existe uma tentativa sem confirmação. Aguarde a reconciliação; não gere outra cobrança.');
         const previous = await mercadoPagoGet('/v1/payments/' + encodeURIComponent(logs[0].gateway_reference), token);
@@ -250,7 +239,6 @@ class PaymentService {
           throw new PaymentError(409, 'A cobrança anterior ainda requer confirmação. Consulte seu status antes de tentar novamente.');
         }
         await db.query("UPDATE subscriptions SET status='canceled' WHERE id=? AND status='pending'", [pending[0].id]);
-      }
     }
     const normReqId = typeof requestId === 'string' && /^[a-f0-9-]{8,64}$/i.test(requestId.trim()) ? requestId.trim() : crypto.randomUUID();
     const subscriptionId = 'pix_' + crypto.createHash('sha256').update(userId + ':' + companyId + ':' + planId + ':' + normReqId).digest('hex');
@@ -364,7 +352,7 @@ class PaymentService {
       qrCode: tx.qr_code ?? '',
       qrCodeBase64: tx.qr_code_base64 ?? '',
       amount: plan.price,
-      expirationDate: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      expirationDate: mp.date_of_expiration ?? dateOfExpiration,
       subscriptionId: subscriptionId
     };
   }
@@ -412,13 +400,6 @@ class PaymentService {
     const row = subs[0];
     if (String(row.subPlanId) !== String(planId)) return null;
 
-    const createdMs = new Date(row.subCreatedAt || row.createdAt).getTime();
-    const isExpired = row.ageSeconds != null ? Number(row.ageSeconds) >= 300 : (Date.now() - createdMs >= 300000);
-    if (isExpired) {
-      await db.query("UPDATE subscriptions SET status='canceled' WHERE id=? AND status='pending'", [row.id]).catch(() => {});
-      return null;
-    }
-
     try {
       const token = await this.accessToken(db);
       const resp = await fetch(`${MP_API}/v1/payments/${encodeURIComponent(String(row.gateway_reference))}`, {
@@ -434,14 +415,15 @@ class PaymentService {
       const got = Number(mp.transaction_amount);
       if (paymentCents(mp.transaction_amount) !== paymentCents(row.amount)) return null;
       
-      const localExpIso = new Date(createdMs + 5 * 60 * 1000).toISOString();
+      const expiration = mp.date_of_expiration;
+      if (typeof expiration !== 'string' || !Number.isFinite(Date.parse(expiration)) || Date.parse(expiration) <= Date.now()) return null;
       const tx = mp.point_of_interaction?.transaction_data ?? {};
       return {
         paymentId: String(mp.id),
         qrCode: tx.qr_code ?? '',
         qrCodeBase64: tx.qr_code_base64 ?? '',
         amount: got || expected || 0,
-        expirationDate: localExpIso,
+        expirationDate: expiration,
         subscriptionId: String(row.id)
       };
     } catch {

@@ -520,47 +520,23 @@ apiRouter.get('/payments/attempt/active', requireAuth, attachCompanyScope, handl
   if (req.user!.role !== 'admin_master' && !(req.companyIds ?? []).includes(companyId)) return res.status(403).json({ error: 'Acesso negado.' });
   
   const pool = (await import('../mysql.js')).pool;
-  // Cancel old pending attempts (> 5 minutes)
-  await pool.query(
-    `UPDATE subscriptions SET status='canceled'
-     WHERE companyId=? AND planId=? AND status='pending'
-     AND createdAt < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 MINUTE)`,
-    [companyId, planId]
-  ).catch(() => {});
-
+  // Reading checkout state must never cancel a potentially successful charge.
   const [rows]: any = await pool.query(`SELECT s.id AS subscriptionId, s.status, s.companyId, s.planId, s.paymentMethod,
-    DATE_ADD(s.createdAt, INTERVAL 5 MINUTE) AS expiresAt,
+    NULL AS expiresAt,
     s.createdAt
     FROM subscriptions s WHERE s.companyId=? AND s.planId=?
     AND (s.paymentMethod='credit_card' OR (s.paymentMethod='pix' AND NOT EXISTS (SELECT 1 FROM payment_logs pl WHERE pl.subscriptionId=s.id)))
     AND (
-      (s.status='pending' AND s.createdAt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 MINUTE))
+      s.status='pending'
       OR (s.status='active' AND (s.nextBillingDate IS NULL OR s.nextBillingDate > UTC_TIMESTAMP()) AND s.createdAt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 MINUTE))
     )
     ORDER BY s.createdAt DESC LIMIT 1`, [companyId, planId]);
 
   if (!rows[0]) {
-    // Check if an attempt expired recently so client can render expired state
-    const [recentExpired]: any = await pool.query(
-      `SELECT s.id AS subscriptionId, 'expired' AS status, s.companyId, s.planId, s.paymentMethod,
-       DATE_ADD(s.createdAt, INTERVAL 5 MINUTE) AS expiresAt
-       FROM subscriptions s WHERE s.companyId=? AND s.planId=? AND s.status='canceled'
-       AND s.createdAt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 15 MINUTE)
-       ORDER BY s.createdAt DESC LIMIT 1`, [companyId, planId]
-    ).catch(() => [[]]);
-    if (recentExpired && recentExpired[0]) {
-      const expIso = recentExpired[0].expiresAt instanceof Date
-        ? recentExpired[0].expiresAt.toISOString()
-        : new Date(recentExpired[0].expiresAt).toISOString();
-      return res.json({ ...recentExpired[0], expiresAt: expIso });
-    }
     return res.json(null);
   }
 
   const result = rows[0];
-  const expiresAtIso = result.expiresAt instanceof Date
-    ? result.expiresAt.toISOString()
-    : new Date(result.expiresAt).toISOString();
 
   res.json({
     subscriptionId: result.subscriptionId,
@@ -568,7 +544,7 @@ apiRouter.get('/payments/attempt/active', requireAuth, attachCompanyScope, handl
     companyId: result.companyId,
     planId: result.planId,
     paymentMethod: result.paymentMethod,
-    expiresAt: expiresAtIso
+    expiresAt: null
   });
 }));
 
@@ -594,7 +570,7 @@ apiRouter.get('/payments/subscription/:id/status', requireAuth, handler(async (r
   const pool = (await import('../mysql.js')).pool;
   const [rows]: any = await pool.query(
     `SELECT s.id, s.status, s.planId, s.companyId, s.nextBillingDate, s.createdAt,
-            DATE_ADD(s.createdAt, INTERVAL 5 MINUTE) AS expiresAt,
+            NULL AS expiresAt,
             TIMESTAMPDIFF(SECOND, s.createdAt, UTC_TIMESTAMP()) AS ageSeconds
      FROM subscriptions s WHERE s.id = ? LIMIT 1`,
     [subId]
@@ -608,16 +584,9 @@ apiRouter.get('/payments/subscription/:id/status', requireAuth, handler(async (r
   let status = row.status;
   if (status === 'active' && row.nextBillingDate && new Date(row.nextBillingDate).getTime() <= Date.now()) {
     status = 'expired';
-  } else if (status === 'pending' && Number(row.ageSeconds) >= 300) {
-    status = 'expired';
-    await pool.query("UPDATE subscriptions SET status='canceled' WHERE id=? AND status='pending'", [subId]).catch(() => {});
   }
 
-  const expiresAtIso = row.expiresAt instanceof Date
-    ? row.expiresAt.toISOString()
-    : new Date(row.expiresAt).toISOString();
-
-  res.json({ status, planId: row.planId, companyId: row.companyId, expiresAt: expiresAtIso });
+  res.json({ status, planId: row.planId, companyId: row.companyId, expiresAt: null });
 }));
 
 // Reconciliação idempotente com o gateway Mercado Pago (evita duplicidade e resolve atrasos de webhook)
