@@ -16,6 +16,25 @@ permissions:
   contents: read
 
 jobs:
+  inspect-backup-access:
+    if: inputs.confirmation == 'inspect-backup-access'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Inspect trusted backup transport (public metadata only)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          command_timeout: 2m
+          script: |
+            set -eu
+            cat /etc/ssh/ssh_host_ed25519_key.pub
+            if [ -f "$HOME/.ssh/authorized_keys" ]; then ssh-keygen -lf "$HOME/.ssh/authorized_keys"; fi
+            docker service ls --format '{{.Name}} {{.Image}}'
+            docker ps -a --filter 'label=com.docker.swarm.service.name=itapoa_itapoa-app' --format '{{.ID}} {{.Status}}'
+            docker volume ls --format '{{.Name}}'
   inspect-system:
     if: inputs.confirmation == 'inspect-system'
     runs-on: ubuntu-24.04
