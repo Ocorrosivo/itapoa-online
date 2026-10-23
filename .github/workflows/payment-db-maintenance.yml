@@ -42,6 +42,7 @@ jobs:
             docker service inspect "$service" --format '{{json .Spec.TaskTemplate.ContainerSpec.Mounts}}' | docker exec -i "$before" node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const m=JSON.parse(s)||[];if(!m.some(x=>["bind","volume"].includes(x.Type)&&x.Target==="/app/uploads"&&!x.ReadOnly))process.exit(1);console.log("PERSISTENT_UPLOAD_MOUNT_PRESENT=OK")})'
             env_before=$(docker service inspect "$service" --format '{{json .Spec.TaskTemplate.ContainerSpec.Env}}' | sha256sum | cut -d' ' -f1)
             image_before=$(docker service inspect "$service" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')
+            content_before=$(docker inspect "$before" --format '{{.Image}}')
             file="itapoa-persistence-check-$PERSISTENCE_RUN_ID.png"
             docker exec -e CHECK_FILE="$file" "$before" node -e 'const f=require("fs"),p=require("path");if(!/^itapoa-persistence-check-[0-9]+\.png$/.test(process.env.CHECK_FILE))process.exit(1);f.writeFileSync(p.join("/app/uploads",process.env.CHECK_FILE),Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=","base64"),{flag:"wx"});'
             file_hash=$(docker exec -e CHECK_FILE="$file" "$before" node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(require("path").join("/app/uploads",process.env.CHECK_FILE))).digest("hex"))')
@@ -49,8 +50,8 @@ jobs:
             after=$(docker ps --filter "label=com.docker.swarm.service.name=$service" --format '{{.ID}}')
             test -n "$after"
             test "$before" != "$after"
-            test "$image_before" = "$(docker service inspect "$service" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')"
-            test "$env_before" = "$(docker service inspect "$service" --format '{{json .Spec.TaskTemplate.ContainerSpec.Env}}' | sha256sum | cut -d' ' -f1)"
+            test "$content_before" = "$(docker inspect "$after" --format '{{.Image}}')" || { echo 'Container image content changed unexpectedly'; exit 1; }
+            test "$env_before" = "$(docker service inspect "$service" --format '{{json .Spec.TaskTemplate.ContainerSpec.Env}}' | sha256sum | cut -d' ' -f1)" || { echo 'Runtime environment changed unexpectedly'; exit 1; }
             docker exec -i -e CHECK_FILE="$file" -e EXPECTED_HASH="$file_hash" "$after" node - <<'NODE'
             const fs=require('fs'),path=require('path'),crypto=require('crypto');
             (async()=>{
