@@ -10,6 +10,8 @@ coverage/
 # Pacotes de deploy locais (não versionar)
 *.zip
 *.rar
+*.tar.gz
+*.sql.gz
 playwright-report/
 test-results/
 .test-runtime/
@@ -17,3 +19,4 @@ playwright/.cache/
 .claude/
 skills-lock.json
 .playwright-mcp/
+.vite/

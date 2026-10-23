@@ -8,3 +8,14 @@ dist
 .env.*
 !.env.example
 *.zip
+*.rar
+*.tar.gz
+*.sql.gz
+playwright-report
+test-results
+.test-runtime
+.playwright-mcp
+tests
+founder
+assets
+database/SEED_DEMO.sql

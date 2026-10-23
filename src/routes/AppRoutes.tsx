@@ -14,10 +14,8 @@ import { EventsPage } from '../pages/EventsPage';
 import { BlogPage } from '../pages/BlogPage';
 import { JobsPage } from '../pages/JobsPage';
 import { PlansPage } from '../pages/PlansPage';
-import { CheckoutPage } from '../pages/CheckoutPage';
 import { BairroDetailPage } from '../pages/BairroDetailPage';
 import { PraiaDetailPage } from '../pages/PraiaDetailPage';
-import { InstitutionalPage } from '../pages/institutional/InstitutionalPage';
 import CampaignDetailSection from '../components/CampaignDetailSection';
 import { AIModal } from '../components/common/AIModal';
 import { Header } from '../components/common/Header';
@@ -35,6 +33,8 @@ import { LoadingSpinner } from '../components/common/LoadingSpinner';
 
 const AdminDashboardPage = lazy(() => import('../pages/AdminDashboardPage').then(m => ({ default: m.AdminDashboardPage })));
 const EmpresarioDashboardPage = lazy(() => import('../pages/EmpresarioDashboardPage').then(m => ({ default: m.EmpresarioDashboardPage})));
+const CheckoutPage = lazy(() => import('../pages/CheckoutPage').then(m => ({ default: m.CheckoutPage })));
+const InstitutionalPage = lazy(() => import('../pages/institutional/InstitutionalPage').then(m => ({ default: m.InstitutionalPage })));
 
 /**
  * Mapa canônico SPA — 7 itens do menu + aliases legados para compatibilidade.
@@ -386,7 +386,11 @@ export const AppRoutes: React.FC = () => {
         );
 
       case 'checkout':
-        return <CheckoutPage onNavigateTab={handleNavigateTab} />;
+        return (
+          <Suspense fallback={<LoadingSpinner text="Carregando checkout seguro..." />}>
+            <CheckoutPage onNavigateTab={handleNavigateTab} />
+          </Suspense>
+        );
 
       case 'projetos-sociais':
         if (campaigns[0]) {
@@ -423,31 +427,37 @@ export const AppRoutes: React.FC = () => {
 
       case 'contato':
         return (
-          <InstitutionalPage
-            type="contact"
-            onNavigateBack={() => handleNavigateTab('home')}
-            onOpenAuthModal={handleOpenAuthModal}
-          />
+          <Suspense fallback={<LoadingSpinner />}>
+            <InstitutionalPage
+              type="contact"
+              onNavigateBack={() => handleNavigateTab('home')}
+              onOpenAuthModal={handleOpenAuthModal}
+            />
+          </Suspense>
         );
 
       case 'sobre':
         return (
-          <InstitutionalPage
-            type="about"
-            onNavigateBack={() => handleNavigateTab('home')}
-            onOpenAuthModal={handleOpenAuthModal}
-          />
+          <Suspense fallback={<LoadingSpinner />}>
+            <InstitutionalPage
+              type="about"
+              onNavigateBack={() => handleNavigateTab('home')}
+              onOpenAuthModal={handleOpenAuthModal}
+            />
+          </Suspense>
         );
 
       case 'privacy':
       case 'terms':
       case 'help':
         return (
-          <InstitutionalPage
-            type={currentTab as unknown as 'privacy' | 'terms' | 'help'}
-            onNavigateBack={() => handleNavigateTab('home')}
-            onOpenAuthModal={handleOpenAuthModal}
-          />
+          <Suspense fallback={<LoadingSpinner />}>
+            <InstitutionalPage
+              type={currentTab as unknown as 'privacy' | 'terms' | 'help'}
+              onNavigateBack={() => handleNavigateTab('home')}
+              onOpenAuthModal={handleOpenAuthModal}
+            />
+          </Suspense>
         );
 
       case 'admin':
