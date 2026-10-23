@@ -166,8 +166,8 @@ export class AuthService {
     const current = typeof currentPassword === 'string' ? currentPassword : '';
     const next = typeof newPassword === 'string' ? newPassword : '';
 
-    if (next.length < MIN_PASSWORD_LENGTH) {
-      throw new AuthError(400, `A nova senha deve ter no mínimo ${MIN_PASSWORD_LENGTH} caracteres.`);
+    if (next.length < MIN_PASSWORD_LENGTH || Buffer.byteLength(next, 'utf8') > 72) {
+      throw new AuthError(400, `A nova senha deve ter no mínimo ${MIN_PASSWORD_LENGTH} caracteres e no máximo 72 bytes.`);
     }
 
     const row = await UserRepository.findRawBy('id', userId);
@@ -178,8 +178,21 @@ export class AuthService {
     }
 
     const hashed = await bcrypt.hash(next, BCRYPT_ROUNDS);
-    await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashed, userId]);
-    return { success: true };
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [locked]: any = await connection.query('SELECT password FROM users WHERE id = ? FOR UPDATE', [userId]);
+      if (!locked[0] || locked[0].password !== row.password) {
+        throw new AuthError(409, 'A senha foi alterada durante esta solicitação. Entre novamente.');
+      }
+      await connection.query('UPDATE users SET password = ? WHERE id = ?', [hashed, userId]);
+      await connection.query('INSERT INTO user_auth_state (user_id, version) VALUES (?, 1) ON DUPLICATE KEY UPDATE version = version + 1', [userId]);
+      await connection.commit();
+      return { success: true };
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally { connection.release(); }
   }
 }
 

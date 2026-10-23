@@ -33,7 +33,10 @@ export class RecoveryLimiter {
 export class PasswordRecoveryService {
   private pending = 0;
   private limiter = new RecoveryLimiter();
-  constructor(private db = pool, private mailer = recoveryMailer) {}
+  constructor(private db = pool, private mailer: {
+    configured(): boolean;
+    send(to: string, link: string): Promise<{ messageId?: string } | void>;
+  } = recoveryMailer) {}
 
   async available() {
     if (!this.mailer.configured()) return false;
@@ -51,7 +54,13 @@ export class PasswordRecoveryService {
     }
     this.limiter.consume(`ip:${tokenHash(ip)}`, 20);
     this.limiter.consume(`email:${fingerprint(email)}`, 5);
-    if (this.pending >= 10 || !await this.available()) throw new RecoveryError(503, UNAVAILABLE);
+    if (this.pending >= 10) throw new RecoveryError(503, UNAVAILABLE);
+    // Reserve synchronously, before the first await, including requests preparing SQL.
+    this.pending++;
+    let deliveryQueued = false;
+    const correlationId = randomUUID();
+    try {
+    if (!await this.available()) throw new RecoveryError(503, UNAVAILABLE);
 
     const connection = await this.db.getConnection();
     let mail: { to: string; link: string; userId: string; hash: string } | undefined;
@@ -84,23 +93,36 @@ export class PasswordRecoveryService {
     // SMTP is outside the response path: known/unknown accounts receive the same
     // response, without exposing existence through SMTP latency or errors.
     if (mail) {
-      this.pending++;
+      deliveryQueued = true;
       const task = mail;
       setImmediate(() => {
-        void this.deliver(task).finally(() => { this.pending--; });
+        void this.deliver(task, correlationId).finally(() => { this.pending--; });
       });
     }
-    return { message: RECOVERY_MESSAGE };
+    console.info('[password-recovery] request_processed', correlationId);
+    return { message: RECOVERY_MESSAGE, correlationId };
+    } finally {
+      if (!deliveryQueued) this.pending--;
+    }
   }
 
-  private async deliver(mail: { to: string; link: string; userId: string; hash: string }) {
-    try { await this.mailer.send(mail.to, mail.link); }
-    catch {
+  private async deliver(mail: { to: string; link: string; userId: string; hash: string }, correlationId: string) {
+    try {
+      const result = await this.mailer.send(mail.to, mail.link);
+      const messageId = result && result.messageId;
+      console.info('[password-recovery] delivery_accepted', JSON.stringify({ correlationId,
+        messageId: messageId && /^[a-zA-Z0-9<>@._+\-]{1,180}$/.test(messageId) ? messageId : undefined,
+        timestamp: new Date().toISOString() }));
+    } catch (error: any) {
       // Never log SMTP errors (can contain credentials/recipient), links or tokens.
-      console.error('[password-recovery] delivery_failed', randomUUID());
+      const allowedCodes = ['EAUTH','ECONNECTION','ECONNREFUSED','ECONNRESET','ETIMEDOUT','ESOCKET','EDNS','EENVELOPE','EMESSAGE'];
+      console.error('[password-recovery] delivery_failed', JSON.stringify({ correlationId,
+        code: allowedCodes.includes(error?.code) ? error.code : 'SMTP_FAILURE',
+        responseCode: Number.isInteger(error?.responseCode) && error.responseCode >= 100 && error.responseCode <= 599 ? error.responseCode : undefined,
+        timestamp: new Date().toISOString() }));
       try {
         await this.db.query('DELETE FROM password_reset_tokens WHERE user_id = ? AND token_hash = ?', [mail.userId, mail.hash]);
-      } catch { console.error('[password-recovery] cleanup_failed'); }
+      } catch { console.error('[password-recovery] cleanup_failed', correlationId); }
     }
   }
 

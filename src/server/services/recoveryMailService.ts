@@ -1,33 +1,14 @@
-import nodemailer from 'nodemailer';
-import { env } from '../config/env.js';
+import { mailConfig, createMailTransport } from './mailService.js';
 
 /** Optional feature: absent/invalid SMTP disables recovery, never the whole site. */
 export function recoveryMailConfig() {
-  const host = process.env.SMTP_HOST?.trim();
-  const port = Number(process.env.SMTP_PORT || 465);
-  const user = process.env.SMTP_USER?.trim();
-  const pass = process.env.SMTP_PASSWORD || process.env.SMTP_PASS;
-  const from = (process.env.SMTP_FROM || process.env.EMAIL_FROM)?.trim();
-  if (!host || !user || !pass || !from || ![465, 587].includes(port)) return null;
-  if (!/^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(from)) return null;
-  try {
-    const url = new URL(env.appUrl);
-    if (url.username || url.password || (env.isProduction && url.protocol !== 'https:')) return null;
-  } catch { return null; }
-  return { host, port, user, pass, from };
+  return mailConfig();
 }
 
 export function recoveryTransport() {
   const config = recoveryMailConfig();
   if (!config) throw new Error('RECOVERY_SMTP_UNAVAILABLE');
-  return nodemailer.createTransport({
-    host: config.host, port: config.port, secure: config.port === 465,
-    requireTLS: config.port === 587,
-    auth: { user: config.user, pass: config.pass },
-    tls: { rejectUnauthorized: true, minVersion: 'TLSv1.2' },
-    connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 15000,
-    logger: false, debug: false,
-  });
+  return createMailTransport();
 }
 
 export const recoveryMailer = {
@@ -44,6 +25,7 @@ export const recoveryMailer = {
         disableFileAccess: true, disableUrlAccess: true,
       });
       if (!result.accepted?.length || result.rejected?.length) throw new Error('RECOVERY_SMTP_REJECTED');
+      return { messageId: typeof result.messageId === 'string' ? result.messageId : undefined };
     } finally { transport.close(); }
   },
 };
