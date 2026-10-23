@@ -3,6 +3,8 @@ name: Deploy Easypanel (itapoa.online)
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -57,10 +59,7 @@ jobs:
           JWT_SECRET: ci-only-not-a-production-secret-0123456789abcdef
         run: |
           node scripts/smoke-catalog.mjs --offline
-          node --import tsx --test tests/unit/checkout.test.ts
-          node --import tsx --test tests/unit/password-recovery.test.ts
-          node --import tsx --test tests/unit/email-verification.test.ts
-          node --import tsx --test tests/unit/mail-config.test.ts
+          node --import tsx --test tests/unit/*.test.ts
 
       - name: Install payment test browser
         timeout-minutes: 10
@@ -69,9 +68,10 @@ jobs:
       - name: Payment backend and browser integration (isolated database, synthetic gateway)
         timeout-minutes: 5
         run: |
-          node --import tsx --test tests/integration/payment-backend.test.ts tests/integration/payment-checkout-browser.test.ts tests/integration/password-recovery-backend.test.ts
+          node --import tsx --test tests/integration/*.test.ts
 
       - name: Deploy and verify on VPS
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -98,6 +98,15 @@ jobs:
             # Read-only gate: deployment must never create/migrate payment tables.
             payment_container=$(docker ps --filter 'label=com.docker.swarm.service.name=itapoa_itapoa-app' --format '{{.ID}}' | head -n 1)
             test -n "$payment_container"
+            # Refuse image replacement with ephemeral uploads. Storage migration
+            # and external backup validation must happen separately.
+            upload_target=$(docker exec "$payment_container" node -e 'console.log(require("path").resolve(process.env.UPLOAD_DIR||"uploads"))')
+            docker service inspect "$SERVICE" --format '{{json .Spec.TaskTemplate.ContainerSpec.Mounts}}' | docker exec -i -e AUDIT_UPLOAD_TARGET="$upload_target" "$payment_container" node -e '
+              let input="";process.stdin.on("data",c=>input+=c);process.stdin.on("end",()=>{
+                const target=process.env.AUDIT_UPLOAD_TARGET;
+                const persistent=(JSON.parse(input)||[]).some(m=>["bind","volume"].includes(m.Type)&&!m.ReadOnly&&m.Target!=="/"&&(target===m.Target||target.startsWith(m.Target+"/")));
+                if(!persistent){console.error("Uploads are not persistent. Validate external backups and migrate storage before deployment. No deployment performed.");process.exitCode=1;}
+              });'
             docker exec -i "$payment_container" node - <<'NODE'
             const mysql = require('mysql2/promise');
             (async () => {
