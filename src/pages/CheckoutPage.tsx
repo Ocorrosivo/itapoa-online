@@ -1078,8 +1078,6 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                 <span className="text-xs font-semibold text-slate-900">
                   {isFree
                     ? 'Gratuito (Sem renovação)'
-                    : method === 'card'
-                    ? 'Assinatura mensal recorrente'
                     : 'Pagamento avulso (30 dias)'}
                 </span>
               </div>
@@ -1103,7 +1101,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                 {isFree
                   ? 'Nenhuma cobrança bancária.'
                   : method === 'card'
-                  ? 'Cobrança mensal no cartão. Cancele quando quiser no painel.'
+                  ? 'Pagamento único no cartão, sem renovação automática.'
                   : 'Pagamento avulso via Pix sem renovação automática.'}
               </p>
             </div>
@@ -1111,7 +1109,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
             <div className="pt-4 border-t border-slate-100 flex items-start gap-2 text-xs text-slate-500 leading-relaxed">
               <LockKeyhole size={16} className="text-slate-400 shrink-0 mt-0.5" />
               <span>
-                Pagamento processado em ambiente seguro com certificação oficial do Mercado Pago.
+                Pagamento processado pelo Mercado Pago. A ativação depende da confirmação do pagamento.
               </span>
             </div>
           </aside>

@@ -27,6 +27,17 @@ async function checkout(page:Page) {
   await page.locator('#checkout-company').selectOption('a');
 }
 const confirmed = (page:Page)=>page.getByRole('heading',{name:'Pagamento confirmado com sucesso!',exact:true});
+test('card and Pix disclose single-payment terms without promising automatic renewal', async () => {
+  const page=await context.newPage();await checkout(page);
+  await expect(page.getByText('Pagamento avulso (30 dias)',{exact:true})).toBeVisible();
+  await expect(page.getByText('Pagamento único no cartão, sem renovação automática.',{exact:true})).toBeVisible();
+  await expect(page.getByText('Assinatura mensal recorrente',{exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'Pix oficial',exact:true}).click();
+  await expect(page.getByText('Pagamento avulso (30 dias)',{exact:true})).toBeVisible();
+  await expect(page.getByText('Pagamento avulso via Pix sem renovação automática.',{exact:true})).toBeVisible();
+  assert.equal(h.calls.filter(c=>c.method==='POST').length,0);
+});
+
 test('approved card response is not success; reload resumes; webhook activates DB and then screen', async () => {
   h.setResponseState('approved'); const page=await context.newPage();await checkout(page);
   await page.getByRole('button',{name:'Pagar com SDK simulado'}).click();
