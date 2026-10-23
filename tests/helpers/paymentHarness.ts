@@ -21,7 +21,7 @@ export async function sqlScript(db: any, source: string) {
   if (statement.trim()) throw new Error('Incomplete test SQL script');
 }
 
-export async function createPaymentHarness() {
+export async function createPaymentHarness(uploadDirectory?: string) {
   const port = Number(process.env.PAYMENT_TEST_DB_PORT || 43316);
   if (port === 3306 || port < 1024) throw new Error('Use a dedicated local test database port, never production');
   const database = `itapoa_payments_test_${process.pid}`;
@@ -92,6 +92,11 @@ export async function createPaymentHarness() {
     return value ? Response.json(value) : Response.json({ error: 'not_found' }, { status: 404 });
   };
   const app = express();
+  if (uploadDirectory) {
+    const { createUploadRouter } = await import('../../src/server/routes/uploads.js');
+    app.use('/api', createUploadRouter(uploadDirectory));
+    app.use('/uploads', express.static(uploadDirectory));
+  }
   app.post('/api/webhooks/mercadopago', express.json(), mercadoPagoWebhook);
   app.use(express.json()); app.use('/api', apiRouter);
   app.use('/api', (_req,res)=>{res.status(404).json({error:'Endpoint não encontrado.'});});

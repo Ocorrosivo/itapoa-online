@@ -12,6 +12,7 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { randomUUID } from 'node:crypto';
 import {
   UserRepository, CategoryRepository, CityRepository, DistrictRepository,
   ProductRepository, ServiceRepository, CouponRepository, ReviewRepository,
@@ -39,6 +40,7 @@ import {
 import { checkConnection, isDatabaseUnavailable } from '../mysql.js';
 import { env } from '../config/env.js';
 import { passwordRecoveryRouter } from './passwordRecovery.js';
+import { VerificationError } from '../services/emailVerificationService.js';
 
 export const apiRouter = Router();
 apiRouter.use('/auth', passwordRecoveryRouter);
@@ -53,7 +55,7 @@ const fail = (res: Response, error: unknown) => {
   if (isDatabaseUnavailable(error)) {
     return res.status(503).json({ error: 'Banco de dados temporariamente indisponível.' });
   }
-  if (error instanceof AuthError || error instanceof ServiceError || error instanceof EngagementError || error instanceof PaymentError) {
+  if (error instanceof AuthError || error instanceof ServiceError || error instanceof EngagementError || error instanceof PaymentError || error instanceof VerificationError) {
     return res.status(error.status).json({ error: error.message });
   }
   console.error('[api]', error instanceof Error ? error.message : error);
@@ -232,39 +234,8 @@ apiRouter.get('/companies/:id/media', handler(async (req, res) => {
 }));
 
 apiRouter.post('/companies/:id/media', requireAuth, requireCompanyParam('id'), handler(async (req, res) => {
-  const { url, fileType } = req.body ?? {};
-  if (!url || typeof url !== 'string' || !url.trim()) {
-    return res.status(400).json({ error: 'URL da imagem é obrigatória.' });
-  }
-
-  const companyId = req.params.id;
-  const entitlements = await EntitlementService.getCompanyEntitlements(companyId);
-  const maxPhotos = entitlements.limits.maxGalleryPhotos;
-
-  const pool = (await import('../mysql.js')).pool;
-  const [countRows]: any = await pool.query(
-    'SELECT COUNT(*) as total FROM media_items WHERE entityId = ? AND entityType = ?',
-    [companyId, 'company']
-  );
-  const currentTotal = Number(countRows[0]?.total ?? 0);
-
-  if (currentTotal >= maxPhotos) {
-    return res.status(403).json({
-      error: `Limite de fotos atingido para o plano ${entitlements.planName} (${maxPhotos} fotos). Faça upgrade para adicionar mais fotos à galeria.`,
-      errorType: 'plan_limit',
-      limit: maxPhotos,
-      current: currentTotal
-    });
-  }
-
-  const { nanoid } = await import('nanoid');
-  const id = `media_${nanoid(16)}`;
-  await pool.query(
-    'INSERT INTO media_items (id, url, entityId, entityType, fileType, createdAt) VALUES (?, ?, ?, ?, ?, NOW())',
-    [id, url.trim(), companyId, 'company', fileType || 'image/jpeg']
-  );
-
-  res.json({ success: true, item: { id, url: url.trim(), entityId: companyId, entityType: 'company' } });
+  const { addGalleryPhoto } = await import('../services/galleryService.js');
+  res.json(await addGalleryPhoto(req.params.id, req.body?.url, req.body?.fileType));
 }));
 
 apiRouter.delete('/companies/:id/media/:mediaId', requireAuth, requireCompanyParam('id'), handler(async (req, res) => {
@@ -993,12 +964,10 @@ apiRouter.post('/support/tickets', requireAuth, handler(async (req, res) => {
   const { subject, message, category } = req.body ?? {};
   if (!subject?.trim()) return res.status(400).json({ error: 'Assunto obrigatório.' });
   if (!message?.trim()) return res.status(400).json({ error: 'Mensagem obrigatória.' });
-  const { nanoid } = await import('nanoid');
-  const id = `ticket_${nanoid(12)}`;
-  const now = new Date().toISOString();
+  const id = `ticket_${randomUUID()}`;
   await (await import('../mysql.js')).pool.query(
-    'INSERT INTO support_tickets (id, userId, subject, message, status, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
-    [id, req.user!.id, subject.trim().slice(0, 255), message.trim().slice(0, 5000), 'open', now]
+    'INSERT INTO support_tickets (id, userId, subject, message, status, createdAt) VALUES (?, ?, ?, ?, ?, NOW())',
+    [id, req.user!.id, subject.trim().slice(0, 255), message.trim().slice(0, 5000), 'open']
   );
   res.json({ success: true, id });
 }));

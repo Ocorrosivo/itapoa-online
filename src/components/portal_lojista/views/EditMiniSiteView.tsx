@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { Company } from '../../../types';
 import { useCompany } from '../../../context/CompanyContext';
-import { api } from '../../../lib/apiClient';
+import { api, apiFetch } from '../../../lib/apiClient';
 import { maskPhone } from '../../../utils/validators';
 
 interface EditMiniSiteViewProps {

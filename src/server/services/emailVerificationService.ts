@@ -34,24 +34,9 @@ export class EmailVerificationService {
   private limiter = new SimpleRateLimiter();
 
   async initTable() {
-    try {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS user_email_verifications (
-          user_id VARCHAR(255) PRIMARY KEY,
-          email VARCHAR(255) NOT NULL,
-          token_hash CHAR(64) NOT NULL UNIQUE,
-          expires_at DATETIME NOT NULL,
-          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          verified_at DATETIME NULL,
-          INDEX idx_uev_token_hash (token_hash),
-          INDEX idx_uev_email (email)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-      `);
-    } catch {
-      // Falha não-bloqueante se usuário do banco tiver restrição de DDL
-    }
+    // Runtime must not create/migrate production tables.
+    await pool.query('SELECT user_id, token_hash, verified_at FROM user_email_verifications LIMIT 0');
   }
-
   /**
    * Cria ou substitui um token de confirmação pendente para um usuário recém-cadastrado.
    * Invalida qualquer token anterior para garantir uso único do token mais recente.
@@ -118,8 +103,8 @@ export class EmailVerificationService {
       }
       return rows[0].verified_at !== null;
     } catch {
-      // Se tabela não existir no banco, não bloqueia o acesso
-      return true;
+      // A database/configuration failure is not proof of a verified identity.
+      throw new VerificationError(503, 'Não foi possível verificar a confirmação do e-mail.');
     }
   }
 

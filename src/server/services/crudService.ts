@@ -78,7 +78,11 @@ export class CrudService {
   }
 
   async update(id: string, payload: Record<string, any>) {
-    const updated = await this.repository.update(id, payload);
+    // Ownership was checked for the existing record. Never move it to another
+    // tenant with a client-supplied company key after that check.
+    const data = { ...payload };
+    if (this.repository.companyColumn) delete data[this.repository.companyColumn];
+    const updated = await this.repository.update(id, data);
     if (!updated) throw new ServiceError(400, 'Nenhum campo válido informado.');
     return updated;
   }
