@@ -219,7 +219,7 @@ jobs:
             test -n "$container"
             docker service inspect "$service" --format 'image={{.Spec.TaskTemplate.ContainerSpec.Image}} mounts={{json .Spec.TaskTemplate.ContainerSpec.Mounts}} restart={{json .Spec.TaskTemplate.RestartPolicy}}'
             docker service ps "$service" --format '{{.CurrentState}} {{.Image}}'
-            docker volume inspect itapoa_uploads --format '{{.Name}} {{.Mountpoint}}' || true
+            docker volume inspect itapoa_itapoa-app_uploads --format '{{.Name}} {{.Mountpoint}}' || true
             if [ -d /var/backups/itapoa ]; then
               find /var/backups/itapoa -maxdepth 2 -type f -name '*sha256*' -print
             fi

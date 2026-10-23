@@ -137,3 +137,21 @@ Easypanel foi aberto com a habilidade de navegação; está na tela de login,
 deixado visível/em handoff para o responsável. Pergunta de autenticação enviada.
 Não preencher senha/2FA nem redefinir senha da infraestrutura. Não configurar
 volume só no Docker deixando o controlador do Easypanel divergente.
+
+## 23/10 — armazenamento e SDK verificados após login do responsável
+
+Easypanel autenticado pelo responsável. Volume `uploads` criado no controlador,
+montagem real `itapoa_itapoa-app_uploads:/app/uploads` e `UPLOAD_DIR` aplicados.
+Recriação controlada preservou imagem, ambiente e imagem sintética de teste;
+SHA-256 dos bytes e leitura HTTPS conferidos. Actions `39965520177`: sucesso.
+Arquivo sintético removido; nenhum arquivo de cliente ou registro SQL alterado.
+Consulta confirmou um administrador com papel real; nenhuma promoção de conta.
+
+Lint/build: exit 0. Suíte final: 125 testes, 12 suítes, zero falhas/ignorados.
+SDK oficial Mercado Pago renderizou 11 frames seguros com campos de número e
+código de segurança usando a chave pública fornecida. Zero submissões
+financeiras. Script opt-in `tests/manual/check-real-card-sdk.ts`; não substitui
+pagamento/webhook reais. Access Token permanece ausente do runtime até publicar
+as correções. Fonte Easypanel confirmada: Ocorrosivo/itapoa-online, main, Dockerfile.
+Publicação desta auditoria e ativação final ainda pendentes; não afirmar sucesso
+sem Actions, saúde e X-Release-Sha exato.

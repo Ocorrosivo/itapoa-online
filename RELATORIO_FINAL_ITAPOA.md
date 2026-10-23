@@ -1,10 +1,13 @@
 # Itapoá Online — resultado da etapa de auditoria (23/10/2026)
 
-**Não é uma homologação integral nem uma publicação concluída.** Correções de
-código estão em `codex/auditoria-geral`; produção não foi alterada nesta etapa.
-Atualização: backup criado, restaurado e copiado para fora da VPS. Continuam
-pendentes o armazenamento persistente e a configuração financeira no Easypanel;
-o navegador está na tela de login e depende de autenticação do responsável.
+**Não é uma homologação financeira integral nem uma publicação concluída.**
+Correções de código estão em `codex/auditoria-geral`. Backup externo conferido;
+armazenamento persistente configurado pelo Easypanel e testado com recriação
+da tarefa. O responsável autenticou no painel. A configuração foi aplicada
+separadamente à main existente; a publicação desta auditoria ainda será feita.
+Credenciais financeiras preparadas, mas Access Token propositalmente ausente
+do serviço até publicar a correção contra cobranças duplicadas. A seção 10
+atualiza os registros históricos das seções anteriores.
 
 ## 1. Ambiente e evidências
 
@@ -67,7 +70,7 @@ o navegador está na tela de login e depende de autenticação do responsável.
 
 - `npm run lint`: exit 0; `npm run build`: exit 0.
 - `node --import tsx --test tests/unit/*.test.ts tests/integration/*.test.ts`:
-  **123 testes aprovados, 12 suítes, zero falhas e zero ignorados**.
+  **125 testes aprovados, 12 suítes, zero falhas e zero ignorados**.
 - Integração usa MariaDB local isolado e rotas HTTP reais, incluindo concorrência,
   rollback, isolamento, upload físico, leitura do arquivo e recuperação/login.
 - SDK/API Mercado Pago e entrega SMTP são simulados nesses testes. Quatro casos
@@ -89,15 +92,15 @@ o navegador está na tela de login e depende de autenticação do responsável.
 | Pix em produção | BLOQUEADA POR DEPENDÊNCIA EXTERNA | Configuração pública desabilitada; regressões locais corrigidas/testadas |
 | Idempotência/webhook | CORRIGIDA E TESTADA | SQL real e gateway simulado; entrega real externa pendente |
 | Upload/galeria no código | CORRIGIDA E TESTADA | Bytes, MIME falso, tamanho, escopo, rollback e limite concorrente testados |
-| Persistência de uploads | BLOQUEADA POR DEPENDÊNCIA EXTERNA | Serviço sem mounts; volume itapoa_uploads ausente; backup externo não comprovado |
+| Persistência de uploads | CORRIGIDA E TESTADA | Volume gerenciado itapoa_itapoa-app_uploads; recriação preservou bytes e URL pública, Actions 39965520177 |
 | MySQL/conexão atual | FUNCIONANDO SEM ALTERAÇÕES | Saúde conectada e SELECTs reais; auditoria integral de índices/FKs ainda pendente |
 | Login/reset backend | CORRIGIDA E TESTADA | Testes locais de hash, prazo, uso único, concorrência e revogação |
 | Login/reset em produção | CORRIGIDA, MAS AGUARDANDO VALIDAÇÃO | Correções ainda não publicadas; nova senha real do usuário não foi verificada |
 | SMTP real | PENDENTE | Host/senha presentes; entrega anterior confirmada pelo usuário, não repetida nesta etapa |
 | Perfil administrativo | CORRIGIDA, MAS AGUARDANDO VALIDAÇÃO | Correção compila; fluxo visual autenticado após publicação ainda não homologado |
-| EasyPanel/aplicação | FUNCIONANDO SEM ALTERAÇÕES | Imagem/SHA/saúde identificados; configuração persistente de uploads ausente |
+| EasyPanel/aplicação | CONFIGURADA E TESTADA | Controlador e serviço alinhados; volume persistente e UPLOAD_DIR aplicados explicitamente |
 | Backup externo | CORRIGIDA E TESTADA | Criado em 23/10, restauração isolada conferida, cópia no computador com SHA-256 idêntico |
-| Deploy desta auditoria | PENDENTE | Sem merge/push main, sem mudança de configuração ou recriação |
+| Deploy desta auditoria | PENDENTE | Sem merge/push main; configuração e teste de recriação já realizados separadamente |
 
 ## 6. Infraestrutura, banco e arquivos
 
@@ -191,3 +194,23 @@ O item 1 de retomada está atendido para o estado atual, exceto os arquivos
 históricos não localizados. Armazenamento/variáveis/deploy permanecem pendentes.
 Não usar restauração de senha ou recuperação de conta do Easypanel para contornar
 a autenticação: o responsável deve fazer login diretamente no navegador.
+
+## 10. Atualização — configuração explícita após login e testes finais
+
+Itens 1, 2 e 4 da seção 8 atendidos para os dados existentes: backup externo
+validado, volume criado no Easypanel e administrador real confirmado (1 conta).
+Volume `itapoa_itapoa-app_uploads` em `/app/uploads`, com `UPLOAD_DIR` consistente
+no controlador e no serviço. Actions `39965520177`: recriação preservou bytes
+e leitura HTTPS; imagem sintética removida sem alterar dados de clientes.
+
+Suíte repetida: 125 testes aprovados, 12 suítes, zero falhas e zero ignorados;
+lint/build exit 0. SDK oficial carregado com chave pública fornecida: 11 frames
+seguros, campos de número e código de segurança visíveis, zero submissões
+financeiras. Isso comprova renderização, não liquidação ou entrega de webhook.
+
+Variáveis financeiras preparadas no painel; Access Token removido
+propositalmente antes da aplicação para impedir cobranças na main ainda sem a
+correção de duplicidade. Ativar somente após publicar o código revisado. A
+aplicação de configuração via Easypanel recompilou a main existente e não é a
+publicação desta auditoria. Workflow oficial deve restabelecer imagem/SHA exatos.
+Não houve cobrança real, alteração de senha, migração ou promoção de usuários.
