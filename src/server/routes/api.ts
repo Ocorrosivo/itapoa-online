@@ -513,17 +513,63 @@ apiRouter.post('/payments/pix', requireAuth, requireCompanyAccess, handler(async
   res.json(await paymentService.createPixPayment(req.user!.id, companyId, planId, payerEmail, payerName, payerDoc, requestId));
 }));
 
-// Resume card checkout after a reload without replaying an SDK token or charging again.
+// Resume card/pix checkout after a reload without replaying an SDK token or charging again.
 apiRouter.get('/payments/attempt/active', requireAuth, attachCompanyScope, handler(async (req, res) => {
   const companyId = String(req.query.companyId ?? ''), planId = String(req.query.planId ?? '');
   if (!companyId || !planId) return res.status(400).json({ error: 'Empresa e plano obrigatórios.' });
   if (req.user!.role !== 'admin_master' && !(req.companyIds ?? []).includes(companyId)) return res.status(403).json({ error: 'Acesso negado.' });
-  const [rows]: any = await (await import('../mysql.js')).pool.query(`SELECT s.id AS subscriptionId, s.status, s.companyId, s.planId, s.paymentMethod
+  
+  const pool = (await import('../mysql.js')).pool;
+  // Cancel old pending attempts (> 5 minutes)
+  await pool.query(
+    `UPDATE subscriptions SET status='canceled'
+     WHERE companyId=? AND planId=? AND status='pending'
+     AND createdAt < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 MINUTE)`,
+    [companyId, planId]
+  ).catch(() => {});
+
+  const [rows]: any = await pool.query(`SELECT s.id AS subscriptionId, s.status, s.companyId, s.planId, s.paymentMethod,
+    DATE_ADD(s.createdAt, INTERVAL 5 MINUTE) AS expiresAt,
+    s.createdAt
     FROM subscriptions s WHERE s.companyId=? AND s.planId=?
     AND (s.paymentMethod='credit_card' OR (s.paymentMethod='pix' AND NOT EXISTS (SELECT 1 FROM payment_logs pl WHERE pl.subscriptionId=s.id)))
-    AND (s.status='pending' OR (s.status='active' AND (s.nextBillingDate IS NULL OR s.nextBillingDate > UTC_TIMESTAMP()) AND s.createdAt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 MINUTE)))
+    AND (
+      (s.status='pending' AND s.createdAt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 5 MINUTE))
+      OR (s.status='active' AND (s.nextBillingDate IS NULL OR s.nextBillingDate > UTC_TIMESTAMP()) AND s.createdAt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 MINUTE))
+    )
     ORDER BY s.createdAt DESC LIMIT 1`, [companyId, planId]);
-  res.json(rows[0] || null);
+
+  if (!rows[0]) {
+    // Check if an attempt expired recently so client can render expired state
+    const [recentExpired]: any = await pool.query(
+      `SELECT s.id AS subscriptionId, 'expired' AS status, s.companyId, s.planId, s.paymentMethod,
+       DATE_ADD(s.createdAt, INTERVAL 5 MINUTE) AS expiresAt
+       FROM subscriptions s WHERE s.companyId=? AND s.planId=? AND s.status='canceled'
+       AND s.createdAt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 15 MINUTE)
+       ORDER BY s.createdAt DESC LIMIT 1`, [companyId, planId]
+    ).catch(() => [[]]);
+    if (recentExpired && recentExpired[0]) {
+      const expIso = recentExpired[0].expiresAt instanceof Date
+        ? recentExpired[0].expiresAt.toISOString()
+        : new Date(recentExpired[0].expiresAt).toISOString();
+      return res.json({ ...recentExpired[0], expiresAt: expIso });
+    }
+    return res.json(null);
+  }
+
+  const result = rows[0];
+  const expiresAtIso = result.expiresAt instanceof Date
+    ? result.expiresAt.toISOString()
+    : new Date(result.expiresAt).toISOString();
+
+  res.json({
+    subscriptionId: result.subscriptionId,
+    status: result.status,
+    companyId: result.companyId,
+    planId: result.planId,
+    paymentMethod: result.paymentMethod,
+    expiresAt: expiresAtIso
+  });
 }));
 
 // Recover a valid PIX attempt after a reload without creating a duplicate charge.
@@ -545,15 +591,33 @@ apiRouter.get('/payments/pix/active', requireAuth, attachCompanyScope, handler(a
 apiRouter.get('/payments/subscription/:id/status', requireAuth, handler(async (req, res) => {
   const subId = String(req.params.id || '');
   if (!subId) return res.status(400).json({ error: 'subscriptionId obrigatório.' });
-  const [rows]: any = await (await import('../mysql.js')).pool.query(
-    "SELECT CASE WHEN status='active' AND nextBillingDate <= UTC_TIMESTAMP() THEN 'expired' ELSE status END AS status, planId, companyId FROM subscriptions WHERE id = ? LIMIT 1",
+  const pool = (await import('../mysql.js')).pool;
+  const [rows]: any = await pool.query(
+    `SELECT s.id, s.status, s.planId, s.companyId, s.nextBillingDate, s.createdAt,
+            DATE_ADD(s.createdAt, INTERVAL 5 MINUTE) AS expiresAt,
+            TIMESTAMPDIFF(SECOND, s.createdAt, UTC_TIMESTAMP()) AS ageSeconds
+     FROM subscriptions s WHERE s.id = ? LIMIT 1`,
     [subId]
   );
   if (rows.length === 0) return res.status(404).json({ error: 'Assinatura não encontrada.' });
   const owns = req.user!.role === 'admin_master'
     || (await (await import('../middleware/auth.js')).loadUserCompanies(req.user!.id)).includes(String(rows[0].companyId));
   if (!owns) return res.status(403).json({ error: 'Acesso negado.' });
-  res.json({ status: rows[0].status, planId: rows[0].planId, companyId: rows[0].companyId });
+
+  const row = rows[0];
+  let status = row.status;
+  if (status === 'active' && row.nextBillingDate && new Date(row.nextBillingDate).getTime() <= Date.now()) {
+    status = 'expired';
+  } else if (status === 'pending' && Number(row.ageSeconds) >= 300) {
+    status = 'expired';
+    await pool.query("UPDATE subscriptions SET status='canceled' WHERE id=? AND status='pending'", [subId]).catch(() => {});
+  }
+
+  const expiresAtIso = row.expiresAt instanceof Date
+    ? row.expiresAt.toISOString()
+    : new Date(row.expiresAt).toISOString();
+
+  res.json({ status, planId: row.planId, companyId: row.companyId, expiresAt: expiresAtIso });
 }));
 
 // Reconciliação idempotente com o gateway Mercado Pago (evita duplicidade e resolve atrasos de webhook)

@@ -6,9 +6,9 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Search, MapPin, Star, Filter, ArrowUpDown, 
+  Search, MapPin, Star, Filter, 
   Map, Compass, Sparkles, SlidersHorizontal, Grid, 
-  List, ShieldCheck, Heart 
+  List, ShieldCheck, Heart, Building2, AlertCircle, Loader2
 } from 'lucide-react';
 import { Company, Category, City } from '../types';
 
@@ -40,9 +40,13 @@ export default function DirectorySection({
   const [search, setSearch] = useState(initialSearch);
   const [selCat, setSelCat] = useState(initialCatId);
   const [selCity, setSelCity] = useState(initialCityId);
-  const [sortBy, setSortBy] = useState<'rating' | 'views' | 'distance'>('rating');
+  const [sortBy] = useState<'rating' | 'views' | 'distance'>('rating');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [nearMe, setNearMe] = useState(false);
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [geoLoading, setGeoLoading] = useState(false);
+  const [geoFeedback, setGeoFeedback] = useState<string | null>(null);
+  const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
 
   // Sync props to state dynamically
   useEffect(() => {
@@ -57,9 +61,68 @@ export default function DirectorySection({
     setSelCity(initialCityId);
   }, [initialCityId]);
 
-  // Client Coordinates Mock (Itapoá downtown)
+  // Client Coordinates Fallback (Itapoá downtown)
   const clientLat = -26.115000;
   const clientLng = -48.610000;
+
+  // Cidades permitidas no filtro visual: exclusivamente Itapoá e Joinville
+  const visibleCities = useMemo(() => {
+    return cities.filter(c => {
+      const norm = (c.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+      return norm.includes('itapoa') || norm.includes('joinville');
+    });
+  }, [cities]);
+
+  // Handler interativo do filtro "Próximos a mim"
+  const handleToggleNearMe = () => {
+    if (nearMe) {
+      setNearMe(false);
+      setGeoFeedback(null);
+      return;
+    }
+
+    if (userCoords) {
+      setNearMe(true);
+      return;
+    }
+
+    if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {
+      setGeoLoading(true);
+      setGeoFeedback(null);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setUserCoords({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude
+          });
+          setGeoLoading(false);
+          setGeoFeedback(null);
+          setNearMe(true);
+        },
+        (err) => {
+          setGeoLoading(false);
+          setGeoFeedback('Localização não permitida pelo navegador. Usando referência central de Itapoá.');
+          setUserCoords({ lat: clientLat, lng: clientLng });
+          setNearMe(true);
+        },
+        { timeout: 7000, enableHighAccuracy: false }
+      );
+    } else {
+      setGeoFeedback('Geolocalização não suportada. Usando referência central de Itapoá.');
+      setUserCoords({ lat: clientLat, lng: clientLng });
+      setNearMe(true);
+    }
+  };
+
+  // Helper para normalizar URLs de imagem (caminhos relativos e absolutos)
+  const resolveCoverUrl = (img?: string | null, logo?: string | null) => {
+    const raw = (img && img.trim()) || (logo && logo.trim());
+    if (!raw) return null;
+    if (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('data:') || raw.startsWith('/')) {
+      return raw;
+    }
+    return `/${raw}`;
+  };
 
   // Haversine distance helper (in kilometers)
   const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -78,14 +141,18 @@ export default function DirectorySection({
   const filteredCompanies = useMemo(() => {
     let result = [...companies];
 
-    // Filter keywords
+    // Filter keywords (nome, descrição, endereço ou segmento)
     if (search.trim()) {
       const term = search.toLowerCase();
-      result = result.filter(c => 
-        c.name.toLowerCase().includes(term) ||
-        c.description.toLowerCase().includes(term) ||
-        c.address.toLowerCase().includes(term)
-      );
+      result = result.filter(c => {
+        const catName = categories.find(cat => cat.id === c.categoryId)?.name?.toLowerCase() || '';
+        return (
+          (c.name || '').toLowerCase().includes(term) ||
+          (c.description || '').toLowerCase().includes(term) ||
+          (c.address || '').toLowerCase().includes(term) ||
+          catName.includes(term)
+        );
+      });
     }
 
     // Filter category
@@ -98,17 +165,21 @@ export default function DirectorySection({
       result = result.filter(c => c.cityId === selCity);
     }
 
-    // Filter "Near me" (within 10km of simulated city center)
+    // Filter "Near me" (distância com base na geolocalização autorizada ou fallback)
     if (nearMe) {
+      const targetLat = userCoords?.lat ?? clientLat;
+      const targetLng = userCoords?.lng ?? clientLng;
       result = result.filter(c => {
-        const d = getDistance(clientLat, clientLng, c.latitude, c.longitude);
-        return d <= 8; // near me within 8km limits
+        const cLat = Number(c.latitude);
+        const cLng = Number(c.longitude);
+        if (isNaN(cLat) || isNaN(cLng) || cLat === 0 || cLng === 0) return false;
+        const d = getDistance(targetLat, targetLng, cLat, cLng);
+        return d <= 15; // raio de proximidade de 15km
       });
     }
 
-    // Sort order
+    // Sort order (Diamond sempre em primeiro lugar, seguido por VIP Gold e avaliações)
     result.sort((a, b) => {
-      // 1. Sponsored diamond premium always comes FIRST regardless of criteria
       const scoreA = a.planLevel === 'diamond_extremo' ? 3 : a.planLevel === 'gold_vip' ? 2 : 1;
       const scoreB = b.planLevel === 'diamond_extremo' ? 3 : b.planLevel === 'gold_vip' ? 2 : 1;
       
@@ -116,21 +187,16 @@ export default function DirectorySection({
         return scoreB - scoreA;
       }
 
-      // 2. Secondary sorting criteria
       if (sortBy === 'rating') {
-        return b.rating - a.rating;
+        return (Number(b.rating) || 0) - (Number(a.rating) || 0);
       } else if (sortBy === 'views') {
-        return b.views - a.views;
-      } else if (sortBy === 'distance') {
-        const distA = getDistance(clientLat, clientLng, a.latitude, a.longitude);
-        const distB = getDistance(clientLat, clientLng, b.latitude, b.longitude);
-        return distA - distB; // smaller distance is better
+        return (Number(b.views) || 0) - (Number(a.views) || 0);
       }
       return 0;
     });
 
     return result;
-  }, [companies, search, selCat, selCity, sortBy, nearMe]);
+  }, [companies, search, selCat, selCity, sortBy, nearMe, userCoords, categories]);
 
   const [visibleCount, setVisibleCount] = useState(6);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -215,20 +281,36 @@ export default function DirectorySection({
             </div>
 
             {/* Geolocation matching Toggle */}
-            <div 
-              onClick={() => setNearMe(!nearMe)} 
-              className={`p-4 rounded-xl border transition cursor-pointer flex items-center justify-between ${nearMe ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200'}`}
-            >
-              <div className="flex items-center gap-3">
-                <Compass className={`w-5 h-5 ${nearMe ? 'text-indigo-600' : 'text-slate-400'}`} />
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900">Próximos a mim</h4>
-                  <p className="text-[9px] text-slate-400 font-sans">Simular raio de 8km (Itapoá)</p>
+            <div className="flex flex-col gap-1.5">
+              <div 
+                onClick={handleToggleNearMe} 
+                className={`p-4 rounded-xl border transition cursor-pointer flex items-center justify-between ${nearMe ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-slate-200'}`}
+              >
+                <div className="flex items-center gap-3">
+                  {geoLoading ? (
+                    <Loader2 className="w-5 h-5 text-indigo-600 animate-spin" />
+                  ) : (
+                    <Compass className={`w-5 h-5 ${nearMe ? 'text-indigo-600' : 'text-slate-400'}`} />
+                  )}
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900">Próximos a mim</h4>
+                    <p className="text-[9px] text-slate-400 font-sans">
+                      {nearMe && userCoords 
+                        ? (userCoords.lat === clientLat ? 'Raio de 15km (Itapoá)' : 'Raio de 15km (sua localização)') 
+                        : 'Filtrar por proximidade'}
+                    </p>
+                  </div>
+                </div>
+                <div className={`w-7 h-4 rounded-full p-0.5 transition ${nearMe ? 'bg-indigo-600' : 'bg-slate-200'} flex items-center ${nearMe ? 'justify-end' : 'justify-start'}`}>
+                  <div className="w-3 h-3 rounded-full bg-white shadow-sm" />
                 </div>
               </div>
-              <div className={`w-7 h-4 rounded-full p-0.5 transition ${nearMe ? 'bg-indigo-600' : 'bg-slate-200'} flex items-center ${nearMe ? 'justify-end' : 'justify-start'}`}>
-                <div className="w-3 h-3 rounded-full bg-white shadow-sm" />
-              </div>
+              {geoFeedback && (
+                <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[10px] text-amber-800 flex items-start gap-1.5 font-sans leading-tight">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                  <span>{geoFeedback}</span>
+                </div>
+              )}
             </div>
 
             {/* Selector list of Categories */}
@@ -255,7 +337,7 @@ export default function DirectorySection({
               </div>
             </div>
 
-            {/* Filter by City selector */}
+            {/* Filter by City selector: Exclusivamente Itapoá e Joinville */}
             <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm">
               <h3 className="text-xs font-bold text-slate-900 mb-3 uppercase tracking-wider flex items-center gap-2">
                 <MapPin className="w-3.5 h-3.5 text-slate-400" /> Cidades
@@ -267,7 +349,7 @@ export default function DirectorySection({
                 >
                   Todas as Cidades
                 </button>
-                {cities.map(c => (
+                {visibleCities.map(c => (
                   <button 
                     key={c.id}
                     onClick={() => setSelCity(c.id)}
@@ -277,22 +359,6 @@ export default function DirectorySection({
                   </button>
                 ))}
               </div>
-            </div>
-
-            {/* Reorder filters lists */}
-            <div className="p-6 bg-white border border-slate-200 rounded-2xl shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                <ArrowUpDown className="w-4 h-4 text-slate-400" /> Ordenação de Busca
-              </h3>
-              <select 
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="w-full p-3 rounded-lg bg-slate-100 border border-slate-200 text-xs font-sans text-slate-700 focus:outline-none"
-              >
-                <option value="rating">Melhor Avaliação ⭐</option>
-                <option value="views">Mais Populares 👀</option>
-                <option value="distance">Menor Distância 🧭</option>
-              </select>
             </div>
           </aside>
 
@@ -327,6 +393,8 @@ export default function DirectorySection({
                     const isFav = favorites.includes(c.id);
                     const isDiamond = c.planLevel === 'diamond_extremo';
                     const isGold = c.planLevel === 'gold_vip';
+                    const coverUrl = resolveCoverUrl(c.coverImage, c.logo);
+                    const isImageBroken = Boolean(brokenImages[c.id]) || !coverUrl;
                     
                     return (
                       <motion.div
@@ -340,12 +408,26 @@ export default function DirectorySection({
                       >
                         {/* Company cover thumbnail */}
                         <div className={`relative overflow-hidden shrink-0 ${viewMode === 'grid' ? 'h-44 w-full' : 'h-48 md:h-full w-full md:w-64 bg-slate-900'}`}>
-                          <img 
-                            src={c.coverImage} 
-                            alt={c.name} 
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                            referrerPolicy="no-referrer"
-                          />
+                          {isImageBroken ? (
+                            <div className="w-full h-full bg-gradient-to-br from-slate-800 via-slate-900 to-indigo-950 flex flex-col items-center justify-center p-4 text-center select-none relative overflow-hidden">
+                              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-500/20 via-transparent to-transparent pointer-events-none" />
+                              <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md border border-white/10 flex items-center justify-center text-white mb-2 shadow-inner group-hover:scale-110 transition-transform">
+                                <Building2 className="w-6 h-6 text-indigo-300" />
+                              </div>
+                              <span className="text-xs font-bold text-white/95 line-clamp-1 max-w-[85%] drop-shadow-sm">{c.name}</span>
+                              <span className="text-[10px] text-indigo-200/70 font-sans uppercase tracking-wider mt-0.5">Guia Comercial Itapoá</span>
+                            </div>
+                          ) : (
+                            <img 
+                              src={coverUrl!} 
+                              alt={c.name} 
+                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                              referrerPolicy="no-referrer"
+                              onError={() => {
+                                setBrokenImages(prev => ({ ...prev, [c.id]: true }));
+                              }}
+                            />
+                          )}
                           
                           {/* Top floating tags */}
                           <div className="absolute top-3 left-3 flex flex-col gap-1 z-10">

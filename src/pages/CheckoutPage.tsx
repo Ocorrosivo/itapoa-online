@@ -82,13 +82,34 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
   const [pix, setPix] = useState<PixDetails | null>(null);
   const [subscriptionId, setSubscriptionId] = useState('');
   const [copied, setCopied] = useState(false);
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [attemptExpiresAt, setAttemptExpiresAt] = useState<string | null>(null);
+  const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
 
   const formRef = useRef<HTMLFormElement>(null);
   const preparedCompany = useRef('');
   const attemptKey = useRef('');
   const requestId = useRef(crypto.randomUUID());
   const submitLock = useRef(false);
+
+  const formatCountdown = (secs: number | null) => {
+    if (secs === null) return '05:00';
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const handleStartNewAttempt = () => {
+    setSubscriptionId('');
+    setPix(null);
+    setAttemptExpiresAt(null);
+    setSecondsRemaining(null);
+    setError('');
+    setCheckoutState('ready');
+    if (attemptKey.current) sessionStorage.removeItem(attemptKey.current);
+    const pixAttemptKey = companyChoice && plan ? `itapoa_pix_attempt_${user?.id}_${companyChoice}_${plan.id}` : '';
+    if (pixAttemptKey) sessionStorage.removeItem(pixAttemptKey);
+    requestId.current = crypto.randomUUID();
+  };
 
   useSEO({
     title: 'Checkout Seguro — Finalize seu Plano no Itapoá Online',
@@ -179,6 +200,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
         if (!canceled && existing && existing.qrCode) {
           setPix(existing);
           setSubscriptionId(existing.subscriptionId);
+          setAttemptExpiresAt(existing.expirationDate);
           setMethod('pix');
           setCheckoutState('pending_pix');
         }
@@ -194,34 +216,49 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
   useEffect(() => {
     if (!isAuthenticated || !plan || !companyChoice || pix || subscriptionId) return;
     let active = true;
-    api.get<{ subscriptionId: string; status: string; paymentMethod: string } | null>(`/api/payments/attempt/active?companyId=${encodeURIComponent(companyChoice)}&planId=${encodeURIComponent(plan.id)}`)
+    api.get<{ subscriptionId: string; status: string; paymentMethod: string; expiresAt?: string } | null>(`/api/payments/attempt/active?companyId=${encodeURIComponent(companyChoice)}&planId=${encodeURIComponent(plan.id)}`)
       .then(attempt => {
         if (!active || !attempt?.subscriptionId) return;
-        setSubscriptionId(attempt.subscriptionId); setMethod(attempt.paymentMethod === 'pix' ? 'pix' : 'card');
-        setCheckoutState(attempt.status === 'active' ? 'approved' : 'processing');
-        if (attempt.status === 'active') clearPendingPurchase();
+        setSubscriptionId(attempt.subscriptionId);
+        setMethod(attempt.paymentMethod === 'pix' ? 'pix' : 'card');
+        if (attempt.expiresAt) {
+          setAttemptExpiresAt(attempt.expiresAt);
+        }
+        if (attempt.status === 'active') {
+          setCheckoutState('approved');
+          clearPendingPurchase();
+        } else if (attempt.status === 'expired') {
+          setCheckoutState('expired');
+          setError('Tempo esgotado. Esta tentativa de contratação expirou. Para continuar, inicie novamente o processo.');
+        } else {
+          setCheckoutState(attempt.paymentMethod === 'pix' ? 'pending_pix' : 'processing');
+        }
       }).catch(() => { /* Preserve the selected purchase during a transient failure. */ });
     return () => { active = false; };
   }, [isAuthenticated, plan, companyChoice, pix, subscriptionId]);
 
   // 5. Polling contínuo do status da assinatura enquanto estiver pendente
   useEffect(() => {
-    if (!subscriptionId || checkoutState === 'approved') return;
+    if (!subscriptionId || checkoutState === 'approved' || checkoutState === 'expired') return;
 
     let canceled = false;
     const check = async () => {
       try {
-        const status = await BillingService.getSubscriptionStatusById(subscriptionId);
+        const details = await BillingService.getSubscriptionStatusDetails(subscriptionId);
         if (canceled) return;
-        if (status === 'active') {
+        if (details.expiresAt) {
+          setAttemptExpiresAt(details.expiresAt);
+        }
+        if (details.status === 'active') {
           setCheckoutState('approved');
           clearPendingPurchase();
           if (attemptKey.current) sessionStorage.removeItem(attemptKey.current);
-        } else if (status === 'canceled' || status === 'rejected') {
+        } else if (details.status === 'canceled' || details.status === 'rejected') {
           setCheckoutState('rejected');
           setError('Pagamento não concluído. Você pode tentar novamente com outro cartão ou via Pix.');
-        } else if (status === 'expired') {
-          setCheckoutState('expired'); setError('O período contratado terminou. Você pode iniciar uma nova contratação.');
+        } else if (details.status === 'expired') {
+          setCheckoutState('expired');
+          setError('Tempo esgotado. Esta tentativa de contratação expirou. Para continuar, inicie novamente o processo.');
         }
       } catch {
         // Falhas transitórias de rede não alteram estado
@@ -229,31 +266,31 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
     };
 
     void check();
-    const interval = window.setInterval(check, 4000);
+    const interval = window.setInterval(check, 3000);
     return () => {
       canceled = true;
       window.clearInterval(interval);
     };
   }, [subscriptionId, checkoutState]);
 
-  // 6. Contagem regressiva da validade do Pix
+  // 6. Contagem regressiva da validade de 5 minutos (servidor como autoridade)
   useEffect(() => {
-    if (!pix?.expirationDate || checkoutState !== 'pending_pix') return;
+    if (!attemptExpiresAt || checkoutState === 'approved' || checkoutState === 'ready' || checkoutState === 'expired') return;
 
-    const target = new Date(pix.expirationDate).getTime();
+    const target = new Date(attemptExpiresAt).getTime();
     const tick = () => {
       const remainingSecs = Math.max(0, Math.floor((target - Date.now()) / 1000));
-      setTimeLeft(remainingSecs);
+      setSecondsRemaining(remainingSecs);
       if (remainingSecs <= 0) {
         setCheckoutState('expired');
-        setError('Este QR Code Pix expirou. Gere um novo código para concluir o pagamento.');
+        setError('Tempo esgotado. Esta tentativa de contratação expirou. Para continuar, inicie novamente o processo.');
       }
     };
 
     tick();
     const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
-  }, [pix, checkoutState]);
+  }, [attemptExpiresAt, checkoutState]);
 
   // Preparação idempotente da empresa
   const prepare = async (): Promise<string> => {
@@ -321,6 +358,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
 
       setPix(details);
       setSubscriptionId(details.subscriptionId);
+      setAttemptExpiresAt(details.expirationDate || new Date(Date.now() + 5 * 60 * 1000).toISOString());
       setCheckoutState('pending_pix');
     } catch (e: any) {
       setError(e?.message || 'Não foi possível gerar a cobrança Pix no momento.');
@@ -351,7 +389,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
       }
       sessionStorage.setItem(attemptKey.current, requestId.current);
 
-      const result = await api.post<{ subscriptionId: string; status: string }>(
+      const result = await api.post<{ subscriptionId: string; status: string; expiresAt?: string }>(
         '/api/payments/card',
         {
           companyId,
@@ -369,6 +407,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
       }
 
       setSubscriptionId(result.subscriptionId);
+      setAttemptExpiresAt(result.expiresAt || new Date(Date.now() + 5 * 60 * 1000).toISOString());
       // Gateway approval alone is not proof of activation. Only the backend
       // status poll/reconciliation may show success after the DB transaction.
       setCheckoutState('processing');
@@ -514,8 +553,30 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
               </div>
             )}
 
-            {/* ESTADO: FORMULÁRIO DE CONTRATAÇÃO (NÃO APROVADO) */}
-            {checkoutState !== 'approved' && (
+            {/* ESTADO: EXPIRADO (Prazo de 5 minutos esgotado) */}
+            {checkoutState === 'expired' && (
+              <div className="py-8 px-6 bg-amber-50 border border-amber-200 rounded-3xl text-center space-y-4 shadow-sm">
+                <div className="w-16 h-16 bg-amber-500 text-white rounded-full flex items-center justify-center mx-auto shadow-sm">
+                  <Clock size={36} />
+                </div>
+                <h2 className="text-2xl font-black text-amber-950">Tempo esgotado</h2>
+                <p className="text-sm text-amber-900 max-w-md mx-auto leading-relaxed">
+                  Tempo esgotado. Esta tentativa de contratação expirou. Para continuar, inicie novamente o processo.
+                </p>
+                <div className="pt-4">
+                  <button
+                    type="button"
+                    onClick={handleStartNewAttempt}
+                    className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-slate-950 text-white font-bold hover:bg-slate-800 transition shadow-sm cursor-pointer"
+                  >
+                    Iniciar nova contratação
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ESTADO: FORMULÁRIO DE CONTRATAÇÃO (NÃO APROVADO E NÃO EXPIRADO) */}
+            {checkoutState !== 'approved' && checkoutState !== 'expired' && (
               <>
                 {/* 1. Dados Básicos do Titular */}
                 <form
@@ -807,24 +868,27 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                           </div>
                         </div>
 
-                        {/* Validade e status de reconciliação */}
+                        {/* Validade de 5 minutos e status de reconciliação */}
                         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-200 text-xs">
                           <div className="flex items-center gap-2.5 text-slate-600">
-                            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-200/60 shadow-xs">
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border shadow-xs ${
+                              secondsRemaining !== null && secondsRemaining < 60
+                                ? 'bg-red-100 text-red-600 border-red-300 animate-pulse'
+                                : 'bg-amber-50 text-amber-600 border-amber-200/60'
+                            }`}>
                               <Clock size={16} />
                             </div>
                             <div>
-                              <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Tempo de validade</div>
+                              <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                                {secondsRemaining !== null && secondsRemaining < 60 ? 'Atenção ao tempo' : 'Prazo de conclusão'}
+                              </div>
                               <div className="font-mono font-bold text-slate-900 text-sm">
-                                {timeLeft !== null && timeLeft > 0 ? (
-                                  <>
-                                    Expira em:{' '}
-                                    <strong className="text-slate-950">
-                                      {Math.floor(timeLeft / 60)}m {timeLeft % 60}s
-                                    </strong>
-                                  </>
+                                {secondsRemaining !== null && secondsRemaining > 0 ? (
+                                  <span className={secondsRemaining < 60 ? 'text-red-600 font-black' : 'text-slate-950'}>
+                                    Tempo restante para concluir esta tentativa de pagamento: {formatCountdown(secondsRemaining)}
+                                  </span>
                                 ) : (
-                                  <span className="text-red-600 font-sans text-xs">Código expirado</span>
+                                  <span className="text-red-600 font-sans text-xs font-bold">Tentativa expirada</span>
                                 )}
                               </div>
                             </div>
@@ -834,7 +898,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                             type="button"
                             onClick={handleCheckStatusNow}
                             disabled={checkingStatus}
-                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition disabled:opacity-60"
+                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition disabled:opacity-60 cursor-pointer"
                           >
                             <RefreshCw size={13} className={checkingStatus ? 'animate-spin text-emerald-600' : 'text-slate-600'} />
                             {checkingStatus ? 'Consultando provedor…' : 'Verificar pagamento agora'}
@@ -844,17 +908,73 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                     )}
 
                     {subscriptionId && !pix && (
-                      <div role="status" className="rounded-2xl border border-slate-200 bg-slate-50 p-5 space-y-3">
-                        <h2 className="font-bold text-slate-900">Aguardando confirmação do pagamento</h2>
-                        <p className="text-sm text-slate-600">A ativação depende da confirmação do Mercado Pago e do processamento no servidor. Não refaça a cobrança enquanto esta tentativa estiver em análise.</p>
-                        <button type="button" onClick={handleCheckStatusNow} disabled={checkingStatus} className="rounded-xl bg-slate-900 text-white px-4 py-3 font-bold disabled:opacity-50">
-                          {checkingStatus ? 'Verificando…' : 'Verificar pagamento agora'}
-                        </button>
-                        {checkoutState === 'rejected' && <button type="button" className="block underline text-sm" onClick={() => {
-                          setSubscriptionId(''); setCheckoutState('ready'); setError('');
-                          if (attemptKey.current) sessionStorage.removeItem(attemptKey.current);
-                          requestId.current = crypto.randomUUID();
-                        }}>Iniciar nova tentativa após recusa</button>}
+                      <div role="status" className="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 space-y-5 shadow-sm">
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200/80 w-fit">
+                          <Clock size={14} className="text-amber-600" />
+                          Aguardando confirmação do pagamento
+                        </div>
+
+                        <div>
+                          <h2 className="text-xl sm:text-2xl font-black text-slate-950 tracking-tight">
+                            Aguardando confirmação do pagamento
+                          </h2>
+                          <p className="text-xs sm:text-sm text-slate-500 mt-1 leading-relaxed">
+                            A ativação depende da confirmação do Mercado Pago e do processamento no servidor. Não refaça a cobrança enquanto esta tentativa estiver em análise.
+                          </p>
+                        </div>
+
+                        {/* Contador regressivo de 5 minutos */}
+                        <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition ${
+                          secondsRemaining !== null && secondsRemaining < 60
+                            ? 'bg-red-50 border-red-300 text-red-900 ring-2 ring-red-400/30'
+                            : 'bg-slate-50 border-slate-200 text-slate-700'
+                        }`}>
+                          <div className="flex items-center gap-3">
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${
+                              secondsRemaining !== null && secondsRemaining < 60
+                                ? 'bg-red-600 text-white animate-pulse'
+                                : 'bg-slate-900 text-white'
+                            }`}>
+                              <Clock size={18} />
+                            </div>
+                            <div>
+                              <span className="text-[11px] font-bold uppercase tracking-wider block text-slate-500">
+                                {secondsRemaining !== null && secondsRemaining < 60 ? 'Menos de 1 minuto restante!' : 'Prazo de conclusão'}
+                              </span>
+                              <span className="text-xs sm:text-sm font-semibold">
+                                Tempo restante para concluir esta tentativa de pagamento:
+                              </span>
+                            </div>
+                          </div>
+                          <div className={`font-mono text-lg sm:text-xl font-black px-3.5 py-1.5 rounded-xl text-center self-start sm:self-auto ${
+                            secondsRemaining !== null && secondsRemaining < 60
+                              ? 'text-red-600 bg-red-100 font-black'
+                              : 'text-slate-950 bg-white border border-slate-200'
+                          }`}>
+                            {formatCountdown(secondsRemaining)}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                          <button
+                            type="button"
+                            onClick={handleCheckStatusNow}
+                            disabled={checkingStatus}
+                            className="flex-1 py-3 px-5 rounded-xl bg-slate-950 text-white font-bold hover:bg-slate-800 transition disabled:opacity-50 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer shadow-sm"
+                          >
+                            <RefreshCw size={14} className={checkingStatus ? 'animate-spin' : ''} />
+                            {checkingStatus ? 'Consultando provedor…' : 'Verificar pagamento agora'}
+                          </button>
+                          {checkoutState === 'rejected' && (
+                            <button
+                              type="button"
+                              onClick={handleStartNewAttempt}
+                              className="px-5 py-3 rounded-xl border border-slate-300 text-slate-700 font-bold hover:bg-slate-50 text-xs sm:text-sm transition cursor-pointer"
+                            >
+                              Iniciar nova contratação
+                            </button>
+                          )}
+                        </div>
                       </div>
                     )}
 

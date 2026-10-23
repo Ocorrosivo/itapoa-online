@@ -147,7 +147,7 @@ export default function CompanyDetailSection({
         source: 'guiacomercial',
         device: typeof window !== 'undefined' && window.innerWidth < 768 ? 'mobile' : 'desktop'
       })
-    }).catch(() => {});
+    }).catch(() => { });
   };
 
   // Registra visualização real na montagem
@@ -157,7 +157,7 @@ export default function CompanyDetailSection({
 
   const handleLeadWhatsAppClick = () => {
     trackTelemetry('whatsapp');
-    fetch(`/api/companies/${company.id}/click`, { method: 'POST' }).catch(() => {});
+    fetch(`/api/companies/${company.id}/click`, { method: 'POST' }).catch(() => { });
     const cleanPhone = (company.whatsapp || company.phone || '').replace(/\D/g, '');
     const textMsg = encodeURIComponent(
       `Olá! Encontrei o perfil de ${company.name} no Guia Comercial de Itapoá e gostaria de saber mais informações.`
@@ -167,7 +167,7 @@ export default function CompanyDetailSection({
 
   const handleProductWhatsAppClick = (productName: string) => {
     trackTelemetry('whatsapp');
-    fetch(`/api/companies/${company.id}/click`, { method: 'POST' }).catch(() => {});
+    fetch(`/api/companies/${company.id}/click`, { method: 'POST' }).catch(() => { });
     const cleanPhone = (company.whatsapp || company.phone || '').replace(/\D/g, '');
     const textMsg = encodeURIComponent(
       `Olá! Vi o item "${productName}" no catálogo de ${company.name} no Guia Comercial de Itapoá e gostaria de saber mais detalhes e disponibilidade.`
@@ -182,14 +182,45 @@ export default function CompanyDetailSection({
     }
   };
 
+  const currentCity = cities.find(c => c.id === company.cityId);
+  const currentCategory = categories.find(cat => cat.id === company.categoryId);
+
+  // Validação rigorosa da localização cadastrada
+  const hasCoords = useMemo(() => {
+    const lat = Number(company.latitude);
+    const lng = Number(company.longitude);
+    return !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
+  }, [company.latitude, company.longitude]);
+
+  const rawAddress = (company.address || '').trim();
+  const hasAddress = rawAddress.length > 3;
+  const hasValidLocation = hasCoords || hasAddress;
+
+  const locationQuery = useMemo(() => {
+    const cityName = currentCity?.name || 'Itapoá';
+    if (hasCoords) {
+      return `${company.latitude},${company.longitude}`;
+    }
+    if (hasAddress) {
+      return `${company.name ? company.name + ', ' : ''}${rawAddress}, ${cityName}, SC`;
+    }
+    return '';
+  }, [hasCoords, hasAddress, company.latitude, company.longitude, company.name, rawAddress, currentCity]);
+
+  const embedUrl = useMemo(() => {
+    if (!hasValidLocation || !locationQuery) return '';
+    return `https://maps.google.com/maps?q=${encodeURIComponent(locationQuery)}&t=&z=15&ie=UTF8&iwloc=&output=embed`;
+  }, [hasValidLocation, locationQuery]);
+
+  const directionsUrl = useMemo(() => {
+    if (!hasValidLocation || !locationQuery) return '';
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(locationQuery)}`;
+  }, [hasValidLocation, locationQuery]);
+
   const handleRouteClick = () => {
+    if (!hasValidLocation || !directionsUrl) return;
     trackTelemetry('route');
-    const destination = company.address 
-      ? encodeURIComponent(`${company.address}, Itapoá, SC`) 
-      : company.latitude && company.longitude 
-        ? `${company.latitude},${company.longitude}` 
-        : encodeURIComponent(`${company.name}, Itapoá, SC`);
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${destination}`, '_blank');
+    window.open(directionsUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleCopyLink = () => {
@@ -252,9 +283,6 @@ export default function CompanyDetailSection({
     return result;
   }, [reviews, ratingFilter, sortOption, reviewsSearch]);
 
-  const currentCity = cities.find(c => c.id === company.cityId);
-  const currentCategory = categories.find(cat => cat.id === company.categoryId);
-
   // Empresas recomendadas da mesma categoria ou cidade para preencher a página
   const relatedCompanies = useMemo(() => {
     if (!companies || companies.length === 0) return [];
@@ -265,7 +293,7 @@ export default function CompanyDetailSection({
 
   return (
     <div id="company_detail_container" className="relative w-full min-h-screen bg-slate-50 pb-20">
-      
+
       {/* 1. CABEÇALHO PANORÂMICO PREMIUM (Conexão contínua com a barra superior, sem faixa branca) */}
       <div className="w-full bg-[#0A0915] border-b border-slate-800/80 pt-2 sm:pt-4 pb-8 sm:pb-10 shadow-xl">
         <div className="max-w-7xl mx-auto px-4 md:px-8">
@@ -286,147 +314,149 @@ export default function CompanyDetailSection({
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/25 to-transparent pointer-events-none" />
             <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-transparent pointer-events-none" />
 
-          {/* Top Bar Actions */}
-          <div className="relative z-10 flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={onBack}
-              className="px-4 py-2 bg-slate-950/70 hover:bg-slate-900 border border-white/20 text-white font-bold text-xs rounded-full transition flex items-center gap-1.5 backdrop-blur-md cursor-pointer shadow-lg active:scale-95"
-            >
-              <span>← Voltar ao Guia</span>
-            </button>
-
-            <div className="flex items-center gap-2">
-              {/* Badges de Plano / Selo */}
-              {isDiamond ? (
-                <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 border border-amber-300 shadow-md">
-                  <Sparkles className="w-3.5 h-3.5 fill-slate-950" />
-                  <span>PARCEIRO DIAMOND OFICIAL</span>
-                </span>
-              ) : isGold ? (
-                <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-[#C8102E] to-red-600 text-white border border-red-400 shadow-md">
-                  <Zap className="w-3.5 h-3.5 fill-white" />
-                  <span>PARCEIRO VIP GOLD</span>
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-950/80 text-emerald-400 border border-emerald-500/40 backdrop-blur-md shadow-md">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>PERFIL OFICIAL VERIFICADO</span>
-                </span>
-              )}
-
+            {/* Top Bar Actions */}
+            <div className="relative z-10 flex items-center justify-between gap-3">
               <button
                 type="button"
-                onClick={handleCopyLink}
-                className="p-2.5 bg-slate-950/70 hover:bg-slate-900 border border-white/20 text-white rounded-full transition backdrop-blur-md shadow cursor-pointer active:scale-95"
-                title="Compartilhar Link Oficial"
-                aria-label="Compartilhar"
+                onClick={onBack}
+                className="px-4 py-2 bg-slate-950/70 hover:bg-slate-900 border border-white/20 text-white font-bold text-xs rounded-full transition flex items-center gap-1.5 backdrop-blur-md cursor-pointer shadow-lg active:scale-95"
               >
-                <Share2 className="w-4 h-4" />
+                <span>← Voltar ao Guia</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => onToggleFavorite(company.id)}
-                className="p-2.5 bg-slate-950/70 hover:bg-slate-900 border border-white/20 text-white rounded-full transition backdrop-blur-md shadow cursor-pointer active:scale-95"
-                title="Favoritar Empresa"
-                aria-label="Favoritar"
-              >
-                <Heart className={`w-4 h-4 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-white'}`} />
-              </button>
-            </div>
-          </div>
-
-          {/* Bottom Content: Logo, Título, Categoria, Avaliação e CTAs */}
-          <div className="relative z-10 pt-8 flex flex-col lg:flex-row lg:items-end justify-between gap-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
-              {/* Logo Avatar */}
-              <div className="relative shrink-0">
-                <img
-                  src={company.logo || '/logotipo.png'}
-                  alt={company.name}
-                  className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl md:rounded-3xl object-contain bg-white p-2 border-2 border-white/80 shadow-2xl"
-                  referrerPolicy="no-referrer"
-                />
-                <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center text-white text-[10px] font-bold shadow" title="Empresa Ativa">
-                  ✓
-                </span>
-              </div>
-
-              {/* Informações Principais */}
-              <div className="text-white space-y-1.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-md bg-[#C8102E] text-white text-[10px] font-black uppercase tracking-wider shadow-sm">
-                    {currentCategory?.name || 'Comércio Local'}
+              <div className="flex items-center gap-2">
+                {/* Badges de Plano / Selo */}
+                {isDiamond ? (
+                  <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 border border-amber-300 shadow-md">
+                    <Sparkles className="w-3.5 h-3.5 fill-slate-950" />
+                    <span>PARCEIRO DIAMOND OFICIAL</span>
                   </span>
-                  <span className="text-xs text-slate-300 font-medium flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-red-400" />
-                    {currentCity?.name || 'Itapoá - SC'}
+                ) : isGold ? (
+                  <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-[#C8102E] to-red-600 text-white border border-red-400 shadow-md">
+                    <Zap className="w-3.5 h-3.5 fill-white" />
+                    <span>PARCEIRO VIP GOLD</span>
                   </span>
-                </div>
-
-                <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight leading-tight drop-shadow-md">
-                  {company.name}
-                </h1>
-
-                {company.description && (
-                  <p className="text-xs sm:text-sm text-slate-200 max-w-2xl font-medium leading-relaxed drop-shadow line-clamp-2">
-                    {company.description}
-                  </p>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-950/80 text-emerald-400 border border-emerald-500/40 backdrop-blur-md shadow-md">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>PERFIL OFICIAL VERIFICADO</span>
+                  </span>
                 )}
 
-                {/* Avaliação e Status */}
-                <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-300">
-                  <div className="flex items-center gap-1.5 bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-lg font-black text-xs shadow-sm">
-                    <Star className="w-3.5 h-3.5 fill-slate-950 text-slate-950" />
-                    <span>{safeRating > 0 ? safeRating.toFixed(1) : '5.0'}</span>
-                  </div>
-                  <span className="font-semibold text-slate-200">
-                    ({reviews.length} {reviews.length === 1 ? 'avaliação' : 'avaliações no portal'})
-                  </span>
-                  <span className="text-slate-400 hidden sm:inline">•</span>
-                  <span className="inline-flex items-center gap-1 text-emerald-400 font-bold">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    Canal Oficial Aberto
-                  </span>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="p-2.5 bg-slate-950/70 hover:bg-slate-900 border border-white/20 text-white rounded-full transition backdrop-blur-md shadow cursor-pointer active:scale-95"
+                  title="Compartilhar Link Oficial"
+                  aria-label="Compartilhar"
+                >
+                  <Share2 className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onToggleFavorite(company.id)}
+                  className="p-2.5 bg-slate-950/70 hover:bg-slate-900 border border-white/20 text-white rounded-full transition backdrop-blur-md shadow cursor-pointer active:scale-95"
+                  title="Favoritar Empresa"
+                  aria-label="Favoritar"
+                >
+                  <Heart className={`w-4 h-4 ${isFavorited ? 'fill-red-500 text-red-500' : 'text-white'}`} />
+                </button>
               </div>
             </div>
 
-            {/* Ações Rápidas de Contato */}
-            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 shrink-0">
-              <button
-                type="button"
-                onClick={handleLeadWhatsAppClick}
-                className="w-full sm:w-auto px-6 py-3.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-slate-950 font-black text-xs sm:text-sm tracking-wider uppercase rounded-xl transition flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/20 active:scale-95 cursor-pointer"
-              >
-                <Phone className="w-4 h-4 fill-slate-950" />
-                <span>Conversar no WhatsApp</span>
-              </button>
+            {/* Bottom Content: Logo, Título, Categoria, Avaliação e CTAs */}
+            <div className="relative z-10 pt-8 flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
+                {/* Logo Avatar */}
+                <div className="relative shrink-0">
+                  <img
+                    src={company.logo || '/logotipo.png'}
+                    alt={company.name}
+                    className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl md:rounded-3xl object-contain bg-white p-2 border-2 border-white/80 shadow-2xl"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = '/logotipo.png';
+                    }}
+                  />
+                  <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center text-white text-[10px] font-bold shadow" title="Empresa Ativa">
+                    ✓
+                  </span>
+                </div>
 
-              {company.phone && (
+                {/* Informações Principais */}
+                <div className="text-white space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-md bg-[#C8102E] text-white text-[10px] font-black uppercase tracking-wider shadow-sm">
+                      {currentCategory?.name || 'Comércio Local'}
+                    </span>
+                    <span className="text-xs text-slate-300 font-medium flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-red-400" />
+                      {currentCity?.name || 'Itapoá - SC'}
+                    </span>
+                  </div>
+
+                  <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight leading-tight drop-shadow-md">
+                    {company.name}
+                  </h1>
+
+                  {company.description && (
+                    <p className="text-xs sm:text-sm text-slate-200 max-w-2xl font-medium leading-relaxed drop-shadow line-clamp-2">
+                      {company.description}
+                    </p>
+                  )}
+
+                  {/* Avaliação e Status */}
+                  <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-300">
+                    <div className="flex items-center gap-1.5 bg-amber-400 text-slate-950 px-2.5 py-0.5 rounded-lg font-black text-xs shadow-sm">
+                      <Star className="w-3.5 h-3.5 fill-slate-950 text-slate-950" />
+                      <span>{safeRating > 0 ? safeRating.toFixed(1) : '5.0'}</span>
+                    </div>
+                    <span className="font-semibold text-slate-200">
+                      ({reviews.length} {reviews.length === 1 ? 'avaliação' : 'avaliações no portal'})
+                    </span>
+                    <span className="text-slate-400 hidden sm:inline">•</span>
+                    <span className="inline-flex items-center gap-1 text-emerald-400 font-bold">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      Canal Oficial Aberto
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Ações Rápidas de Contato */}
+              <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 shrink-0">
                 <button
                   type="button"
-                  onClick={handlePhoneClick}
-                  className="w-full sm:w-auto px-4 py-3.5 bg-slate-900/80 hover:bg-slate-800 text-white border border-white/20 font-bold text-xs sm:text-sm rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer backdrop-blur-md shadow-md active:scale-95"
+                  onClick={handleLeadWhatsAppClick}
+                  className="w-full sm:w-auto px-6 py-3.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-slate-950 font-black text-xs sm:text-sm tracking-wider uppercase rounded-xl transition flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/20 active:scale-95 cursor-pointer"
                 >
-                  <span>Ligar</span>
+                  <Phone className="w-4 h-4 fill-slate-950" />
+                  <span>Conversar no WhatsApp</span>
                 </button>
-              )}
+
+                {company.phone && (
+                  <button
+                    type="button"
+                    onClick={handlePhoneClick}
+                    className="w-full sm:w-auto px-4 py-3.5 bg-slate-900/80 hover:bg-slate-800 text-white border border-white/20 font-bold text-xs sm:text-sm rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer backdrop-blur-md shadow-md active:scale-95"
+                  >
+                    <span>Ligar</span>
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
       </div>
-    </div>
 
       {/* 2. BARRA DE NAVEGAÇÃO DE ABAS */}
       <div className="max-w-7xl mx-auto px-4 md:px-8 mt-8">
         <div className="flex border-b border-slate-200 gap-4 md:gap-8 mb-8 overflow-x-auto whitespace-nowrap scrollbar-none">
           <button
             onClick={() => setActiveTab('info')}
-            className={`pb-4 text-sm font-bold transition inline-flex items-center gap-2 border-b-2 cursor-pointer ${
-              activeTab === 'info' ? 'border-[#C8102E] text-[#C8102E] font-black' : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
+            className={`pb-4 text-sm font-bold transition inline-flex items-center gap-2 border-b-2 cursor-pointer ${activeTab === 'info' ? 'border-[#C8102E] text-[#C8102E] font-black' : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
           >
             <span>Informações Gerais</span>
           </button>
@@ -435,9 +465,8 @@ export default function CompanyDetailSection({
           {!isBronze && (
             <button
               onClick={() => setActiveTab('products')}
-              className={`pb-4 text-sm font-bold transition inline-flex items-center gap-2 border-b-2 cursor-pointer ${
-                activeTab === 'products' ? 'border-[#C8102E] text-[#C8102E] font-black' : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
+              className={`pb-4 text-sm font-bold transition inline-flex items-center gap-2 border-b-2 cursor-pointer ${activeTab === 'products' ? 'border-[#C8102E] text-[#C8102E] font-black' : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
             >
               <ShoppingBag className="w-4 h-4" />
               <span>Catálogo ({safeProducts.length})</span>
@@ -448,9 +477,8 @@ export default function CompanyDetailSection({
           {!isBronze && coupons.length > 0 && (
             <button
               onClick={() => setActiveTab('coupons')}
-              className={`pb-4 text-sm font-bold transition inline-flex items-center gap-2 border-b-2 cursor-pointer ${
-                activeTab === 'coupons' ? 'border-[#C8102E] text-[#C8102E] font-black' : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
+              className={`pb-4 text-sm font-bold transition inline-flex items-center gap-2 border-b-2 cursor-pointer ${activeTab === 'coupons' ? 'border-[#C8102E] text-[#C8102E] font-black' : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
             >
               <Tag className="w-4 h-4 text-amber-500" />
               <span>Promoções Ativas ({coupons.length})</span>
@@ -459,9 +487,8 @@ export default function CompanyDetailSection({
 
           <button
             onClick={() => setActiveTab('reviews')}
-            className={`pb-4 text-sm font-bold transition inline-flex items-center gap-2 border-b-2 cursor-pointer ${
-              activeTab === 'reviews' ? 'border-[#C8102E] text-[#C8102E] font-black' : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
+            className={`pb-4 text-sm font-bold transition inline-flex items-center gap-2 border-b-2 cursor-pointer ${activeTab === 'reviews' ? 'border-[#C8102E] text-[#C8102E] font-black' : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
           >
             <span>Avaliações ({reviews.length})</span>
           </button>
@@ -469,13 +496,13 @@ export default function CompanyDetailSection({
 
         {/* 3. CONTEÚDO PRINCIPAL + SIDEBAR */}
         <div className="flex flex-col lg:flex-row gap-8">
-          
+
           <main className="flex-1 flex flex-col gap-8">
-            
+
             {/* ABA: INFORMAÇÕES GERAIS */}
             {activeTab === 'info' && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-8">
-                
+
                 {/* Sobre Nós */}
                 <div className="p-6 md:p-8 bg-white border border-slate-200/90 rounded-3xl shadow-sm">
                   <div className="flex items-center gap-2.5 mb-4">
@@ -608,6 +635,10 @@ export default function CompanyDetailSection({
                                 src={rel.coverImage || rel.logo || '/hero-itapoa.jpg'}
                                 alt={rel.name}
                                 className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLImageElement).src = '/hero-itapoa.jpg';
+                                }}
                               />
                               <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/60 backdrop-blur-sm text-white text-[9px] font-bold">
                                 {categories.find(c => c.id === rel.categoryId)?.name || 'Comércio'}
@@ -671,7 +702,7 @@ export default function CompanyDetailSection({
                             <h4 className="font-bold text-sm text-slate-900 group-hover:text-indigo-600 transition truncate">{p.name}</h4>
                             <p className="text-xs text-slate-500 line-clamp-2 mt-1">{p.description}</p>
                           </div>
-                          
+
                           <div className="flex items-center justify-between mt-3">
                             {p.price != null && Number(p.price) > 0 ? (
                               <span className="text-sm font-black text-slate-900">
@@ -741,7 +772,7 @@ export default function CompanyDetailSection({
             {/* ABA: AVALIAÇÕES */}
             {activeTab === 'reviews' && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-6">
-                
+
                 {/* Listagem de Avaliações */}
                 <div className="p-6 md:p-8 bg-white border border-slate-200 rounded-3xl shadow-sm">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5 mb-6">
@@ -862,7 +893,7 @@ export default function CompanyDetailSection({
 
           {/* 4. SIDEBAR OFICIAL (SEM ANÚNCIOS DE CONCORRENTES EM PERFIS PAGOS) */}
           <aside className="w-full lg:w-80 shrink-0 flex flex-col gap-6">
-            
+
             {/* Box de Contato Direto & WhatsApp */}
             <div className="p-6 bg-white border border-slate-200/90 rounded-3xl shadow-sm flex flex-col">
               <span className="text-[10px] font-black uppercase tracking-widest text-[#C8102E] block mb-2">
@@ -871,7 +902,7 @@ export default function CompanyDetailSection({
               <h3 className="text-base font-black text-slate-900 mb-4">Contato Direto</h3>
 
               <div className="space-y-4 text-xs text-slate-700">
-                
+
                 {/* Botão de WhatsApp */}
                 <button
                   type="button"
@@ -959,28 +990,60 @@ export default function CompanyDetailSection({
               </div>
             </div>
 
-            {/* Mapa de Localização Interativo */}
-            <div
-              onClick={handleRouteClick}
-              className="w-full rounded-3xl overflow-hidden border border-slate-200 shadow-sm relative h-48 bg-slate-100 flex items-center justify-center cursor-pointer group"
-              title="Clique para abrir rota no Google Maps"
-            >
-              <div
-                className="absolute inset-0 bg-cover bg-center group-hover:scale-105 transition duration-500"
-                style={{ backgroundImage: `url('https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=600&q=80')` }}
-              />
-              <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-[1px] group-hover:bg-slate-900/40 transition" />
-              <div className="relative z-10 flex flex-col items-center gap-1.5 p-4 text-center">
-                <div className="w-9 h-9 rounded-full bg-[#C8102E] flex items-center justify-center text-white font-bold text-sm shadow-md group-hover:scale-110 transition">
-                  📍
+            {/* Mapa de Localização Oficial Contextualizado */}
+            {hasValidLocation ? (
+              <div className="w-full rounded-3xl overflow-hidden border border-slate-200 shadow-sm bg-white relative flex flex-col">
+                <div className="w-full h-52 relative bg-slate-100 overflow-hidden">
+                  <iframe
+                    title={`Mapa de localização de ${company.name}`}
+                    src={embedUrl}
+                    className="w-full h-full border-0"
+                    loading="lazy"
+                    allowFullScreen
+                    referrerPolicy="no-referrer-when-downgrade"
+                  />
                 </div>
-                <span className="text-white text-xs font-black drop-shadow">{company.name}</span>
-                <span className="text-slate-200 text-[10px] drop-shadow max-w-xs truncate">{company.address || 'Itapoá - SC'}</span>
-                <span className="text-[10px] font-bold text-white bg-black/40 px-2.5 py-0.5 rounded-full border border-white/20 mt-1">
-                  Abrir no Google Maps →
-                </span>
+
+                <div className="p-4 bg-white border-t border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 truncate">
+                      <MapPin className="w-3.5 h-3.5 text-[#C8102E] shrink-0" />
+                      <span className="truncate">{company.name}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 font-sans truncate mt-0.5">
+                      {company.address || `${currentCity?.name || 'Itapoá'} - SC`}
+                    </p>
+                  </div>
+
+                  <a
+                    href={directionsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => trackTelemetry('route')}
+                    className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#C8102E] hover:bg-[#A00D24] text-white text-[11px] font-bold shadow-sm transition shrink-0 cursor-pointer"
+                    title="Abrir rota no Google Maps em nova aba"
+                  >
+                    <span>Ver rota</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </a>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="w-full rounded-3xl border border-dashed border-slate-300 p-6 bg-slate-50 flex flex-col items-center justify-center text-center gap-2">
+                <div className="w-10 h-10 rounded-full bg-slate-200/80 flex items-center justify-center text-slate-500">
+                  <MapPin className="w-5 h-5 text-slate-400" />
+                </div>
+                <h4 className="text-xs font-bold text-slate-700">Localização ainda não cadastrada</h4>
+                <p className="text-[11px] text-slate-400 max-w-xs leading-relaxed">
+                  Este estabelecimento ainda não cadastrou o endereço físico completo no guia.
+                </p>
+                {currentUserId && (
+                  <span className="text-[10px] text-indigo-600 font-semibold mt-1">
+                    Responsável pela empresa? Atualize o endereço no Painel do Lojista.
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Selo Oficial de Verificação do Portal */}
             <div className="p-5 bg-gradient-to-br from-slate-900 to-slate-950 text-white border border-slate-800 rounded-3xl shadow-sm space-y-2">

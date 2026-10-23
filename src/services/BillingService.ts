@@ -57,6 +57,10 @@ export class BillingService {
     return res.status;
   }
 
+  static async getSubscriptionStatusDetails(subscriptionId: string): Promise<{ status: string; expiresAt?: string; planId?: string; companyId?: string }> {
+    return await api.get<{ status: string; expiresAt?: string; planId?: string; companyId?: string }>(`/api/payments/subscription/${encodeURIComponent(subscriptionId)}/status`);
+  }
+
   /**
    * Creates a real PIX charge on the backend and returns the QR issued by
    * Mercado Pago. planCode is the plan id (e.g. plan_gold_vip).

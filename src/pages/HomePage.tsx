@@ -167,39 +167,39 @@ export const HomePage: React.FC<HomePageProps> = ({
     <div className="bg-slate-50 text-slate-900 flex flex-col">
       {/* 1. Panoramic Hero Section with Aerial Background (Image 2 & 3) */}
       <section className="relative w-full bg-slate-950 overflow-hidden shadow-2xl">
-        {/* Background Image: Aerial photo of Itapoá */}
+        {/* Background Image: Aerial photo of Itapoá valorizando praia, mar e paisagem */}
         <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-700"
+          className="absolute inset-0 bg-cover bg-[center_35%] bg-no-repeat transition-all duration-700"
           style={{ backgroundImage: `url('/hero-itapoa.jpg')` }}
           aria-hidden="true"
         />
 
-        {/* Ambient Gradient Overlays for Readability & Contrast (-35% de overlay para maior visibilidade da praia) */}
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/60 via-slate-950/30 to-transparent pointer-events-none" />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/65 via-slate-950/15 to-transparent pointer-events-none" />
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/40 via-transparent to-slate-950/50 pointer-events-none" />
+        {/* Ambient Gradient Overlays: centro e lado direito iluminados e vibrantes; leitura impecável à esquerda */}
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/70 via-slate-950/20 via-45% to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/30 via-transparent to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/45 via-transparent to-transparent pointer-events-none" />
 
         {/* Hero Content Container */}
-        <div className="relative z-10 max-w-7xl mx-auto px-4 pt-10 sm:pt-14 lg:pt-16 pb-8 sm:pb-10 flex flex-col justify-between min-h-[520px] sm:min-h-[560px] lg:min-h-[600px]">
+        <div className="relative z-10 max-w-7xl mx-auto px-4 pt-10 sm:pt-14 lg:pt-16 pb-8 sm:pb-10 flex flex-col justify-between min-h-[560px] sm:min-h-[600px] lg:min-h-[640px]">
           {/* Headline block */}
           <div className="max-w-2xl space-y-3 sm:space-y-4">
             <div className="inline-flex items-center gap-2.5">
               <span className="w-8 h-1 bg-[#C8102E] rounded-full inline-block" />
-              <span className="text-xs sm:text-sm font-extrabold uppercase tracking-widest text-slate-200">
+              <span className="text-xs sm:text-sm font-extrabold uppercase tracking-widest text-slate-100 drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
                 BEM-VINDO AO
               </span>
             </div>
 
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-none drop-shadow-xl">
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-none drop-shadow-[0_3px_12px_rgba(0,0,0,0.9)]">
               ITAPOÁ ONLINE
             </h1>
 
-            <p className="text-sm sm:text-base lg:text-lg font-medium text-slate-100 drop-shadow-md">
+            <p className="text-sm sm:text-base lg:text-lg font-medium text-slate-100 drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]">
               Aqui você encontra tudo o que precisa em um só lugar!
             </p>
 
             {/* Quick category shortcuts row with icons and divider lines */}
-            <div className="flex flex-wrap items-center gap-3 sm:gap-4 pt-2 text-xs sm:text-sm font-bold text-white drop-shadow">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4 pt-2 text-xs sm:text-sm font-bold text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
               <button
                 type="button"
                 onClick={handleExecuteSearch}
@@ -208,7 +208,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <Store className="w-4 h-4 text-red-400" />
                 <span>Comércio Local</span>
               </button>
-              <span className="text-white/30 hidden sm:inline">|</span>
+              <span className="text-white/40 hidden sm:inline">|</span>
 
               <button
                 type="button"
@@ -221,7 +221,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <Briefcase className="w-4 h-4 text-red-400" />
                 <span>Serviços</span>
               </button>
-              <span className="text-white/30 hidden sm:inline">|</span>
+              <span className="text-white/40 hidden sm:inline">|</span>
 
               <button
                 type="button"
@@ -231,7 +231,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <MapPin className="w-4 h-4 text-red-400" />
                 <span>Turismo</span>
               </button>
-              <span className="text-white/30 hidden sm:inline">|</span>
+              <span className="text-white/40 hidden sm:inline">|</span>
 
               <button
                 type="button"
@@ -244,14 +244,14 @@ export const HomePage: React.FC<HomePageProps> = ({
             </div>
           </div>
 
-          {/* 6 Cards floating strip along bottom of Hero */}
-          <div className="pt-8 sm:pt-12">
+          {/* 6 Cards floating strip along bottom of Hero (proporção equilibrada sem cobrir a praia) */}
+          <div className="pt-6 sm:pt-8">
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3.5">
               {litoralBanners.map((b, idx) => (
                 <div
                   key={idx}
                   onClick={() => onSelectPraia && onSelectPraia(b.slug)}
-                  className="relative overflow-hidden rounded-2xl group cursor-pointer h-36 sm:h-40 lg:h-44 shadow-xl border border-white/15 bg-slate-900 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:border-white/40"
+                  className="relative overflow-hidden rounded-2xl group cursor-pointer h-32 sm:h-36 lg:h-38 shadow-xl border border-white/15 bg-slate-900 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:border-white/40"
                 >
                   <img
                     src={b.img}
@@ -272,14 +272,14 @@ export const HomePage: React.FC<HomePageProps> = ({
               {/* 6th Card: ITAPOÁ SC Special Red Card */}
               <div
                 onClick={() => onNavigateTab('tourism')}
-                className="relative bg-gradient-to-br from-red-600 via-[#C8102E] to-red-800 rounded-2xl flex flex-col justify-center items-center text-center p-4 cursor-pointer group h-36 sm:h-40 lg:h-44 shadow-xl border border-red-500/40 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:border-white/50"
+                className="relative bg-gradient-to-br from-red-600 via-[#C8102E] to-red-800 rounded-2xl flex flex-col justify-center items-center text-center p-3.5 cursor-pointer group h-32 sm:h-36 lg:h-38 shadow-xl border border-red-500/40 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:border-white/50"
               >
-                <MapPin className="w-6 h-6 text-white mb-1 drop-shadow group-hover:scale-110 transition" />
-                <span className="text-lg sm:text-xl font-black tracking-widest text-white uppercase block leading-tight">
+                <MapPin className="w-5 h-5 text-white mb-0.5 drop-shadow group-hover:scale-110 transition" />
+                <span className="text-base sm:text-lg font-black tracking-widest text-white uppercase block leading-tight">
                   ITAPOÁ SC
                 </span>
-                <span className="text-[11px] italic text-red-100 block mt-0.5">"Paraíso Catarinense"</span>
-                <span className="text-[10px] font-extrabold uppercase text-white tracking-wider mt-3 border border-white/60 px-3 py-1 rounded-lg bg-black/20 flex items-center gap-1 group-hover:bg-white group-hover:text-[#C8102E] transition">
+                <span className="text-[10px] italic text-red-100 block mt-0.5">"Paraíso Catarinense"</span>
+                <span className="text-[9px] font-extrabold uppercase text-white tracking-wider mt-2 border border-white/60 px-2.5 py-0.5 rounded-lg bg-black/20 flex items-center gap-1 group-hover:bg-white group-hover:text-[#C8102E] transition">
                   GUIA OFICIAL <ArrowRight className="w-3 h-3" />
                 </span>
               </div>
