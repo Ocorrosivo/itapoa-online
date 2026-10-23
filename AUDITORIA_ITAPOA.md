@@ -155,3 +155,8 @@ pagamento/webhook reais. Access Token permanece ausente do runtime até publicar
 as correções. Fonte Easypanel confirmada: Ocorrosivo/itapoa-online, main, Dockerfile.
 Publicação desta auditoria e ativação final ainda pendentes; não afirmar sucesso
 sem Actions, saúde e X-Release-Sha exato.
+
+Conferência de dependências imediatamente antes de publicar encontrou aviso
+alto novo em body-parser 1.20.8 (GHSA-27r3-jxmh-p828). Atualização compatível para
+1.20.9 via npm audit fix alterou somente essa dependência no lockfile. Nova
+consulta npm audit completa: zero vulnerabilidades reportadas.
