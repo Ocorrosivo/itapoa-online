@@ -27,19 +27,15 @@ export interface AuthResult {
   user: AuthenticatedUser;
 }
 
-export const MASTER_ADMIN_EMAIL = 'suprememidias.ok@gmail.com';
-
 const normalizeEmail = (email: unknown): string =>
   typeof email === 'string' ? email.trim().toLowerCase() : '';
 
 const toPublicUser = (row: Record<string, any>): AuthenticatedUser => {
-  const email = String(row.email || '').toLowerCase().trim();
-  const isMaster = email === MASTER_ADMIN_EMAIL.toLowerCase();
   return {
     id: String(row.id),
     name: row.name,
     email: row.email,
-    role: isMaster ? 'admin_master' : row.role,
+    role: row.role,
     city: row.city ?? null
   };
 };
@@ -90,7 +86,7 @@ export class AuthService {
     if (!name || !email) {
       throw new AuthError(400, 'Nome e e-mail são obrigatórios.');
     }
-    if (password.length < MIN_PASSWORD_LENGTH) {
+    if (password.length < MIN_PASSWORD_LENGTH || Buffer.byteLength(password, 'utf8') > 72) {
       throw new AuthError(400, `A senha deve ter no mínimo ${MIN_PASSWORD_LENGTH} caracteres.`);
     }
 
@@ -99,9 +95,8 @@ export class AuthService {
       throw new AuthError(409, 'E-mail já cadastrado.');
     }
 
-    const isMaster = email === MASTER_ADMIN_EMAIL.toLowerCase();
     const requestedRole = typeof payload.role === 'string' ? payload.role : 'advertiser';
-    const role = isMaster ? 'admin_master' : (SELF_SERVICE_ROLES.includes(requestedRole) ? requestedRole : 'advertiser');
+    const role = SELF_SERVICE_ROLES.includes(requestedRole) ? requestedRole : 'advertiser';
 
     const id = `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
@@ -166,8 +161,8 @@ export class AuthService {
     const current = typeof currentPassword === 'string' ? currentPassword : '';
     const next = typeof newPassword === 'string' ? newPassword : '';
 
-    if (next.length < MIN_PASSWORD_LENGTH) {
-      throw new AuthError(400, `A nova senha deve ter no mínimo ${MIN_PASSWORD_LENGTH} caracteres.`);
+    if (next.length < MIN_PASSWORD_LENGTH || Buffer.byteLength(next, 'utf8') > 72) {
+      throw new AuthError(400, `A nova senha deve ter no mínimo ${MIN_PASSWORD_LENGTH} caracteres e no máximo 72 bytes.`);
     }
 
     const row = await UserRepository.findRawBy('id', userId);
@@ -178,8 +173,21 @@ export class AuthService {
     }
 
     const hashed = await bcrypt.hash(next, BCRYPT_ROUNDS);
-    await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashed, userId]);
-    return { success: true };
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [locked]: any = await connection.query('SELECT password FROM users WHERE id = ? FOR UPDATE', [userId]);
+      if (!locked[0] || locked[0].password !== row.password) {
+        throw new AuthError(409, 'A senha foi alterada durante esta solicitação. Entre novamente.');
+      }
+      await connection.query('UPDATE users SET password = ? WHERE id = ?', [hashed, userId]);
+      await connection.query('INSERT INTO user_auth_state (user_id, version) VALUES (?, 1) ON DUPLICATE KEY UPDATE version = version + 1', [userId]);
+      await connection.commit();
+      return { success: true };
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally { connection.release(); }
   }
 }
 

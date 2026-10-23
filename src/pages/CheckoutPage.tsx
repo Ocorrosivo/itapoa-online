@@ -273,7 +273,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
     };
   }, [subscriptionId, checkoutState]);
 
-  // 6. Contagem regressiva da validade de 5 minutos (servidor como autoridade)
+  // Countdown is informational: only the gateway can settle/cancel a charge.
   useEffect(() => {
     if (!attemptExpiresAt || checkoutState === 'approved' || checkoutState === 'ready' || checkoutState === 'expired') return;
 
@@ -282,8 +282,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
       const remainingSecs = Math.max(0, Math.floor((target - Date.now()) / 1000));
       setSecondsRemaining(remainingSecs);
       if (remainingSecs <= 0) {
-        setCheckoutState('expired');
-        setError('Tempo esgotado. Esta tentativa de contratação expirou. Para continuar, inicie novamente o processo.');
+        setError('O prazo informado terminou. Confirme o status do pagamento antes de iniciar outra cobrança.');
       }
     };
 
@@ -358,7 +357,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
 
       setPix(details);
       setSubscriptionId(details.subscriptionId);
-      setAttemptExpiresAt(details.expirationDate || new Date(Date.now() + 5 * 60 * 1000).toISOString());
+      setAttemptExpiresAt(details.expirationDate || null);
       setCheckoutState('pending_pix');
     } catch (e: any) {
       setError(e?.message || 'Não foi possível gerar a cobrança Pix no momento.');
@@ -407,7 +406,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
       }
 
       setSubscriptionId(result.subscriptionId);
-      setAttemptExpiresAt(result.expiresAt || new Date(Date.now() + 5 * 60 * 1000).toISOString());
+      setAttemptExpiresAt(result.expiresAt || null);
       // Gateway approval alone is not proof of activation. Only the backend
       // status poll/reconciliation may show success after the DB transaction.
       setCheckoutState('processing');

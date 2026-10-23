@@ -11,10 +11,11 @@ import {
   LogOut, ShieldAlert, Cpu
 } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
+import { api } from '../../../lib/apiClient';
 
 
 export const AdminProfileView: React.FC = () => {
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, logout } = useAuth();
 
   // Profile Form States
   const [name, setName] = useState(user?.name || 'Administrador Master');
@@ -43,6 +44,7 @@ export const AdminProfileView: React.FC = () => {
   // Status & Feedback
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
+  const [profileError, setProfileError] = useState('');
 
   // Active Sessions Mock Data
   const activeSessions = [
@@ -61,33 +63,21 @@ export const AdminProfileView: React.FC = () => {
     e.preventDefault();
     setIsSaving(true);
     setSaveSuccessMsg('');
+    setProfileError('');
 
     try {
-      // 1. Update Auth Context local state
+      // Only update local state after an authenticated successful database write.
+      await api.put('/api/auth/profile', { name, phone, avatarUrl });
       updateUser({
         name,
-        email,
         phone,
         avatarUrl
       });
 
-      // 2. Persist to API backend
-      await fetch('/api/auth/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: user?.id,
-          name,
-          email,
-          phone,
-          avatarUrl
-        })
-      });
-
       setSaveSuccessMsg('Perfil do Administrador Master atualizado com sucesso no MySQL!');
       setTimeout(() => setSaveSuccessMsg(''), 4000);
-    } catch (err) {
-      console.error('Error saving profile:', err);
+    } catch (err: any) {
+      setProfileError(err?.message || 'Não foi possível salvar o perfil.');
     } finally {
       setIsSaving(false);
     }
@@ -108,19 +98,13 @@ export const AdminProfileView: React.FC = () => {
     }
 
     try {
-      const res = await fetch('/api/auth/password', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentPassword, newPassword })
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || 'Erro ao alterar senha.');
-      }
-      setPasswordMsg({ type: 'success', text: 'Senha alterada com sucesso! A nova senha já está ativa.' });
+      await api.put('/api/auth/password', { currentPassword, newPassword });
+      setPasswordMsg({ type: 'success', text: 'Senha alterada. Entre novamente com a nova senha.' });
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
+      logout();
+      window.location.assign('/login');
     } catch (err: any) {
       setPasswordMsg({ type: 'error', text: err.message || 'Erro ao alterar a senha.' });
     }
@@ -173,6 +157,7 @@ export const AdminProfileView: React.FC = () => {
         </div>
       </div>
 
+      {profileError && <div role="alert" className="p-4 text-red-300">{profileError}</div>}
       {saveSuccessMsg && (
         <div className="p-4 bg-emerald-950/80 border border-emerald-600/50 rounded-2xl text-emerald-300 text-xs font-bold flex items-center gap-3 animate-fade-in">
           <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
@@ -223,7 +208,7 @@ export const AdminProfileView: React.FC = () => {
                   <input
                     type="email"
                     value={email}
-                    onChange={e => setEmail(e.target.value)}
+                    readOnly
                     className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-[#C8102E]"
                     required
                   />

@@ -10,11 +10,11 @@ export interface MailConfig {
 }
 
 export function mailConfig(): MailConfig | null {
-  const host = (process.env.SMTP_HOST || 'smtp.hostinger.com')?.trim();
+  const host = process.env.SMTP_HOST?.trim();
   const port = Number(process.env.SMTP_PORT || 465);
-  const user = (process.env.SMTP_USER || process.env.SMTP_USERNAME || 'contato@itapoa.online')?.trim();
+  const user = (process.env.SMTP_USER || process.env.SMTP_USERNAME)?.trim();
   const pass = process.env.SMTP_PASSWORD || process.env.SMTP_PASS;
-  const from = (process.env.SMTP_FROM || process.env.EMAIL_FROM || 'contato@itapoa.online')?.trim();
+  const from = (process.env.SMTP_FROM || process.env.EMAIL_FROM)?.trim();
 
   if (!host || !user || !pass || !from || ![465, 587].includes(port)) return null;
   if (!/^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(from)) return null;
@@ -60,7 +60,7 @@ export const mailService = {
   async send({ to, subject, text, html }: SendMailOptions): Promise<{ accepted: boolean; messageId?: string }> {
     const config = mailConfig();
     if (!config) {
-      console.warn('[mail] SMTP not configured; message logged only without external dispatch');
+      console.warn('[mail] SMTP not configured; no message sent');
       return { accepted: false };
     }
 
@@ -81,6 +81,9 @@ export const mailService = {
       }
 
       return { accepted: true, messageId: result.messageId };
+    } catch {
+      // The API error funnel logs error.message: never forward raw SMTP replies.
+      throw new Error('SMTP_DELIVERY_FAILED');
     } finally {
       transport.close();
     }

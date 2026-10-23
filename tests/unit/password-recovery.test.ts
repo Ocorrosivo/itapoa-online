@@ -67,7 +67,9 @@ test('known/unknown accounts get identical responses; only token hash is persist
   const { state, service } = await fixture();
   const unknown = await service.request('unknown@example.test', '127.0.0.1');
   const known = await service.request(' RECOVERY@example.test ', '127.0.0.1');
-  assert.deepEqual(known, unknown);
+  assert.equal(known.message, unknown.message);
+  assert.match(known.correlationId, /^[a-f0-9-]{36}$/);
+  assert.match(unknown.correlationId, /^[a-f0-9-]{36}$/);
   assert.ok(!JSON.stringify(known).includes(state.user.email));
   await tick();
   assert.equal(state.mail.length, 1);
@@ -151,7 +153,34 @@ test('SMTP failure removes undelivered token without leaking server error', asyn
     assert.equal(state.mail.length, 0);
     assert.ok(!JSON.stringify(logs).includes('must-not-log'));
     assert.ok(!JSON.stringify(logs).includes(state.user.email));
+    assert.ok(JSON.stringify(logs).includes(reply.correlationId));
   } finally { console.error = original; }
+});
+
+test('SMTP capacity is reserved before awaits and released for unknown accounts', async () => {
+  const {service}=await fixture();
+  let release!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  service.available=async()=>{await gate;return true;};
+  const pending=Promise.allSettled(Array.from({length:20},(_,i)=>service.request(`unknown${i}@example.test`,`ip${i}`)));
+  release();
+  const results=await pending;
+  assert.equal(results.filter(r=>r.status==='fulfilled').length,10);
+  assert.equal(results.filter(r=>r.status==='rejected'&&r.reason.status===503).length,10);
+  await service.request('another@example.test','another-ip');
+});
+
+test('session lookup failure never restores a revoked version-zero JWT', async () => {
+  const query=pool.query;
+  (pool as any).query=async()=>{throw Object.assign(new Error('private SQL must not leak'),{code:'ER_TABLEACCESS_DENIED_ERROR'});};
+  try {
+    await assert.rejects(sessionVersion('test-user'),{code:'ER_TABLEACCESS_DENIED_ERROR'});
+    let status=0,nextCalled=false;
+    const req:any={headers:{authorization:'Bearer '+signToken({id:'test-user',email:'test@example.test',role:'advertiser',av:0})}};
+    const res:any={status(value:number){status=value;return this;},json(){return this;}};
+    await requireAuth(req,res,()=>{nextCalled=true;});
+    assert.equal(status,401);assert.equal(nextCalled,false);assert.equal(req.user,undefined);
+  }finally{pool.query=query;}
 });
 
 test('password/email validation, rate limit and legacy sessions', async () => {
@@ -168,11 +197,11 @@ test('password/email validation, rate limit and legacy sessions', async () => {
   await assert.rejects(service.reset(getToken(state.mail[0].link), 'weak'), { status: 400 });
   const query = pool.query;
   (pool as any).query = async () => { throw Object.assign(new Error('missing'), { code: 'ER_NO_SUCH_TABLE' }); };
-  try { assert.equal(await sessionVersion('legacy-user'), 0); } finally { pool.query = query; }
+  try { await assert.rejects(sessionVersion('legacy-user'), { code: 'ER_NO_SUCH_TABLE' }); } finally { pool.query = query; }
 });
 
 test('SMTP validates config and uses verified TLS with no debug/credentials output', () => {
-  const names = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_PASS', 'SMTP_FROM', 'EMAIL_FROM'];
+  const names = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_USERNAME', 'SMTP_PASSWORD', 'SMTP_PASS', 'SMTP_FROM', 'EMAIL_FROM'];
   const saved = Object.fromEntries(names.map(n => [n, process.env[n]]));
   const original = nodemailer.createTransport;
   let options: any;

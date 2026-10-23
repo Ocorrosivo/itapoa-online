@@ -140,6 +140,46 @@ test('unknown outcome is searched read-only and never emits another payment', as
   assert.ok(h.calls.some(call=>call.path==='/v1/payments/search'));
   assert.equal(h.calls.filter(call=>call.method==='POST').length,0);
 });
+
+test('old unknown card attempt is resumed, not canceled or charged twice', async () => {
+  const input={companyId:'a',planId:'plan_gold_vip',requestId:crypto.randomUUID(),formData:{token:'synthetic-sdk-token',payment_method_id:'visa',installments:1,payer:{email:'a@example.test',identification:{type:'CPF',number:'12345678909'}}}};
+  h.setFailure('timeout');
+  const first=await h.request('/api/payments/card','POST',input);
+  await h.admin.query('UPDATE subscriptions SET createdAt=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 20 MINUTE) WHERE id=?',[first.body.subscriptionId]);
+  h.setFailure(null);h.calls.length=0;
+  const before=await h.snapshot();
+  const poll=await h.request(`/api/payments/subscription/${first.body.subscriptionId}/status`);
+  assert.equal(poll.body.status,'pending');assert.deepEqual(await h.snapshot(),before);
+  const active=await h.request('/api/payments/attempt/active?companyId=a&planId=plan_gold_vip');
+  assert.equal(active.body.subscriptionId,first.body.subscriptionId);assert.deepEqual(await h.snapshot(),before);
+  const retry=await h.request('/api/payments/card','POST',{...input,requestId:crypto.randomUUID()});
+  assert.equal(retry.body.subscriptionId,first.body.subscriptionId);
+  assert.equal(h.calls.filter(c=>c.method==='POST').length,0);
+});
+
+test('Pix older than five minutes keeps provider expiry and is reused', async () => {
+  const input={companyId:'a',planId:'plan_gold_vip',payerEmail:'a@example.test',requestId:crypto.randomUUID()};
+  const first=await h.request('/api/payments/pix','POST',input);
+  const remote=h.gateway.get(first.body.paymentId);
+  assert.equal(first.body.expirationDate,remote.date_of_expiration);
+  await h.admin.query('UPDATE subscriptions SET createdAt=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 10 MINUTE) WHERE id=?',[first.body.subscriptionId]);
+  h.calls.length=0;
+  const retry=await h.request('/api/payments/pix','POST',{...input,requestId:crypto.randomUUID()});
+  assert.equal(retry.body.subscriptionId,first.body.subscriptionId);
+  assert.equal(retry.body.expirationDate,remote.date_of_expiration);
+  assert.equal(h.calls.filter(c=>c.method==='POST').length,0);
+});
+
+test('old unknown Pix without saved remote id blocks a new charge', async () => {
+  h.setFailure('timeout');
+  const input={companyId:'a',planId:'plan_gold_vip',payerEmail:'a@example.test',requestId:crypto.randomUUID()};
+  assert.equal((await h.request('/api/payments/pix','POST',input)).status,503);
+  await h.admin.query('UPDATE subscriptions SET createdAt=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 20 MINUTE)');
+  h.setFailure(null);h.calls.length=0;
+  const before=await h.snapshot();
+  assert.equal((await h.request('/api/payments/pix','POST',{...input,requestId:crypto.randomUUID()})).status,409);
+  assert.deepEqual(await h.snapshot(),before);assert.equal(h.calls.filter(c=>c.method==='POST').length,0);
+});
 test('approved plan blocks a new charge even if another tab submits a different request ID later', async () => {
   await h.attempt();await h.webhook('900001');const before=await h.snapshot();
   const result=await h.request('/api/payments/pix','POST',{companyId:'a',planId:'plan_gold_vip',payerEmail:'a@example.test',requestId:crypto.randomUUID()});

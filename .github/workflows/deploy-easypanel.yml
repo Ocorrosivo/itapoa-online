@@ -3,10 +3,12 @@ name: Deploy Easypanel (itapoa.online)
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
-  group: easypanel-deploy
+  group: ${{ github.event_name == 'pull_request' && github.ref || 'easypanel-deploy' }}
   cancel-in-progress: false
 
 jobs:
@@ -57,9 +59,7 @@ jobs:
           JWT_SECRET: ci-only-not-a-production-secret-0123456789abcdef
         run: |
           node scripts/smoke-catalog.mjs --offline
-          node --import tsx --test tests/unit/checkout.test.ts
-          node --import tsx --test tests/unit/password-recovery.test.ts
-          node --import tsx --test tests/unit/email-verification.test.ts
+          node --import tsx --test tests/unit/*.test.ts
 
       - name: Install payment test browser
         timeout-minutes: 10
@@ -68,9 +68,10 @@ jobs:
       - name: Payment backend and browser integration (isolated database, synthetic gateway)
         timeout-minutes: 5
         run: |
-          node --import tsx --test tests/integration/payment-backend.test.ts tests/integration/payment-checkout-browser.test.ts
+          node --import tsx --test tests/integration/*.test.ts
 
       - name: Deploy and verify on VPS
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -97,6 +98,15 @@ jobs:
             # Read-only gate: deployment must never create/migrate payment tables.
             payment_container=$(docker ps --filter 'label=com.docker.swarm.service.name=itapoa_itapoa-app' --format '{{.ID}}' | head -n 1)
             test -n "$payment_container"
+            # Refuse image replacement with ephemeral uploads. Storage migration
+            # and external backup validation must happen separately.
+            upload_target=$(docker exec "$payment_container" node -e 'console.log(require("path").resolve(process.env.UPLOAD_DIR||"uploads"))')
+            docker service inspect "$SERVICE" --format '{{json .Spec.TaskTemplate.ContainerSpec.Mounts}}' | docker exec -i -e AUDIT_UPLOAD_TARGET="$upload_target" "$payment_container" node -e '
+              let input="";process.stdin.on("data",c=>input+=c);process.stdin.on("end",()=>{
+                const target=process.env.AUDIT_UPLOAD_TARGET;
+                const persistent=(JSON.parse(input)||[]).some(m=>["bind","volume"].includes(m.Type)&&!m.ReadOnly&&m.Target!=="/"&&(target===m.Target||target.startsWith(m.Target+"/")));
+                if(!persistent){console.error("Uploads are not persistent. Validate external backups and migrate storage before deployment. No deployment performed.");process.exitCode=1;}
+              });'
             docker exec -i "$payment_container" node - <<'NODE'
             const mysql = require('mysql2/promise');
             (async () => {
@@ -105,9 +115,12 @@ jobs:
                 await db.query('SELECT payment_id, subscription_id, remote_updated_at, activated_at, expires_at FROM gateway_payment_state LIMIT 0');
                 await db.query('SELECT gateway_event_id, attempts, status FROM webhook_events LIMIT 0');
                 await db.query('SELECT version, is_active, allow_new_subscriptions FROM plans LIMIT 0');
+                await db.query('SELECT user_id, version FROM user_auth_state LIMIT 0');
+                const [admins]=await db.query("SELECT COUNT(*) total FROM users WHERE role='admin_master'");
+                if(!Number(admins[0].total))throw new Error('Administrator role must be explicitly configured before deployment');
                 console.log('Payment schema preflight: OK');
               } finally { await db.end(); }
-            })().catch(()=>{console.error('Payment schema not ready. Apply the reviewed migration only after explicit backup/authorization. No deployment performed.');process.exitCode=1;});
+            })().catch(()=>{console.error('Runtime preflight failed: check the reviewed payment/auth schema and an explicitly configured admin role. No deployment performed.');process.exitCode=1;});
             NODE
             docker build --pull --build-arg RELEASE_SHA="$EXPECTED_SHA" -t "$IMAGE" "$BUILD_DIR"
 

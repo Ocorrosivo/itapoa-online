@@ -47,6 +47,19 @@ export class CompanyRepositoryClass extends BaseRepository {
   }
 
   /** Registers the owner association used by the anti-IDOR middleware. */
+  async createWithOwner(data: Record<string, any>, userId: string) {
+    const clean=this.pickWritable(data), keys=Object.keys(clean);
+    const connection=await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.query(`INSERT INTO companies (${keys.map(key=>'`'+key+'`').join(',')}) VALUES (${keys.map(()=>'?').join(',')})`,keys.map(key=>clean[key]));
+      await connection.query("INSERT INTO companies_users(user_id,company_id,access_level) VALUES(?,?,'owner')",[userId,clean.id]);
+      const [rows]:any=await connection.query('SELECT * FROM companies WHERE id=?',[clean.id]);
+      await connection.commit();
+      return rows[0];
+    }catch(error){await connection.rollback();throw error;}finally{connection.release();}
+  }
+
   async linkOwner(companyId: string, userId: string) {
     await pool.query(
       `INSERT INTO companies_users (user_id, company_id, access_level)

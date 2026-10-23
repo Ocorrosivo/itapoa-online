@@ -21,7 +21,7 @@ export async function sqlScript(db: any, source: string) {
   if (statement.trim()) throw new Error('Incomplete test SQL script');
 }
 
-export async function createPaymentHarness() {
+export async function createPaymentHarness(uploadDirectory?: string) {
   const port = Number(process.env.PAYMENT_TEST_DB_PORT || 43316);
   if (port === 3306 || port < 1024) throw new Error('Use a dedicated local test database port, never production');
   const database = `itapoa_payments_test_${process.pid}`;
@@ -31,6 +31,8 @@ export async function createPaymentHarness() {
     DB_PASSWORD: password, DB_NAME: database, JWT_SECRET: 'local-payments-fixture-not-a-real-secret-0123456789',
     APP_URL: 'http://127.0.0.1:4179', MERCADOPAGO_ACCESS_TOKEN: 'TEST-fixture-not-a-real-token',
     MERCADOPAGO_WEBHOOK_SECRET: 'fixture-webhook-signature-only', MERCADOPAGO_MODE: 'test',
+    // Never inherit a real SMTP transport from the operator's shell.
+    SMTP_HOST: '',
   });
   const admin = await mysql.createConnection({ host: '127.0.0.1', port, user: 'root', password });
   await admin.query(`CREATE DATABASE \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
@@ -40,7 +42,8 @@ export async function createPaymentHarness() {
     'database/migrations/20261020_admin_master_and_grants.sql',
     'database/migrations/20261021_mercadopago_trial_and_billing.sql',
     'database/migrations/20261022_webhook_events_and_orphan_media.sql',
-    'database/migrations/20261021_payment_settlement.sql']) {
+    'database/migrations/20261021_payment_settlement.sql',
+    'database/migrations/20261021_password_recovery.sql']) {
     await sqlScript(admin, await fs.readFile(file, 'utf8'));
   }
   const { pool } = await import('../../src/server/mysql.js');
@@ -91,6 +94,11 @@ export async function createPaymentHarness() {
     return value ? Response.json(value) : Response.json({ error: 'not_found' }, { status: 404 });
   };
   const app = express();
+  if (uploadDirectory) {
+    const { createUploadRouter } = await import('../../src/server/routes/uploads.js');
+    app.use('/api', createUploadRouter(uploadDirectory));
+    app.use('/uploads', express.static(uploadDirectory));
+  }
   app.post('/api/webhooks/mercadopago', express.json(), mercadoPagoWebhook);
   app.use(express.json()); app.use('/api', apiRouter);
   app.use('/api', (_req,res)=>{res.status(404).json({error:'Endpoint não encontrado.'});});
