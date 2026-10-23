@@ -68,8 +68,6 @@ export const Footer: React.FC<FooterProps> = ({ onNavigateTab }) => {
             <ul className="space-y-2 text-[9px] text-slate-500 font-medium">
               <li>• Itapoá - SC (Sede Litoral)</li>
               <li>• Joinville - SC</li>
-              <li>• Curitiba - PR</li>
-              <li>• Florianópolis - SC</li>
             </ul>
           </div>
 
