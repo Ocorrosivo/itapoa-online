@@ -80,6 +80,16 @@ test('tenant update cannot move its product into another company',async()=>{
     assert.equal(rows[0].company_id,'a');assert.equal(rows[0].name,'Updated');
   }finally{await h.admin.query("DELETE FROM products WHERE id='scope_test'");}
 });
+test('self-registration cannot acquire admin privileges through role or reserved email',async()=>{
+  const email='suprememidias.ok@gmail.com';
+  const registered=await h.request('/api/auth/register','POST',{name:'Synthetic registration',email,password:'Fixture-password-123',role:'admin_master'},'');
+  assert.equal(registered.status,200);assert.equal(registered.body.user.role,'advertiser');
+  try{
+    const [rows]:any=await h.admin.query('SELECT role FROM users WHERE id=?',[registered.body.user.id]);
+    assert.equal(rows[0].role,'advertiser');
+    await new Promise(resolve=>setTimeout(resolve,30));
+  }finally{await h.admin.query('DELETE FROM users WHERE id=?',[registered.body.user.id]);}
+});
 test('profile edits cannot create a trial or fabricate ratings',async()=>{
   const result=await h.request('/api/companies/a','PUT',{name:'Company a',access_grant_type:'trial',trial_ends_at:'2099-01-01',has_used_trial:0,rating:5,reviewCount:999});
   assert.equal(result.status,200);

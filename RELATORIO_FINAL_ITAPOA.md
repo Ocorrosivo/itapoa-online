@@ -130,7 +130,8 @@ Branch: `codex/auditoria-geral`.
 - `51e60ca`: CI de PR e bloqueio de deploy sem persistência.
 - Commit posterior de documentação registra este relatório, sem novo código.
 
-Push realizado somente na branch de auditoria. Produção permanece `1382af0`.
+Push realizado somente na branch de auditoria. A verificação inicial de produção
+identificou `1382af0`; publicações paralelas posteriores não são desta auditoria.
 Não declaramos Actions de deploy desta auditoria bem-sucedido, pois não ocorreu.
 
 ## 8. Pendências e retomada segura

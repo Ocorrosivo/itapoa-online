@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: easypanel-deploy
+  group: ${{ github.event_name == 'pull_request' && github.ref || 'easypanel-deploy' }}
   cancel-in-progress: false
 
 jobs:
@@ -116,9 +116,11 @@ jobs:
                 await db.query('SELECT gateway_event_id, attempts, status FROM webhook_events LIMIT 0');
                 await db.query('SELECT version, is_active, allow_new_subscriptions FROM plans LIMIT 0');
                 await db.query('SELECT user_id, version FROM user_auth_state LIMIT 0');
+                const [admins]=await db.query("SELECT COUNT(*) total FROM users WHERE role='admin_master'");
+                if(!Number(admins[0].total))throw new Error('Administrator role must be explicitly configured before deployment');
                 console.log('Payment schema preflight: OK');
               } finally { await db.end(); }
-            })().catch(()=>{console.error('Payment schema not ready. Apply the reviewed migration only after explicit backup/authorization. No deployment performed.');process.exitCode=1;});
+            })().catch(()=>{console.error('Runtime preflight failed: check the reviewed payment/auth schema and an explicitly configured admin role. No deployment performed.');process.exitCode=1;});
             NODE
             docker build --pull --build-arg RELEASE_SHA="$EXPECTED_SHA" -t "$IMAGE" "$BUILD_DIR"
 

@@ -31,6 +31,8 @@ export async function createPaymentHarness(uploadDirectory?: string) {
     DB_PASSWORD: password, DB_NAME: database, JWT_SECRET: 'local-payments-fixture-not-a-real-secret-0123456789',
     APP_URL: 'http://127.0.0.1:4179', MERCADOPAGO_ACCESS_TOKEN: 'TEST-fixture-not-a-real-token',
     MERCADOPAGO_WEBHOOK_SECRET: 'fixture-webhook-signature-only', MERCADOPAGO_MODE: 'test',
+    // Never inherit a real SMTP transport from the operator's shell.
+    SMTP_HOST: '',
   });
   const admin = await mysql.createConnection({ host: '127.0.0.1', port, user: 'root', password });
   await admin.query(`CREATE DATABASE \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);

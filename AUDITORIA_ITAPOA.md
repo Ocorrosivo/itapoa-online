@@ -110,3 +110,10 @@ Inspeção 39906490025 não localizou uploads nos caminhos legados consultados;
 ZIP local antigo de publicação contém zero uploads. Relatório detalhado e
 limitações: `RELATORIO_FINAL_ITAPOA.md`. Nenhum cenário simulado foi descrito
 como homologação financeira real.
+
+A limpeza paralela foi integrada pelo responsável em `origin/main` (`752e689`).
+Seu diff foi revisto (remoção de componentes/rotinas legadas e chunks lazy); não
+alterou pagamentos ou configuração de produção. Foi incorporada somente à branch
+de auditoria em `232112c`. Lint/build e testes repetidos após essa integração.
+CI do PR na revisão anterior passou lint/build, smoke e integração; etapa SSH foi
+ignorada corretamente. Uma nova execução valida a revisão final do PR.
