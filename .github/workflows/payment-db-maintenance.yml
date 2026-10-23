@@ -37,7 +37,7 @@ jobs:
             backup=/var/backups/itapoa/site-20261023T055338Z-39908273388
             test -f "$backup/VERIFIED.txt"
             test "$(sha256sum "$backup/bundle.tar.gz" | cut -d' ' -f1)" = 96e264a8fb460fd7c39373302f31f0a24467b803cdd8e19447495206ddebf340
-            before=$(docker ps --filter "label=com.docker.swarm.service.name=$service" --format '{{.ID}}')
+            before=$(docker ps --filter "label=com.docker.swarm.service.name=$service" --format '{{.ID}}' | head -n 1)
             test -n "$before"
             docker service inspect "$service" --format '{{json .Spec.TaskTemplate.ContainerSpec.Mounts}}' | docker exec -i "$before" node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const m=JSON.parse(s)||[];if(!m.some(x=>["bind","volume"].includes(x.Type)&&x.Target==="/app/uploads"&&!x.ReadOnly))process.exit(1);console.log("PERSISTENT_UPLOAD_MOUNT_PRESENT=OK")})'
             env_before=$(docker service inspect "$service" --format '{{json .Spec.TaskTemplate.ContainerSpec.Env}}' | sha256sum | cut -d' ' -f1)
@@ -47,7 +47,7 @@ jobs:
             docker exec -e CHECK_FILE="$file" "$before" node -e 'const f=require("fs"),p=require("path");if(!/^itapoa-persistence-check-[0-9]+\.png$/.test(process.env.CHECK_FILE))process.exit(1);f.writeFileSync(p.join("/app/uploads",process.env.CHECK_FILE),Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=","base64"),{flag:"wx"});'
             file_hash=$(docker exec -e CHECK_FILE="$file" "$before" node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(require("path").join("/app/uploads",process.env.CHECK_FILE))).digest("hex"))')
             docker service update --force "$service"
-            after=$(docker ps --filter "label=com.docker.swarm.service.name=$service" --format '{{.ID}}')
+            after=$(docker ps --filter "label=com.docker.swarm.service.name=$service" --format '{{.ID}}' | head -n 1)
             test -n "$after"
             test "$before" != "$after"
             test "$content_before" = "$(docker inspect "$after" --format '{{.Image}}')" || { echo 'Container image content changed unexpectedly'; exit 1; }
@@ -66,6 +66,10 @@ jobs:
               const mysql=require('mysql2/promise');const db=await mysql.createConnection({host:process.env.DB_HOST,port:Number(process.env.DB_PORT||3306),user:process.env.DB_USER,password:process.env.DB_PASSWORD,database:process.env.DB_NAME});
               try{const [admins]=await db.query("SELECT COUNT(*) total FROM users WHERE role='admin_master'");console.log(JSON.stringify({administratorRoleCount:admins[0].total}));}finally{await db.end();}
               fs.unlinkSync(file);
+              for(const previous of ['39964799470','39965114150']){
+                const diagnostic=path.join('/app/uploads','itapoa-persistence-check-'+previous+'.png');
+                if(fs.existsSync(diagnostic)&&digest(fs.readFileSync(diagnostic))===process.env.EXPECTED_HASH)fs.unlinkSync(diagnostic);
+              }
               console.log('UPLOAD_PERSISTENCE_AFTER_TASK_RECREATION=OK');
               console.log('TEMPORARY_SYNTHETIC_IMAGE_REMOVED=OK');
             })().catch(()=>{console.error('Persistence verification failed; inspect before publishing');process.exitCode=1;});
