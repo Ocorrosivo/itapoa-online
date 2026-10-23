@@ -16,6 +16,59 @@ permissions:
   contents: read
 
 jobs:
+  verify-upload-persistence:
+    if: inputs.confirmation == 'verify-upload-persistence'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify saved volume survives a controlled task recreation
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          PERSISTENCE_RUN_ID: ${{ github.run_id }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          envs: PERSISTENCE_RUN_ID
+          command_timeout: 5m
+          script: |
+            set -eu
+            service=itapoa_itapoa-app
+            backup=/var/backups/itapoa/site-20261023T055338Z-39908273388
+            test -f "$backup/VERIFIED.txt"
+            test "$(sha256sum "$backup/bundle.tar.gz" | cut -d' ' -f1)" = 96e264a8fb460fd7c39373302f31f0a24467b803cdd8e19447495206ddebf340
+            before=$(docker ps --filter "label=com.docker.swarm.service.name=$service" --format '{{.ID}}')
+            test -n "$before"
+            docker service inspect "$service" --format '{{json .Spec.TaskTemplate.ContainerSpec.Mounts}}' | docker exec -i "$before" node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const m=JSON.parse(s)||[];if(!m.some(x=>["bind","volume"].includes(x.Type)&&x.Target==="/app/uploads"&&!x.ReadOnly))process.exit(1);console.log("PERSISTENT_UPLOAD_MOUNT_PRESENT=OK")})'
+            env_before=$(docker service inspect "$service" --format '{{json .Spec.TaskTemplate.ContainerSpec.Env}}' | sha256sum | cut -d' ' -f1)
+            image_before=$(docker service inspect "$service" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')
+            file="itapoa-persistence-check-$PERSISTENCE_RUN_ID.png"
+            docker exec -e CHECK_FILE="$file" "$before" node -e 'const f=require("fs"),p=require("path");if(!/^itapoa-persistence-check-[0-9]+\.png$/.test(process.env.CHECK_FILE))process.exit(1);f.writeFileSync(p.join("/app/uploads",process.env.CHECK_FILE),Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=","base64"),{flag:"wx"});'
+            file_hash=$(docker exec -e CHECK_FILE="$file" "$before" node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(require("path").join("/app/uploads",process.env.CHECK_FILE))).digest("hex"))')
+            docker service update --force "$service"
+            after=$(docker ps --filter "label=com.docker.swarm.service.name=$service" --format '{{.ID}}')
+            test -n "$after"
+            test "$before" != "$after"
+            test "$image_before" = "$(docker service inspect "$service" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')"
+            test "$env_before" = "$(docker service inspect "$service" --format '{{json .Spec.TaskTemplate.ContainerSpec.Env}}' | sha256sum | cut -d' ' -f1)"
+            docker exec -e CHECK_FILE="$file" -e EXPECTED_HASH="$file_hash" "$after" node - <<'NODE'
+            const fs=require('fs'),path=require('path'),crypto=require('crypto');
+            (async()=>{
+              const file=path.join('/app/uploads',process.env.CHECK_FILE);
+              const digest=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
+              if(digest(fs.readFileSync(file))!==process.env.EXPECTED_HASH)throw new Error('Stored file changed');
+              let ok=false;for(let i=0;i<20;i++){
+                try{const response=await fetch('https://itapoa.online/uploads/'+process.env.CHECK_FILE,{signal:AbortSignal.timeout(5000)});if(response.ok&&digest(Buffer.from(await response.arrayBuffer()))===process.env.EXPECTED_HASH){ok=true;break;}}catch{}
+                await new Promise(r=>setTimeout(r,1000));
+              }
+              if(!ok)throw new Error('Public file validation failed');
+              const mysql=require('mysql2/promise');const db=await mysql.createConnection({host:process.env.DB_HOST,port:Number(process.env.DB_PORT||3306),user:process.env.DB_USER,password:process.env.DB_PASSWORD,database:process.env.DB_NAME});
+              try{const [admins]=await db.query("SELECT COUNT(*) total FROM users WHERE role='admin_master'");console.log(JSON.stringify({administratorRoleCount:admins[0].total}));}finally{await db.end();}
+              fs.unlinkSync(file);
+              console.log('UPLOAD_PERSISTENCE_AFTER_TASK_RECREATION=OK');
+              console.log('TEMPORARY_SYNTHETIC_IMAGE_REMOVED=OK');
+            })().catch(()=>{console.error('Persistence verification failed; inspect before publishing');process.exitCode=1;});
+            NODE
   inspect-controller:
     if: inputs.confirmation == 'inspect-controller'
     runs-on: ubuntu-24.04
