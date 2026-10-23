@@ -4,14 +4,15 @@
  * Restored Home Page Component - Original Layout & Bright Theme
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Play, Facebook, Instagram, Phone, Globe,
-  Sun, Palmtree, Fish, Ship, Landmark, MapPin, Store, Briefcase, Users, ArrowRight
+  Sun, Palmtree, Fish, Ship, Landmark, MapPin, Store, Briefcase, Users, ArrowRight,
+  Search, X, Sparkles, Building2, Calendar, Newspaper
 } from 'lucide-react';
 import { useCompany } from '../context/CompanyContext';
 import { PremiumCompaniesCarousel } from '../components/PremiumCompaniesCarousel';
-import { QuickSearchInput } from '../components/common/QuickSearchInput';
+import { quickSearch, groupLabel, QuickSearchItem, QuickSearchGroup } from '../services/quickSearchService';
 import { matchesCompanySearch, normalizeSearch } from '../utils/catalogSearch';
 
 interface HomePageProps {
@@ -21,6 +22,14 @@ interface HomePageProps {
   onSelectBairro?: (slug: string) => void;
   onSelectPraia?: (slug: string) => void;
 }
+
+const groupIcon: Record<QuickSearchGroup, React.ReactNode> = {
+  empresas: <Building2 className="w-4 h-4 text-blue-500" />,
+  eventos: <Calendar className="w-4 h-4 text-amber-500" />,
+  turismo: <MapPin className="w-4 h-4 text-emerald-500" />,
+  blog: <Newspaper className="w-4 h-4 text-purple-500" />,
+  empregos: <Briefcase className="w-4 h-4 text-rose-500" />,
+};
 
 export const HomePage: React.FC<HomePageProps> = ({
   onNavigateCompany,
@@ -32,6 +41,10 @@ export const HomePage: React.FC<HomePageProps> = ({
   const { companies, categories, searchCatId, setSearchCatId, loading, catalogError, refreshData } = useCompany();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBairroFilter, setSelectedBairroFilter] = useState<string | null>(null);
+  const [liveSuggestions, setLiveSuggestions] = useState<QuickSearchItem[]>([]);
+  const [isSearchingLive, setIsSearchingLive] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const searchWrapRef = useRef<HTMLDivElement>(null);
 
   const litoralBanners = [
     {
@@ -69,11 +82,56 @@ export const HomePage: React.FC<HomePageProps> = ({
   const normalizeStr = normalizeSearch;
 
   const handleExecuteSearch = () => {
+    setShowDropdown(false);
     const el = document.getElementById('parceiros_section');
     if (el) {
       el.scrollIntoView({ behavior: 'smooth' });
     }
   };
+
+  const handleSelectSuggestion = (item: QuickSearchItem) => {
+    setShowDropdown(false);
+    if (item.group === 'empresas') {
+      onNavigateCompany(item.slug);
+    } else if (item.group === 'eventos' || item.group === 'turismo' || item.group === 'blog') {
+      onNavigateTab('turismo');
+    } else if (item.group === 'empregos') {
+      onNavigateTab('empregos');
+    }
+  };
+
+  // Live suggestions debounce ao digitar no campo único
+  useEffect(() => {
+    const term = searchTerm.trim();
+    if (term.length < 2) {
+      setLiveSuggestions([]);
+      setIsSearchingLive(false);
+      return;
+    }
+    setIsSearchingLive(true);
+    const timer = setTimeout(async () => {
+      try {
+        const results = await quickSearch(term);
+        setLiveSuggestions(results);
+      } catch {
+        setLiveSuggestions([]);
+      } finally {
+        setIsSearchingLive(false);
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Fechar dropdown de sugestões ao clicar fora
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (searchWrapRef.current && !searchWrapRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, []);
 
   // Randomized order on page load for fair exposure across all companies
   const [shuffledCompanies, setShuffledCompanies] = useState<any[]>([]);
@@ -241,45 +299,147 @@ export const HomePage: React.FC<HomePageProps> = ({
           onNavigateTab={onNavigateTab}
         />
 
-        <div className="text-center space-y-6 pt-6">
-          <div className="space-y-2">
-            <span className="text-[10px] font-black tracking-widest text-[#C8102E] uppercase">
-              ACHE TUDO O QUE PRECISA
-            </span>
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">
-              O que você está buscando?
+        {/* 2. Premium Unified Search Section (Single Box + Live Suggestions + High-Converting Design) */}
+        <div className="relative rounded-3xl bg-gradient-to-b from-white via-slate-50/80 to-slate-100/70 p-6 sm:p-10 lg:p-12 border border-slate-200/90 shadow-xl shadow-slate-200/60 overflow-visible text-center space-y-6">
+          {/* Ambient subtle glow at top */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-80 h-24 bg-red-500/5 blur-3xl pointer-events-none rounded-full" />
+
+          {/* Section Header */}
+          <div className="relative z-10 space-y-2.5 max-w-2xl mx-auto">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-red-50 border border-red-100 text-[#C8102E] text-[10px] sm:text-[11px] font-black uppercase tracking-widest shadow-2xs">
+              <Sparkles className="w-3.5 h-3.5 text-[#C8102E]" />
+              <span>ACHE TUDO O QUE PRECISA EM ITAPOÁ</span>
+            </div>
+            <h2 className="text-2xl sm:text-4xl font-black text-slate-900 tracking-tight leading-tight">
+              O que você está buscando hoje?
             </h2>
-            <p className="text-xs font-semibold text-slate-500">
-              Busque por empresa, categoria, bairro, produto ou serviço. <strong className="text-slate-800">Exemplo: Mercado, Pousada, Hambúrguer, Itapema, Lava Rápido</strong>
+            <p className="text-xs sm:text-sm font-medium text-slate-500">
+              Busque por empresa, categoria, bairro, produto ou serviço. <strong className="text-slate-700">Ex: Mercado, Pousada, Hambúrguer, Itapema, Lava Rápido</strong>
             </p>
           </div>
 
-          {/* Busca rapida com sugestoes: lupa + debounce + acento-insensivel + agrupado por tipo */}
-          <QuickSearchInput
-            onNavigateCompany={onNavigateCompany}
-            onNavigateTab={onNavigateTab}
-            placeholder="Digite o nome da empresa, serviço, bairro ou produto..."
-          />
+          {/* SINGLE UNIFIED PREMIUM SEARCH BOX */}
+          <div ref={searchWrapRef} className="relative max-w-2xl mx-auto z-30">
+            <div className="relative flex items-center bg-white rounded-2xl shadow-xl shadow-slate-200/80 border-2 border-slate-200 focus-within:border-[#C8102E] focus-within:ring-4 focus-within:ring-[#C8102E]/10 transition-all duration-300 p-1.5 sm:p-2">
+              <div className="pl-3 sm:pl-4 pr-1 text-slate-400 flex items-center pointer-events-none flex-shrink-0">
+                <Search className="w-5 h-5 text-slate-400" />
+              </div>
 
-          {/* Filtro local da secao parceiros (mantido) */}
-          <div className="max-w-2xl mx-auto flex items-center shadow-lg rounded-xl overflow-hidden border border-slate-200 bg-white focus-within:ring-2 focus-within:ring-[#C8102E]/30">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') handleExecuteSearch();
-              }}
-              placeholder="Filtrar parceiros abaixo…"
-              aria-label="Filtrar parceiros"
-              className="flex-1 px-6 py-4 text-sm focus:outline-none placeholder-slate-400 bg-white"
-            />
-            <button
-              onClick={handleExecuteSearch}
-              className="bg-black text-white px-8 py-4 font-black text-xs tracking-wider uppercase hover:bg-slate-800 transition cursor-pointer"
-            >
-              BUSCAR &gt;&gt;
-            </button>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  if (e.target.value.trim().length >= 2) setShowDropdown(true);
+                }}
+                onFocus={() => {
+                  if (searchTerm.trim().length >= 2) setShowDropdown(true);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleExecuteSearch();
+                }}
+                placeholder="Digite o nome da empresa, serviço, bairro ou produto..."
+                aria-label="Buscar em Itapoá"
+                className="flex-1 py-3 px-3 text-sm sm:text-base font-semibold text-slate-900 placeholder:text-slate-400 placeholder:font-normal bg-transparent focus:outline-none"
+              />
+
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setShowDropdown(false);
+                  }}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition mr-1 cursor-pointer"
+                  title="Limpar busca"
+                  aria-label="Limpar busca"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={handleExecuteSearch}
+                className="bg-gradient-to-r from-[#C8102E] to-red-600 hover:from-red-700 hover:to-[#C8102E] text-white px-6 sm:px-8 py-3 sm:py-3.5 rounded-xl font-black text-xs sm:text-sm tracking-wider uppercase shadow-md shadow-red-500/25 hover:shadow-lg hover:shadow-red-500/35 active:scale-95 transition cursor-pointer flex items-center gap-1.5 flex-shrink-0"
+              >
+                <span>BUSCAR</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Live Instant Suggestions Dropdown */}
+            {showDropdown && searchTerm.trim().length >= 2 && (
+              <div className="absolute left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden z-50 max-h-[min(65vh,480px)] overflow-y-auto text-left">
+                {isSearchingLive ? (
+                  <div className="px-4 py-6 text-center text-sm text-slate-500 flex items-center justify-center gap-2">
+                    <span className="w-4 h-4 border-2 border-slate-300 border-t-[#C8102E] rounded-full animate-spin" />
+                    <span>Buscando resultados em Itapoá…</span>
+                  </div>
+                ) : liveSuggestions.length === 0 ? (
+                  <div className="px-5 py-6 text-center space-y-2">
+                    <p className="text-sm font-bold text-slate-800">
+                      Nenhum resultado direto para “{searchTerm}”
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Pressione <strong className="text-slate-700">BUSCAR</strong> para filtrar os parceiros cadastrados logo abaixo.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleExecuteSearch}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-[#C8102E] hover:underline pt-1 cursor-pointer"
+                    >
+                      Ver parceiros filtrados <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="py-2">
+                    <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between text-xs text-slate-500 bg-slate-50/50">
+                      <span className="font-semibold">Sugestões rápidas encontradas:</span>
+                      <span className="text-[11px] font-bold text-[#C8102E]">{liveSuggestions.length} itens</span>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {liveSuggestions.slice(0, 8).map((item) => (
+                        <button
+                          key={`${item.group}-${item.id}`}
+                          type="button"
+                          onClick={() => handleSelectSuggestion(item)}
+                          className="w-full px-4 py-3 hover:bg-red-50/50 flex items-center justify-between transition cursor-pointer text-left group"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="p-2 rounded-lg bg-slate-100 group-hover:bg-white transition flex-shrink-0">
+                              {groupIcon[item.group]}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="text-sm font-bold text-slate-800 group-hover:text-[#C8102E] truncate transition">
+                                {item.title}
+                              </div>
+                              {item.subtitle && (
+                                <div className="text-xs text-slate-400 truncate mt-0.5">
+                                  {item.subtitle}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 group-hover:bg-[#C8102E] group-hover:text-white transition flex-shrink-0 ml-2">
+                            {groupLabel(item.group)}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="p-2.5 bg-slate-50 border-t border-slate-100 text-center">
+                      <button
+                        type="button"
+                        onClick={handleExecuteSearch}
+                        className="text-xs font-bold text-[#C8102E] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        Ver todos os resultados na lista abaixo <ArrowRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Quick search chips */}
@@ -292,6 +452,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               return (
                 <button
                   key={chip}
+                  type="button"
                   onClick={() => {
                     if (chip === 'Todos') {
                       setSearchTerm('');
@@ -302,10 +463,10 @@ export const HomePage: React.FC<HomePageProps> = ({
                     }
                     handleExecuteSearch();
                   }}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold transition cursor-pointer ${
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-200 cursor-pointer ${
                     isSelected
-                      ? 'bg-[#C8102E] text-white shadow-sm'
-                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                      ? 'bg-[#C8102E] text-white shadow-md shadow-red-500/20 scale-105'
+                      : 'bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 border border-slate-200 shadow-2xs hover:border-slate-300'
                   }`}
                 >
                   {chip}
@@ -316,8 +477,8 @@ export const HomePage: React.FC<HomePageProps> = ({
 
           {/* Active filter badges */}
           {(searchTerm || searchCatId || selectedBairroFilter) && (
-            <div className="flex flex-wrap items-center justify-center gap-2 pt-2 text-xs">
-              <span className="text-slate-500 font-medium">Filtro ativo:</span>
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-3 text-xs border-t border-slate-200/60 max-w-2xl mx-auto">
+              <span className="text-slate-500 font-semibold">Filtro ativo:</span>
               {searchTerm && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-red-100 text-[#C8102E] font-medium">
                   "{searchTerm}"
@@ -337,6 +498,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 </span>
               )}
               <button
+                type="button"
                 onClick={() => {
                   setSearchTerm('');
                   setSelectedBairroFilter(null);
