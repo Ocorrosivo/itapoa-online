@@ -7,7 +7,8 @@
 import React, { useState, useRef, useEffect, useId } from 'react';
 import {
   Sparkles, Settings, LogIn, LogOut, MapPin, Building2,
-  ShieldAlert, Bell, Facebook, Instagram, Youtube, ChevronDown, UserCheck, Menu, X
+  ShieldAlert, Bell, Facebook, Instagram, Youtube, ChevronDown, UserCheck, Menu, X,
+  Home, Megaphone
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCompany } from '../../context/CompanyContext';
@@ -135,138 +136,107 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       )}
 
-      <div className="bg-slate-950 text-slate-400 text-[11px] font-semibold py-1 text-center border-b border-slate-800 tracking-wider">
-        Guia Comercial e Marketplace Premium
-      </div>
-
-      <div className="bg-[#C8102E] text-white shadow-md relative z-50">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-          <div
-            onClick={() => handleNav('home')}
-            className="flex items-center gap-3 cursor-pointer group"
-          >
-            <img
-              src="/logotipo.png"
-              alt="Itapoá Online - Guia Comercial e Marketplace"
-              className="h-12 md:h-14 w-auto object-contain group-hover:scale-105 transition transform drop-shadow-lg"
-            />
-            <div className="hidden md:flex flex-col">
-              <span className="text-sm font-black tracking-wider text-white uppercase leading-none">ITAPOÁ ONLINE</span>
-              <span className="text-[10px] font-semibold text-red-200 tracking-wide mt-0.5">Guia Comercial &amp; Marketplace</span>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-end gap-2">
-            {isAuthenticated ? (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleNav(user?.role === 'admin_master' ? 'admin' : 'painel')}
-                  className="text-xs font-bold px-3 py-1.5 rounded-lg bg-black/20 hover:bg-black/30 text-white transition flex items-center gap-1.5"
-                >
-                  <UserCheck className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Meu Painel</span>
-                </button>
-                <button
-                  onClick={logout}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-black/20 hover:bg-black/30 text-white transition flex items-center gap-1"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>Sair</span>
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={onOpenAuthModal}
-                className="text-xs font-bold px-4 py-2 rounded-xl bg-white text-[#C8102E] hover:bg-red-50 transition shadow-md cursor-pointer"
-              >
-                Entrar / Cadastrar
-              </button>
-            )}
-            <button
-              onClick={() => setMobileOpen(v => !v)}
-              className="lg:hidden p-2 rounded-lg bg-black/20 hover:bg-black/30 text-white transition ml-1"
-              aria-label={mobileOpen ? 'Fechar menu' : 'Abrir menu'}
-              aria-expanded={mobileOpen}
+      <header
+        className={`sticky top-0 z-40 transition-all duration-300 ${
+          currentTab === 'home'
+            ? 'bg-slate-950/70 backdrop-blur-md border-b border-white/10 text-white shadow-xl'
+            : 'bg-[#0A0915] border-b border-slate-800 text-white shadow-xl'
+        }`}
+      >
+        <div className="max-w-7xl mx-auto px-4 py-2 sm:py-2.5">
+          <div className="flex items-center justify-between gap-2 lg:gap-4 min-h-[3rem]">
+            {/* Brand / Logo */}
+            <div
+              onClick={() => handleNav('home')}
+              className="flex items-center gap-2.5 sm:gap-3 cursor-pointer group flex-shrink-0"
             >
-              {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
-          </div>
-        </div>
-      </div>
+              <img
+                src="/logotipo.png"
+                alt="Itapoá Online"
+                className="h-10 sm:h-12 w-auto object-contain group-hover:scale-105 transition transform drop-shadow-md"
+              />
+              <div className="flex flex-col">
+                <span className="text-xs sm:text-sm font-black tracking-wider text-white uppercase leading-none">
+                  ITAPOÁ ONLINE
+                </span>
+                <span className="text-[9px] sm:text-[10px] font-semibold text-slate-300 tracking-wide mt-0.5">
+                  Guia Comercial &amp; Marketplace
+                </span>
+              </div>
+            </div>
 
-      <header className="sticky top-0 z-40 bg-[#0A0915] border-b border-slate-800 text-white shadow-xl">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-stretch justify-between min-h-[3.5rem] text-[10px] sm:text-xs font-bold uppercase tracking-wider">
-            <nav className="hidden lg:flex items-stretch" aria-label="Menu principal">
-              {MENU_PRIMARY.map(item => (
+            {/* Desktop Navigation Links */}
+            <nav className="hidden lg:flex items-center gap-1 xl:gap-1.5" aria-label="Menu principal">
+              {/* Início: Red pill button as in Image 2 */}
+              <button
+                onClick={() => handleNav('home')}
+                className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-xs font-bold transition whitespace-nowrap ${
+                  isActive('home')
+                    ? 'bg-[#C8102E] text-white shadow-sm font-black'
+                    : 'text-slate-200 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                <Home className="w-3.5 h-3.5" />
+                <span>Início</span>
+              </button>
+
+              {MENU_PRIMARY.filter(i => i.tab !== 'home').map(item => (
                 <button
                   key={item.tab}
                   onClick={() => handleNav(item.tab)}
-                  className={`px-3 flex items-center justify-center transition whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition whitespace-nowrap ${
                     isActive(item.tab)
-                      ? item.tab === 'home'
-                        ? 'bg-[#C8102E] text-white font-black'
-                        : 'bg-slate-800 text-white'
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                      ? 'bg-[#C8102E] text-white font-black'
+                      : 'text-slate-200 hover:text-white hover:bg-white/10'
                   }`}
                 >
                   {item.label}
                 </button>
               ))}
 
-              {/* Turismo dropdown — link separado da seta, sem botão dentro de link */}
+              {/* Turismo Dropdown */}
               <div
                 ref={turismoRef}
-                className={`relative flex items-stretch border-x border-slate-800/60 ${isTurismoActive(currentTab) ? 'bg-slate-800' : 'bg-transparent'}`}
+                className="relative flex items-center"
                 onMouseEnter={() => { clearCloseTimeout(); setTurismoOpen(true); }}
                 onMouseLeave={scheduleClose}
                 onFocusCapture={() => { clearCloseTimeout(); setTurismoOpen(true); }}
               >
                 <button
                   onClick={() => handleNav('turismo')}
-                  className={`px-3 flex items-center justify-center transition whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:z-10 ${
-                    isTurismoActive(currentTab) ? 'text-white' : 'text-slate-300 hover:text-white'
+                  className={`px-2.5 py-1.5 rounded-l-lg text-xs font-bold uppercase tracking-wider transition whitespace-nowrap flex items-center gap-1 ${
+                    isTurismoActive(currentTab) ? 'bg-[#C8102E] text-white' : 'text-slate-200 hover:text-white hover:bg-white/10'
                   }`}
-                  aria-current={isTurismoActive(currentTab) ? 'page' : undefined}
                 >
                   Turismo
                 </button>
                 <button
                   type="button"
                   onClick={() => setTurismoOpen(v => !v)}
-                  aria-expanded={turismoOpen}
-                  aria-controls={dropdownId}
-                  aria-label={turismoOpen ? 'Fechar submenu Turismo' : 'Abrir submenu Turismo'}
-                  className={`px-2 flex items-center justify-center transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:z-10 -ml-1 ${
-                    isTurismoActive(currentTab) ? 'text-white' : 'text-slate-300 hover:text-white'
+                  className={`px-1.5 py-1.5 rounded-r-lg text-xs transition -ml-1 ${
+                    isTurismoActive(currentTab) ? 'bg-[#C8102E] text-white' : 'text-slate-200 hover:text-white hover:bg-white/10'
                   }`}
                 >
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-150 ${turismoOpen ? 'rotate-180' : 'rotate-0'}`} aria-hidden="true" />
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-150 ${turismoOpen ? 'rotate-180' : 'rotate-0'}`} />
                 </button>
 
-                {/* Dropdown overlay — sem gap, sobrepõe conteúdo */}
+                {/* Dropdown Menu */}
                 <div
                   id={dropdownId}
                   role="menu"
-                  aria-label="Submenu Turismo"
-                  className={`absolute top-full left-0 min-w-[180px] bg-white rounded-b-xl rounded-tr-xl shadow-xl border border-slate-200 overflow-hidden z-50 transition-all duration-150 origin-top ${
+                  className={`absolute top-full left-0 min-w-[180px] bg-slate-900/95 backdrop-blur-md rounded-xl shadow-2xl border border-white/10 overflow-hidden z-50 transition-all duration-150 origin-top mt-1 ${
                     turismoOpen ? 'opacity-100 visible translate-y-0' : 'opacity-0 invisible -translate-y-1 pointer-events-none'
                   }`}
-                  onMouseEnter={() => { clearCloseTimeout(); setTurismoOpen(true); }}
-                  onMouseLeave={scheduleClose}
                 >
                   {TURISMO_DROPDOWN.map(item => (
                     <button
                       key={item.tab}
                       role="menuitem"
                       onClick={() => handleNav(item.tab)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Escape') setTurismoOpen(false);
-                      }}
-                      className="w-full text-left px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition flex items-center justify-between focus:outline-none focus-visible:bg-slate-100 focus-visible:text-slate-900"
+                      className="w-full text-left px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-slate-200 hover:bg-[#C8102E] hover:text-white transition flex items-center justify-between"
                     >
                       <span>{item.label}</span>
-                      <span aria-hidden="true" className="text-slate-400 text-[10px]">›</span>
+                      <span className="text-slate-400 text-xs">›</span>
                     </button>
                   ))}
                 </div>
@@ -276,10 +246,10 @@ export const Header: React.FC<HeaderProps> = ({
                 <button
                   key={item.tab}
                   onClick={() => handleNav(item.tab)}
-                  className={`px-3 flex items-center justify-center transition whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 ${
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition whitespace-nowrap ${
                     isActive(item.tab)
-                      ? 'bg-slate-800 text-white'
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                      ? 'bg-[#C8102E] text-white font-black'
+                      : 'text-slate-200 hover:text-white hover:bg-white/10'
                   }`}
                 >
                   {item.label}
@@ -288,51 +258,89 @@ export const Header: React.FC<HeaderProps> = ({
 
               <button
                 onClick={handleVip}
-                className="px-4 flex items-center justify-center text-cyan-400 hover:text-cyan-300 hover:bg-slate-800 transition whitespace-nowrap focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
-                aria-label="Ver planos VIP"
+                className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-cyan-400 hover:text-cyan-300 hover:bg-white/10 transition whitespace-nowrap flex items-center gap-1"
               >
                 <span>VIP 💎</span>
               </button>
             </nav>
 
-            <div className="lg:hidden flex items-center text-slate-400 text-[10px] font-semibold tracking-wider">
-              <span className="hidden sm:inline">Menu — toque no ícone ao topo</span>
-              <span className="sm:hidden">ITAPOÁ ONLINE</span>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="hidden lg:flex items-center gap-3 text-slate-400 border-r border-slate-800 pr-4">
-                <Facebook className="w-3.5 h-3.5 hover:text-blue-400 cursor-pointer transition" />
-                <Instagram className="w-3.5 h-3.5 hover:text-pink-400 cursor-pointer transition" />
-                <span className="text-xs font-bold hover:text-green-400 cursor-pointer transition">w</span>
-                <Youtube className="w-3.5 h-3.5 hover:text-red-500 cursor-pointer transition" />
+            {/* Right CTA and Icons */}
+            <div className="flex items-center gap-1.5 sm:gap-2.5">
+              {/* Social Icons */}
+              <div className="hidden xl:flex items-center gap-2.5 text-slate-300 border-r border-white/15 pr-3">
+                <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 transition" aria-label="Facebook">
+                  <Facebook className="w-3.5 h-3.5" />
+                </a>
+                <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" className="hover:text-pink-400 transition" aria-label="Instagram">
+                  <Instagram className="w-3.5 h-3.5" />
+                </a>
+                <a href="https://wa.me/" target="_blank" rel="noopener noreferrer" className="hover:text-green-400 font-bold text-xs transition" aria-label="WhatsApp">
+                  w
+                </a>
               </div>
 
-              <Bell className="w-4 h-4 text-slate-400 cursor-pointer hover:text-white transition" />
+              {/* Notification Bell */}
+              <button title="Notificações" className="p-1.5 text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition">
+                <Bell className="w-4 h-4" />
+              </button>
 
+              {/* IA / Sparkles */}
               <button
                 onClick={onOpenAIModal}
                 title="IA do Guia Comercial"
-                className="p-2 text-slate-300 hover:text-amber-400 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded"
+                className="p-1.5 text-slate-300 hover:text-amber-400 hover:bg-white/10 rounded-lg transition"
               >
                 <Sparkles className="w-4 h-4 animate-pulse" />
               </button>
 
+              {/* Admin Gear */}
               <PermissionGate permission="companies.edit">
                 <button
                   onClick={() => handleNav('admin')}
                   title="Painel Administrativo Master"
-                  className="p-2 text-purple-400 hover:text-purple-300 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded"
+                  className="p-1.5 text-purple-400 hover:text-purple-300 hover:bg-white/10 rounded-lg transition"
                 >
                   <Settings className="w-4 h-4" />
                 </button>
               </PermissionGate>
 
+              {/* Authenticated user quick actions */}
+              {isAuthenticated && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => handleNav(user?.role === 'admin_master' ? 'admin' : 'painel')}
+                    className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white transition flex items-center gap-1"
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Meu Painel</span>
+                  </button>
+                  <button
+                    onClick={logout}
+                    title="Sair"
+                    className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white transition"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* ANUNCIANTE Button (Megaphone) */}
               <button
                 onClick={onOpenAuthModal}
-                className="hidden sm:inline-flex px-4 py-1.5 bg-[#C8102E] hover:bg-red-700 text-white font-extrabold text-[10px] rounded transition shadow-md tracking-wider ml-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30"
+                className="px-3 sm:px-4 py-1.5 bg-[#C8102E] hover:bg-red-700 text-white font-extrabold text-[11px] rounded-lg transition shadow-md tracking-wider flex items-center gap-1.5 cursor-pointer ml-1"
               >
-                ANUNCIANTE
+                <Megaphone className="w-3.5 h-3.5" />
+                <span>ANUNCIANTE</span>
+              </button>
+
+              {/* Mobile hamburger */}
+              <button
+                onClick={() => setMobileOpen(v => !v)}
+                className="lg:hidden p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition ml-1"
+                aria-label={mobileOpen ? 'Fechar menu' : 'Abrir menu'}
+                aria-expanded={mobileOpen}
+              >
+                {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
             </div>
           </div>

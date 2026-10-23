@@ -6,7 +6,8 @@
 
 import React, { useState } from 'react';
 import {
-  Play, Facebook, Instagram, Phone, Globe
+  Play, Facebook, Instagram, Phone, Globe,
+  Sun, Palmtree, Fish, Ship, Landmark, MapPin, Store, Briefcase, Users, ArrowRight
 } from 'lucide-react';
 import { useCompany } from '../context/CompanyContext';
 import { PremiumCompaniesCarousel } from '../components/PremiumCompaniesCarousel';
@@ -33,11 +34,36 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [selectedBairroFilter, setSelectedBairroFilter] = useState<string | null>(null);
 
   const litoralBanners = [
-    { title: 'Nossas Praias', slug: 'praia-itapema-do-norte', img: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=600&q=80', badge: '● Nossas Praias' },
-    { title: 'O Trapiche', slug: 'praia-do-pontal', img: 'https://images.unsplash.com/photo-1519046904884-53103b34b206?auto=format&fit=crop&w=600&q=80', badge: '● O Trapiche' },
-    { title: 'Pesca Tradicional', slug: 'praia-barra-do-sai', img: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=600&q=80', badge: '● Pesca Tradicional' },
-    { title: 'Porto Itapoá', slug: 'praia-do-pontal', img: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80', badge: '● Porto Itapoá' },
-    { title: 'Farol de Itapoá', slug: 'praia-itapema-do-norte', img: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=600&q=80', badge: '● Farol de Itapoá' }
+    {
+      title: 'Nossas Praias',
+      slug: 'praia-itapema-do-norte',
+      img: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=600&q=80',
+      icon: <Sun className="w-3.5 h-3.5 text-amber-300" />
+    },
+    {
+      title: 'O Trapiche',
+      slug: 'praia-do-pontal',
+      img: 'https://images.unsplash.com/photo-1519046904884-53103b34b206?auto=format&fit=crop&w=600&q=80',
+      icon: <Palmtree className="w-3.5 h-3.5 text-emerald-300" />
+    },
+    {
+      title: 'Pesca Tradicional',
+      slug: 'praia-barra-do-sai',
+      img: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=600&q=80',
+      icon: <Fish className="w-3.5 h-3.5 text-cyan-300" />
+    },
+    {
+      title: 'Porto Itapoá',
+      slug: 'praia-do-pontal',
+      img: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80',
+      icon: <Ship className="w-3.5 h-3.5 text-blue-300" />
+    },
+    {
+      title: 'Farol de Itapoá',
+      slug: 'praia-itapema-do-norte',
+      img: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=600&q=80',
+      icon: <Landmark className="w-3.5 h-3.5 text-amber-200" />
+    }
   ];
 
   const normalizeStr = normalizeSearch;
@@ -81,45 +107,128 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   return (
     <div className="bg-slate-50 text-slate-900 flex flex-col">
-      {/* 1. Litoral Photo Banners Strip — aligned with container for symmetrical layout */}
-      <div className="max-w-7xl mx-auto px-4 pt-6 w-full">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
-          {litoralBanners.map((b, idx) => (
-            <div
-              key={idx}
-              onClick={() => onSelectPraia && onSelectPraia(b.slug)}
-              className="relative overflow-hidden rounded-2xl group cursor-pointer h-36 sm:h-40 lg:h-44 shadow-sm border border-slate-200/60 bg-slate-900"
-            >
-              <img
-                src={b.img}
-                alt={b.title}
-                className="w-full h-full object-cover object-center group-hover:scale-110 transition duration-700 brightness-75"
-                loading="lazy"
-                decoding="async"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent flex items-end p-3 sm:p-4">
-                <span className="text-[12px] sm:text-[13px] font-bold text-white tracking-tight drop-shadow-md">
-                  {b.badge}
+      {/* 1. Panoramic Hero Section with Aerial Background (Image 2 & 3) */}
+      <section className="relative w-full bg-slate-950 overflow-hidden shadow-2xl">
+        {/* Background Image: Aerial photo of Itapoá */}
+        <div
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-all duration-700"
+          style={{ backgroundImage: `url('/hero-itapoa.jpg')` }}
+          aria-hidden="true"
+        />
+
+        {/* Ambient Gradient Overlays for Readability & Contrast */}
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/50 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/60 via-transparent to-slate-950/80" />
+
+        {/* Hero Content Container */}
+        <div className="relative z-10 max-w-7xl mx-auto px-4 pt-10 sm:pt-14 lg:pt-16 pb-8 sm:pb-10 flex flex-col justify-between min-h-[520px] sm:min-h-[560px] lg:min-h-[600px]">
+          {/* Headline block */}
+          <div className="max-w-2xl space-y-3 sm:space-y-4">
+            <div className="inline-flex items-center gap-2.5">
+              <span className="w-8 h-1 bg-[#C8102E] rounded-full inline-block" />
+              <span className="text-xs sm:text-sm font-extrabold uppercase tracking-widest text-slate-200">
+                BEM-VINDO AO
+              </span>
+            </div>
+
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-none drop-shadow-xl">
+              ITAPOÁ ONLINE
+            </h1>
+
+            <p className="text-sm sm:text-base lg:text-lg font-medium text-slate-100 drop-shadow-md">
+              Aqui você encontra tudo o que precisa em um só lugar!
+            </p>
+
+            {/* Quick category shortcuts row with icons and divider lines */}
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4 pt-2 text-xs sm:text-sm font-bold text-white drop-shadow">
+              <button
+                type="button"
+                onClick={handleExecuteSearch}
+                className="flex items-center gap-1.5 hover:text-red-300 transition cursor-pointer"
+              >
+                <Store className="w-4 h-4 text-red-400" />
+                <span>Comércio Local</span>
+              </button>
+              <span className="text-white/30 hidden sm:inline">|</span>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm('Serviços');
+                  handleExecuteSearch();
+                }}
+                className="flex items-center gap-1.5 hover:text-red-300 transition cursor-pointer"
+              >
+                <Briefcase className="w-4 h-4 text-red-400" />
+                <span>Serviços</span>
+              </button>
+              <span className="text-white/30 hidden sm:inline">|</span>
+
+              <button
+                type="button"
+                onClick={() => onNavigateTab('turismo')}
+                className="flex items-center gap-1.5 hover:text-red-300 transition cursor-pointer"
+              >
+                <MapPin className="w-4 h-4 text-red-400" />
+                <span>Turismo</span>
+              </button>
+              <span className="text-white/30 hidden sm:inline">|</span>
+
+              <button
+                type="button"
+                onClick={() => onNavigateTab('empregos')}
+                className="flex items-center gap-1.5 hover:text-red-300 transition cursor-pointer"
+              >
+                <Users className="w-4 h-4 text-red-400" />
+                <span>Empregos</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 6 Cards floating strip along bottom of Hero */}
+          <div className="pt-8 sm:pt-12">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3.5">
+              {litoralBanners.map((b, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => onSelectPraia && onSelectPraia(b.slug)}
+                  className="relative overflow-hidden rounded-2xl group cursor-pointer h-36 sm:h-40 lg:h-44 shadow-xl border border-white/15 bg-slate-900 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:border-white/40"
+                >
+                  <img
+                    src={b.img}
+                    alt={b.title}
+                    className="w-full h-full object-cover object-center group-hover:scale-110 transition duration-700 brightness-85"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/40 to-transparent flex items-end p-3 sm:p-4">
+                    <span className="text-[12px] sm:text-[13px] font-bold text-white tracking-tight drop-shadow-md flex items-center gap-1.5">
+                      {b.icon}
+                      <span>{b.title}</span>
+                    </span>
+                  </div>
+                </div>
+              ))}
+
+              {/* 6th Card: ITAPOÁ SC Special Red Card */}
+              <div
+                onClick={() => onNavigateTab('tourism')}
+                className="relative bg-gradient-to-br from-red-600 via-[#C8102E] to-red-800 rounded-2xl flex flex-col justify-center items-center text-center p-4 cursor-pointer group h-36 sm:h-40 lg:h-44 shadow-xl border border-red-500/40 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:border-white/50"
+              >
+                <MapPin className="w-6 h-6 text-white mb-1 drop-shadow group-hover:scale-110 transition" />
+                <span className="text-lg sm:text-xl font-black tracking-widest text-white uppercase block leading-tight">
+                  ITAPOÁ SC
+                </span>
+                <span className="text-[11px] italic text-red-100 block mt-0.5">"Paraíso Catarinense"</span>
+                <span className="text-[10px] font-extrabold uppercase text-white tracking-wider mt-3 border border-white/60 px-3 py-1 rounded-lg bg-black/20 flex items-center gap-1 group-hover:bg-white group-hover:text-[#C8102E] transition">
+                  GUIA OFICIAL <ArrowRight className="w-3 h-3" />
                 </span>
               </div>
             </div>
-          ))}
-
-          {/* 6th Red Card: ITAPOÁ SC — same row, equal height */}
-          <div
-            onClick={() => onNavigateTab('tourism')}
-            className="relative bg-gradient-to-br from-red-800 to-[#C8102E] rounded-2xl flex flex-col justify-center items-center text-center p-4 cursor-pointer group h-36 sm:h-40 lg:h-44 shadow-sm border border-red-700/50"
-          >
-            <span className="text-lg sm:text-xl font-black tracking-widest text-white uppercase block group-hover:scale-105 transition">
-              ITAPOÁ SC
-            </span>
-            <span className="text-[11px] italic text-red-200 block mt-1">"Paraíso Catarinense"</span>
-            <span className="text-[10px] font-extrabold uppercase text-white/90 tracking-wider mt-3 border border-white/40 px-3 py-1 rounded bg-black/20">
-              GUIA OFICIAL
-            </span>
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Main Container */}
       <div className="w-full max-w-7xl mx-auto px-4 space-y-10 py-8">
