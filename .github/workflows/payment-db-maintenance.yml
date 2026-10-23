@@ -42,7 +42,8 @@ jobs:
             git -C "$source_dir" checkout --quiet --detach FETCH_HEAD
             test "$(git -C "$source_dir" rev-parse HEAD)" = '${{ github.sha }}'
             bash -n "$source_dir/scripts/create-production-backup.sh"
-            BACKUP_CONFIRMATION=create-verified-backup GITHUB_RUN_ID="$BACKUP_RUN_ID" bash "$source_dir/scripts/create-production-backup.sh" "$source_dir" | tee "$source_dir/backup-result.txt"
+            BACKUP_CONFIRMATION=create-verified-backup GITHUB_RUN_ID="$BACKUP_RUN_ID" bash "$source_dir/scripts/create-production-backup.sh" "$source_dir" > "$source_dir/backup-result.txt"
+            cat "$source_dir/backup-result.txt"
             backup=$(sed -n 's/^VERIFIED_BACKUP_DIRECTORY=//p' "$source_dir/backup-result.txt")
             case "$backup" in /var/backups/itapoa/site-*) ;; *) exit 1;; esac
             test -f "$backup/VERIFIED.txt"
@@ -107,6 +108,9 @@ jobs:
             set -eu
             cat /etc/ssh/ssh_host_ed25519_key.pub
             if [ -s "$HOME/.ssh/authorized_keys" ]; then ssh-keygen -lf "$HOME/.ssh/authorized_keys" || true; fi
+            /usr/sbin/sshd -T | grep -E '^(pubkeyauthentication|authorizedkeysfile|permitrootlogin|authenticationmethods|strictmodes) '
+            stat -c '%a %u %g %n' "$HOME/.ssh" "$HOME/.ssh/authorized_keys"
+            journalctl -u ssh --since '-10 minutes' --no-pager | grep -E 'Authentication refused|bad key options|expired|authorized_keys|Failed publickey' | tail -n 12 || true
             docker service ls --format '{{.Name}} {{.Image}}'
             docker ps -a --filter 'label=com.docker.swarm.service.name=itapoa_itapoa-app' --format '{{.ID}} {{.Status}}'
             docker volume ls --format '{{.Name}}'
