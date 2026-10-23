@@ -16,6 +16,81 @@ permissions:
   contents: read
 
 jobs:
+  create-verified-backup:
+    if: inputs.confirmation == 'create-verified-backup'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Backup, isolated restore and expiring download-only access
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          BACKUP_PUBLIC_KEY: ${{ secrets.ITAPOA_BACKUP_TRANSFER_PUBLIC_KEY }}
+          BACKUP_RUN_ID: ${{ github.run_id }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          envs: BACKUP_PUBLIC_KEY,BACKUP_RUN_ID
+          command_timeout: 10m
+          script: |
+            set -eu
+            umask 077
+            source_dir=$(mktemp -d /tmp/itapoa-backup-source.XXXXXXXX)
+            git -C "$source_dir" init --quiet
+            git -C "$source_dir" remote add origin https://github.com/Ocorrosivo/itapoa-online.git
+            git -C "$source_dir" fetch --quiet --depth 1 origin '${{ github.sha }}'
+            git -C "$source_dir" checkout --quiet --detach FETCH_HEAD
+            test "$(git -C "$source_dir" rev-parse HEAD)" = '${{ github.sha }}'
+            bash -n "$source_dir/scripts/create-production-backup.sh"
+            BACKUP_CONFIRMATION=create-verified-backup GITHUB_RUN_ID="$BACKUP_RUN_ID" bash "$source_dir/scripts/create-production-backup.sh" "$source_dir" | tee "$source_dir/backup-result.txt"
+            backup=$(sed -n 's/^VERIFIED_BACKUP_DIRECTORY=//p' "$source_dir/backup-result.txt")
+            case "$backup" in /var/backups/itapoa/site-*) ;; *) exit 1;; esac
+            test -f "$backup/VERIFIED.txt"
+            test -f "$backup/bundle.tar.gz"
+            test "$backup" = "$(realpath "$backup")"
+            read -r key_type key_data ignored <<EOF
+            $BACKUP_PUBLIC_KEY
+            EOF
+            test "$key_type" = ssh-ed25519
+            case "$key_data" in *[!A-Za-z0-9+/=]*|'') exit 1;; esac
+            mkdir -p "$HOME/.ssh"
+            chmod 700 "$HOME/.ssh"
+            touch "$HOME/.ssh/authorized_keys"
+            chmod 600 "$HOME/.ssh/authorized_keys"
+            if grep -Fq "$key_data" "$HOME/.ssh/authorized_keys"; then echo 'Download key already installed; inspect before granting again'; exit 1; fi
+            expires=$(date -u -d '+1 hour' +%Y%m%d%H%M%SZ)
+            printf '\nrestrict,expiry-time="%s",command="/bin/cat -- %s/bundle.tar.gz" %s %s itapoa-backup-download-%s\n' "$expires" "$backup" "$key_type" "$key_data" "$BACKUP_RUN_ID" >> "$HOME/.ssh/authorized_keys"
+            echo "DOWNLOAD_ONLY_ACCESS_EXPIRES_UTC=$expires"
+  revoke-backup-download:
+    if: inputs.confirmation == 'revoke-backup-download'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Remove only the explicitly authorized temporary backup key
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          BACKUP_PUBLIC_KEY: ${{ secrets.ITAPOA_BACKUP_TRANSFER_PUBLIC_KEY }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          envs: BACKUP_PUBLIC_KEY
+          command_timeout: 2m
+          script: |
+            set -eu
+            umask 077
+            read -r key_type key_data ignored <<EOF
+            $BACKUP_PUBLIC_KEY
+            EOF
+            test "$key_type" = ssh-ed25519
+            case "$key_data" in *[!A-Za-z0-9+/=]*|'') exit 1;; esac
+            test -f "$HOME/.ssh/authorized_keys"
+            temporary=$(mktemp "$HOME/.ssh/authorized_keys.backup-cleanup.XXXXXXXX")
+            awk -v key="$key_data" '!(index($0,key)>0 && $NF ~ /^itapoa-backup-download-[0-9]+$/)' "$HOME/.ssh/authorized_keys" > "$temporary"
+            chmod 600 "$temporary"
+            mv "$temporary" "$HOME/.ssh/authorized_keys"
+            if grep -F "$key_data" "$HOME/.ssh/authorized_keys" | grep -q 'itapoa-backup-download-'; then exit 1; fi
+            echo 'TEMPORARY_DOWNLOAD_ACCESS_REMOVED=OK'
   inspect-backup-access:
     if: inputs.confirmation == 'inspect-backup-access'
     runs-on: ubuntu-24.04
@@ -31,7 +106,7 @@ jobs:
           script: |
             set -eu
             cat /etc/ssh/ssh_host_ed25519_key.pub
-            if [ -f "$HOME/.ssh/authorized_keys" ]; then ssh-keygen -lf "$HOME/.ssh/authorized_keys"; fi
+            if [ -s "$HOME/.ssh/authorized_keys" ]; then ssh-keygen -lf "$HOME/.ssh/authorized_keys" || true; fi
             docker service ls --format '{{.Name}} {{.Image}}'
             docker ps -a --filter 'label=com.docker.swarm.service.name=itapoa_itapoa-app' --format '{{.ID}} {{.Status}}'
             docker volume ls --format '{{.Name}}'
