@@ -35,7 +35,7 @@ jobs:
             image=$(docker inspect "$app" --format '{{.Image}}')
             docker run --rm -i --network none --mount type=bind,source=/etc/easypanel,target=/control,readonly "$image" node - <<'NODE'
             const fs=require('fs'),path=require('path');
-            for(const directory of ['/control','/control/projects/itapoa','/control/projects/itapoa/itapoa-app']){
+            for(const directory of ['/control','/control/data','/control/projects/itapoa','/control/projects/itapoa/itapoa-app']){
               if(!fs.existsSync(directory))continue;
               console.log(JSON.stringify({directory,entries:fs.readdirSync(directory)}));
               for(const name of fs.readdirSync(directory).filter(n=>n.endsWith('.json'))){
