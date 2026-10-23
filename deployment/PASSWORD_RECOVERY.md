@@ -10,6 +10,9 @@ O fluxo antigo simulava envio. O novo usa `/esqueci-senha`, API real e
    `SMTP_HOST`, `SMTP_PORT` (465 TLS ou 587 STARTTLS), `SMTP_USER`,
    `SMTP_PASSWORD` (alias `SMTP_PASS`) e `SMTP_FROM=contato@itapoa.online`.
    `SMTP_FROM` deve ser apenas o endereço. `APP_URL=https://itapoa.online`.
+   Confirmação de cadastro e recuperação usam a mesma configuração e transporte.
+   Aliases aceitos: `SMTP_USERNAME`, `SMTP_PASS`, `EMAIL_FROM`. Não há provedor,
+   usuário ou remetente presumidos pelo código.
    Não desabilitar a validação do certificado TLS. Confirmar SPF/DKIM/DMARC
    pelos valores oficiais do provedor; não substituir registros DNS existentes.
 3. Obter autorização separada e backup do banco; então aplicar somente
@@ -49,7 +52,17 @@ Senhas novas usam bcrypt com custo 12, mínimo 8 caracteres e máximo 72 bytes.
 O token fica no fragmento (não enviado em GET) e é removido da URL pelo cliente.
 Respostas de recuperação não são armazenáveis; política de referência é no-referrer.
 Nenhum token/senha/erro SMTP bruto é escrito nos logs. Erros de entrega geram apenas
-`[password-recovery] delivery_failed` e identificador aleatório, sem destinatário.
+`[password-recovery] delivery_failed`, correlationId e código SMTP sanitizado,
+sem destinatário, erro bruto ou link. A resposta genérica de solicitação inclui
+um correlationId em todos os casos; ele permite consultar logs protegidos sem
+revelar existência de conta. `delivery_accepted` registra somente correlationId,
+horário e MessageId seguro após aceitação SMTP, sem comprovar recebimento no Gmail.
+
+`user_auth_state` é obrigatória para autenticação: falhas de consulta não retornam
+versão zero nem revalidam sessões revogadas. O deploy confere essa tabela sem DDL.
+O limite de dez solicitações em preparação/entrega é reservado antes dos awaits.
+Troca autenticada e redefinição de senha usam o mesmo lock de usuário e revogam
+as sessões na mesma transação; o usuário deverá entrar novamente após a troca.
 
 O envio é assíncrono no processo, não uma fila durável: reiniciar o container nesse
 intervalo pode perder o envio; o usuário deve solicitar outro link após um minuto.

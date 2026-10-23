@@ -60,6 +60,7 @@ jobs:
           node --import tsx --test tests/unit/checkout.test.ts
           node --import tsx --test tests/unit/password-recovery.test.ts
           node --import tsx --test tests/unit/email-verification.test.ts
+          node --import tsx --test tests/unit/mail-config.test.ts
 
       - name: Install payment test browser
         timeout-minutes: 10
@@ -68,7 +69,7 @@ jobs:
       - name: Payment backend and browser integration (isolated database, synthetic gateway)
         timeout-minutes: 5
         run: |
-          node --import tsx --test tests/integration/payment-backend.test.ts tests/integration/payment-checkout-browser.test.ts
+          node --import tsx --test tests/integration/payment-backend.test.ts tests/integration/payment-checkout-browser.test.ts tests/integration/password-recovery-backend.test.ts
 
       - name: Deploy and verify on VPS
         uses: appleboy/ssh-action@v1.2.0
@@ -105,6 +106,7 @@ jobs:
                 await db.query('SELECT payment_id, subscription_id, remote_updated_at, activated_at, expires_at FROM gateway_payment_state LIMIT 0');
                 await db.query('SELECT gateway_event_id, attempts, status FROM webhook_events LIMIT 0');
                 await db.query('SELECT version, is_active, allow_new_subscriptions FROM plans LIMIT 0');
+                await db.query('SELECT user_id, version FROM user_auth_state LIMIT 0');
                 console.log('Payment schema preflight: OK');
               } finally { await db.end(); }
             })().catch(()=>{console.error('Payment schema not ready. Apply the reviewed migration only after explicit backup/authorization. No deployment performed.');process.exitCode=1;});

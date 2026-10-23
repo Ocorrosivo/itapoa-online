@@ -40,7 +40,8 @@ export async function createPaymentHarness() {
     'database/migrations/20261020_admin_master_and_grants.sql',
     'database/migrations/20261021_mercadopago_trial_and_billing.sql',
     'database/migrations/20261022_webhook_events_and_orphan_media.sql',
-    'database/migrations/20261021_payment_settlement.sql']) {
+    'database/migrations/20261021_payment_settlement.sql',
+    'database/migrations/20261021_password_recovery.sql']) {
     await sqlScript(admin, await fs.readFile(file, 'utf8'));
   }
   const { pool } = await import('../../src/server/mysql.js');
