@@ -117,3 +117,23 @@ alterou pagamentos ou configuração de produção. Foi incorporada somente à b
 de auditoria em `232112c`. Lint/build e testes repetidos após essa integração.
 CI do PR na revisão anterior passou lint/build, smoke e integração; etapa SSH foi
 ignorada corretamente. Uma nova execução valida a revisão final do PR.
+
+## 23/10 — backup criado após autorização
+
+Usuário confirmou ausência de cópia e autorizou criar. Autorizou expressamente
+acesso temporário somente de leitura do pacote, com expiração e remoção após
+transferência. Backup/restore `39908273388`: sucesso. Pacote privado criado na
+VPS e copiado para `Downloads/Backups Itapoa Online/2026-10-23/`; SHA-256
+`96e264a8fb460fd7c39373302f31f0a24467b803cdd8e19447495206ddebf340`.
+Restaurado em banco isolado, fingerprints e arquivos conferidos. Zero uploads
+atuais ou recuperáveis nos containers antigos disponíveis. Não inventar recuperação
+dos 142 arquivos. Nenhum dado de produção alterado.
+
+Revogação `39908756465`: sucesso. Chave pública temporária removida do GitHub;
+privada temporária apagada do computador. Backup preservado. Dois testes adicionais
+de manifestos passaram. Detalhes: `deployment/BACKUP_RESTORE.md`.
+
+Easypanel foi aberto com a habilidade de navegação; está na tela de login,
+deixado visível/em handoff para o responsável. Pergunta de autenticação enviada.
+Não preencher senha/2FA nem redefinir senha da infraestrutura. Não configurar
+volume só no Docker deixando o controlador do Easypanel divergente.

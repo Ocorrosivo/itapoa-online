@@ -2,7 +2,9 @@
 
 **Não é uma homologação integral nem uma publicação concluída.** Correções de
 código estão em `codex/auditoria-geral`; produção não foi alterada nesta etapa.
-Há bloqueios de armazenamento/backups e configuração financeira em produção.
+Atualização: backup criado, restaurado e copiado para fora da VPS. Continuam
+pendentes o armazenamento persistente e a configuração financeira no Easypanel;
+o navegador está na tela de login e depende de autenticação do responsável.
 
 ## 1. Ambiente e evidências
 
@@ -94,7 +96,7 @@ Há bloqueios de armazenamento/backups e configuração financeira em produção
 | SMTP real | PENDENTE | Host/senha presentes; entrega anterior confirmada pelo usuário, não repetida nesta etapa |
 | Perfil administrativo | CORRIGIDA, MAS AGUARDANDO VALIDAÇÃO | Correção compila; fluxo visual autenticado após publicação ainda não homologado |
 | EasyPanel/aplicação | FUNCIONANDO SEM ALTERAÇÕES | Imagem/SHA/saúde identificados; configuração persistente de uploads ausente |
-| Backup externo | BLOQUEADA POR DEPENDÊNCIA EXTERNA | Não informado local/provedor nem prova de restauração atual |
+| Backup externo | CORRIGIDA E TESTADA | Criado em 23/10, restauração isolada conferida, cópia no computador com SHA-256 idêntico |
 | Deploy desta auditoria | PENDENTE | Sem merge/push main, sem mudança de configuração ou recriação |
 
 ## 6. Infraestrutura, banco e arquivos
@@ -162,3 +164,30 @@ Rollback de código: imagem anterior conhecida, preservando env/mounts; confirma
 saúde/SHA após reversão. Não restaurar banco antigo sobre vendas novas e não
 remover volumes. Migrações destrutivas, limpeza de arquivos e alterações de contas
 nunca fazem parte automática da publicação.
+
+## 9. Atualização — backup autorizado e concluído
+
+O responsável informou que não havia cópia externa e autorizou sua criação.
+Autorizou separadamente uma chave SSH temporária limitada à leitura do pacote.
+
+- Backup/restore real: Actions `39908273388`, sucesso, sem migração.
+- VPS: `/var/backups/itapoa/site-20261023T055338Z-39908273388/`.
+- Cópia permanente fora da VPS: `Downloads/Backups Itapoa Online/2026-10-23/`.
+- Pacote `site-20261023T055338Z-39908273388.tar.gz`, 19.713 bytes.
+- SHA-256 conferido nas duas cópias:
+  `96e264a8fb460fd7c39373302f31f0a24467b803cdd8e19447495206ddebf340`.
+- Dump restaurado em container isolado da mesma imagem; `mariadb-check` e
+  fingerprints conferidos. Uploads antes/depois/cópia conferidos: zero arquivos.
+- Containers antigos disponíveis também não continham uploads recuperáveis.
+  Não houve recuperação comprovada dos 142 arquivos históricos.
+- Acesso temporário removido: Actions `39908756465`, sucesso. Chave pública
+  temporária apagada do GitHub e chave privada temporária apagada do computador.
+- Pacote não foi publicado em artifacts, logs ou repositório; cópias privadas
+  preservadas. Procedimento e limites em `deployment/BACKUP_RESTORE.md`.
+- Dois testes novos aprovados verificam a ferramenta de manifesto. Os 123
+  testes anteriores permanecem registrados; CI executa a suíte ampliada.
+
+O item 1 de retomada está atendido para o estado atual, exceto os arquivos
+históricos não localizados. Armazenamento/variáveis/deploy permanecem pendentes.
+Não usar restauração de senha ou recuperação de conta do Easypanel para contornar
+a autenticação: o responsável deve fazer login diretamente no navegador.
