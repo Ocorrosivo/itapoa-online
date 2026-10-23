@@ -116,10 +116,10 @@ export const HomePage: React.FC<HomePageProps> = ({
           aria-hidden="true"
         />
 
-        {/* Ambient Gradient Overlays for Readability & Contrast */}
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/50 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/60 via-transparent to-slate-950/80" />
+        {/* Ambient Gradient Overlays for Readability & Contrast (-35% de overlay para maior visibilidade da praia) */}
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/60 via-slate-950/30 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/65 via-slate-950/15 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/40 via-transparent to-slate-950/50 pointer-events-none" />
 
         {/* Hero Content Container */}
         <div className="relative z-10 max-w-7xl mx-auto px-4 pt-10 sm:pt-14 lg:pt-16 pb-8 sm:pb-10 flex flex-col justify-between min-h-[520px] sm:min-h-[560px] lg:min-h-[600px]">
