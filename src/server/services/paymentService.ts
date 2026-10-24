@@ -16,6 +16,7 @@ import crypto from 'crypto';
 import { pool } from '../mysql.js';
 import { PaymentError } from './paymentError.js';
 import { assertGatewayPayment, mercadoPagoGet, paymentCents, settlePayment } from './paymentSettlement.js';
+import { checkoutPurchasePrice, previewCheckoutOffer, type CheckoutMethod } from './checkoutOffer.js';
 export { PaymentError } from './paymentError.js';
 
 const MP_API = 'https://api.mercadopago.com';
@@ -38,6 +39,11 @@ interface CreatedPix {
 }
 
 class PaymentService {
+  async checkoutQuote(userId: string, planId: string, method: string) {
+    if (!['card','pix'].includes(method)) throw new PaymentError(400, 'Modalidade inválida.');
+    const plan = await this.getPlan(planId);
+    return previewCheckoutOffer(pool, userId, planId, plan.price, method as CheckoutMethod);
+  }
   async gatewayConfig() {
     const [rows]: any = await pool.query('SELECT publicKey, accessToken FROM payment_config WHERE id = ? LIMIT 1', ['payment']);
     const dbPublicKey = rows[0]?.publicKey?.trim();
@@ -57,26 +63,29 @@ class PaymentService {
   }
 
   /** Only SDK-tokenized card data is accepted. Price and ownership never come from the browser. */
-  private async withCreationLock<T>(companyId: string, planId: string, action: (db: any) => Promise<T>): Promise<T> {
+  private async withCreationLock<T>(companyId: string, planId: string, action: (db: any) => Promise<T>, promotionScope?: string): Promise<T> {
     const db = await pool.getConnection();
     const key = 'itapoa:pay:' + crypto.createHash('sha256').update(companyId + ':' + planId).digest('hex').slice(0, 48);
-    let locked = false, reusable = true;
+    const keys = [key, ...(promotionScope ? ['itapoa:promo:' + crypto.createHash('sha256').update(promotionScope).digest('hex').slice(0,48)] : [])].sort();
+    const locked: string[] = []; let reusable = true;
     try {
-      const [rows]: any = await db.query('SELECT GET_LOCK(?, 5) AS acquired', [key]);
-      if (Number(rows[0]?.acquired) !== 1) throw new PaymentError(409, 'Uma tentativa está sendo processada. Aguarde antes de tentar novamente.');
-      locked = true;
+      for (const lock of keys) {
+        const [rows]: any = await db.query('SELECT GET_LOCK(?, 5) AS acquired', [lock]);
+        if (Number(rows[0]?.acquired) !== 1) throw new PaymentError(409, 'Uma tentativa está sendo processada. Aguarde antes de tentar novamente.');
+        locked.push(lock);
+      }
       return await action(db);
     } finally {
-      if (locked) {
-        try { await db.query('SELECT RELEASE_LOCK(?)', [key]); }
-        catch { db.destroy(); reusable = false; }
+      for (const lock of locked.reverse()) {
+        try { await db.query('SELECT RELEASE_LOCK(?)', [lock]); }
+        catch { db.destroy(); reusable = false; break; }
       }
       if (reusable) db.release();
     }
   }
 
   async createCardPayment(userId: string, companyId: string, planId: string, input: Record<string, any>, appUrl: string) {
-    return this.withCreationLock(companyId, planId, db => this.createCardPaymentLocked(userId, companyId, planId, input, appUrl, db));
+    return this.withCreationLock(companyId, planId, db => this.createCardPaymentLocked(userId, companyId, planId, input, appUrl, db), input.couponCode ? `${userId}:card` : undefined);
   }
 
   private async createCardPaymentLocked(userId: string, companyId: string, planId: string, input: Record<string, any>, appUrl: string, db: any) {
@@ -101,20 +110,23 @@ class PaymentService {
         !(docType === 'CPF' ? /^\d{11}$/ : /^\d{14}$/).test(docNumber)) {
       throw new PaymentError(400, 'Confira os dados do pagamento.');
     }
-    const [pending]: any = await db.query("SELECT id, userId, paymentMethod, createdAt, TIMESTAMPDIFF(SECOND, createdAt, UTC_TIMESTAMP()) AS ageSeconds FROM subscriptions WHERE companyId=? AND planId=? AND status='pending' ORDER BY createdAt DESC LIMIT 1", [companyId, planId]);
+    const [pending]: any = await db.query("SELECT id, userId, paymentMethod, amount, createdAt, TIMESTAMPDIFF(SECOND, createdAt, UTC_TIMESTAMP()) AS ageSeconds FROM subscriptions WHERE companyId=? AND planId=? AND status='pending' ORDER BY createdAt DESC LIMIT 1", [companyId, planId]);
     if (pending[0]) {
       if (pending[0].userId !== userId || pending[0].paymentMethod !== 'credit_card') throw new PaymentError(409, 'Há outro pagamento em andamento para este plano. Retome a tentativa existente.');
       // Age is not evidence that a remote charge failed. Never replay a token.
-      return { subscriptionId: pending[0].id, status: 'unknown' };
+      return { subscriptionId: pending[0].id, status: 'unknown', amount: Number(pending[0].amount) };
     }
     const subscriptionId = `card_${crypto.createHash('sha256').update(`${userId}:${requestId}`).digest('hex')}`;
     const [usedAttempt]: any = await db.query('SELECT id FROM subscriptions WHERE id=?', [subscriptionId]);
     if (usedAttempt.length) throw new PaymentError(409, 'Esta tentativa já foi utilizada. Consulte seu status antes de iniciar outra.');
+    const pricing = await checkoutPurchasePrice(db, userId, planId, plan.price, 'card', input);
+    plan.price = pricing.amount;
     await db.query(
       `INSERT IGNORE INTO subscriptions (id, userId, companyId, planId, status, amount, paymentMethod, payment_type, contracted_price, plan_version, nextBillingDate)
-       VALUES (?, ?, ?, ?, 'pending', ?, 'credit_card', 'onetime_card', ?, ?, ?)`,
-      [subscriptionId, userId, companyId, planId, plan.price, plan.price, plan.version || 1, new Date(Date.now() + 30 * 86400000)]
-    ).catch(async () => {
+       VALUES (?, ?, ?, ?, 'pending', ?, 'credit_card', ?, ?, ?, ?)`,
+      [subscriptionId, userId, companyId, planId, plan.price, pricing.paymentType, plan.price, plan.version || 1, new Date(Date.now() + 30 * 86400000)]
+    ).catch(async (error) => {
+      if (pricing.promotional) throw error;
       return await db.query(
         `INSERT IGNORE INTO subscriptions (id, userId, companyId, planId, status, amount, paymentMethod, nextBillingDate)
          VALUES (?, ?, ?, ?, 'pending', ?, 'credit_card', ?)`,
@@ -195,8 +207,9 @@ class PaymentService {
   }
 
   async createPixPayment(userId: string, companyId: string, planId: string, payerEmail: string,
-    payerName?: string, payerDoc?: { type?: string; number?: string }, requestId?: string): Promise<CreatedPix> {
-    return this.withCreationLock(companyId, planId, db => this.createPixPaymentLocked(userId, companyId, planId, payerEmail, payerName, payerDoc, requestId, db));
+    payerName?: string, payerDoc?: { type?: string; number?: string }, requestId?: string,
+    pricingInput: { couponCode?: unknown; quotedAmount?: unknown } = {}): Promise<CreatedPix> {
+    return this.withCreationLock(companyId, planId, db => this.createPixPaymentLocked(userId, companyId, planId, payerEmail, payerName, payerDoc, requestId, db, pricingInput), pricingInput.couponCode ? `${userId}:pix` : undefined);
   }
 
   private async createPixPaymentLocked(
@@ -207,7 +220,8 @@ class PaymentService {
     payerName: string | undefined,
     payerDoc: { type?: string; number?: string } | undefined,
     requestId: string | undefined,
-    db: any
+    db: any,
+    pricingInput: { couponCode?: unknown; quotedAmount?: unknown }
   ): Promise<CreatedPix> {
     if (typeof payerEmail !== 'string' || payerEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payerEmail)) throw new PaymentError(400, 'Informe um e-mail válido para o pagamento.');
     await this.assertGatewayReady(db);
@@ -225,13 +239,13 @@ class PaymentService {
 
     const token = await this.accessToken(db);
 
-    const [pending]: any = await db.query("SELECT id, createdAt, TIMESTAMPDIFF(SECOND, createdAt, UTC_TIMESTAMP()) AS ageSeconds FROM subscriptions WHERE companyId=? AND planId=? AND status='pending' AND paymentMethod='pix' ORDER BY createdAt DESC LIMIT 1", [companyId, planId]);
+    const [pending]: any = await db.query("SELECT id, amount, createdAt, TIMESTAMPDIFF(SECOND, createdAt, UTC_TIMESTAMP()) AS ageSeconds FROM subscriptions WHERE companyId=? AND planId=? AND status='pending' AND paymentMethod='pix' ORDER BY createdAt DESC LIMIT 1", [companyId, planId]);
     if (pending[0]) {
         const [logs]: any = await db.query('SELECT gateway_reference FROM payment_logs WHERE subscriptionId=? LIMIT 1', [pending[0].id]);
         if (!logs[0]?.gateway_reference) throw new PaymentError(409, 'Existe uma tentativa sem confirmação. Aguarde a reconciliação; não gere outra cobrança.');
         const previous = await mercadoPagoGet('/v1/payments/' + encodeURIComponent(logs[0].gateway_reference), token);
         assertGatewayPayment(previous, String(logs[0].gateway_reference), token, await mercadoPagoGet('/users/me', token), pending[0].id);
-        if (previous.external_reference !== pending[0].id || previous.currency_id !== 'BRL' || paymentCents(previous.transaction_amount) !== paymentCents(plan.price)) {
+        if (previous.external_reference !== pending[0].id || previous.currency_id !== 'BRL' || paymentCents(previous.transaction_amount) !== paymentCents(pending[0].amount)) {
           throw new PaymentError(422, 'A cobrança anterior requer conferência. Nenhuma nova cobrança foi criada.');
         }
         const expired = previous.status === 'pending' && typeof previous.date_of_expiration === 'string' && new Date(previous.date_of_expiration).getTime() <= Date.now();
@@ -244,14 +258,17 @@ class PaymentService {
     const subscriptionId = 'pix_' + crypto.createHash('sha256').update(userId + ':' + companyId + ':' + planId + ':' + normReqId).digest('hex');
     const [used]: any = await db.query('SELECT id FROM subscriptions WHERE id=?', [subscriptionId]);
     if (used.length) throw new PaymentError(409, 'Esta tentativa já foi utilizada. Inicie uma nova tentativa após confirmar o encerramento da anterior.');
+    const pricing = await checkoutPurchasePrice(db, userId, planId, plan.price, 'pix', pricingInput);
+    plan.price = pricing.amount;
     const nextBilling = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
     await db.query(
       `INSERT IGNORE INTO subscriptions
          (id, userId, companyId, planId, status, amount, paymentMethod, payment_type, contracted_price, plan_version, nextBillingDate)
-       VALUES (?, ?, ?, ?, 'pending', ?, 'pix', 'onetime_pix', ?, ?, ?)`,
-      [subscriptionId, userId, companyId, planId, plan.price, plan.price, plan.version || 1, nextBilling]
-    ).catch(async () => {
+       VALUES (?, ?, ?, ?, 'pending', ?, 'pix', ?, ?, ?, ?)`,
+      [subscriptionId, userId, companyId, planId, plan.price, pricing.paymentType, plan.price, plan.version || 1, nextBilling]
+    ).catch(async (error) => {
+      if (pricing.promotional) throw error;
       return await db.query(
         `INSERT IGNORE INTO subscriptions
            (id, userId, companyId, planId, status, amount, paymentMethod, nextBillingDate)

@@ -180,7 +180,7 @@ export const HomePage: React.FC<HomePageProps> = ({
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950/45 via-transparent to-transparent pointer-events-none" />
 
         {/* Hero Content Container */}
-        <div className="relative z-10 max-w-7xl mx-auto px-4 pt-10 sm:pt-14 lg:pt-16 pb-8 sm:pb-10 flex flex-col justify-between min-h-[560px] sm:min-h-[600px] lg:min-h-[640px]">
+        <div className="relative z-10 max-w-7xl mx-auto px-4 pt-20 sm:pt-24 lg:pt-28 pb-8 sm:pb-10 flex flex-col justify-between min-h-[560px] sm:min-h-[600px] lg:min-h-[640px]">
           {/* Headline block */}
           <div className="max-w-2xl space-y-3 sm:space-y-4">
             <div className="inline-flex items-center gap-2.5">

@@ -33,6 +33,7 @@ export async function createPaymentHarness(uploadDirectory?: string) {
     MERCADOPAGO_WEBHOOK_SECRET: 'fixture-webhook-signature-only', MERCADOPAGO_MODE: 'test',
     // Never inherit a real SMTP transport from the operator's shell.
     SMTP_HOST: '',
+    PAYMENT_TEST_ACCOUNT_EMAIL: '', PAYMENT_TEST_STARTS_AT: '', PAYMENT_TEST_EXPIRES_AT: '',
   });
   const admin = await mysql.createConnection({ host: '127.0.0.1', port, user: 'root', password });
   await admin.query(`CREATE DATABASE \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
@@ -43,7 +44,8 @@ export async function createPaymentHarness(uploadDirectory?: string) {
     'database/migrations/20261021_mercadopago_trial_and_billing.sql',
     'database/migrations/20261022_webhook_events_and_orphan_media.sql',
     'database/migrations/20261021_payment_settlement.sql',
-    'database/migrations/20261021_password_recovery.sql']) {
+    'database/migrations/20261021_password_recovery.sql',
+    'database/migrations/20261022_email_verification.sql']) {
     await sqlScript(admin, await fs.readFile(file, 'utf8'));
   }
   const { pool } = await import('../../src/server/mysql.js');

@@ -47,6 +47,13 @@ apiRouter.use('/auth', passwordRecoveryRouter);
 
 const ADMIN_ONLY = ['admin_master'];
 
+async function requireVerifiedEmail(userId: string) {
+  const { emailVerificationService } = await import('../services/emailVerificationService.js');
+  if (!await emailVerificationService.isUserVerified(userId)) {
+    throw new VerificationError(403, 'Confirme seu e-mail antes de continuar a contratação.');
+  }
+}
+
 /**
  * Single error funnel. Known service errors keep their status; anything else
  * becomes a 500 with a generic body so internals never reach the client.
@@ -106,8 +113,8 @@ apiRouter.post('/auth/login', handler(async (req, res) => {
 
 apiRouter.post('/auth/register', handler(async (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
-  const { token, user } = await authService.register({ ...(req.body ?? {}), ip });
-  res.json({ success: true, token, user });
+  const { token, user, verificationEmailSent } = await authService.register({ ...(req.body ?? {}), ip });
+  res.json({ success: true, token, user, verificationEmailSent });
 }));
 
 // Confirmação de e-mail via POST (anti-scanner: nunca consome em GET)
@@ -115,7 +122,8 @@ apiRouter.post('/auth/verify-email', handler(async (req, res) => {
   const { emailVerificationService } = await import('../services/emailVerificationService.js');
   const token = req.body?.token;
   const result = await emailVerificationService.verifyToken(token);
-  res.json({ success: true, message: 'E-mail confirmado com sucesso!', email: result.email });
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ success: true, message: 'E-mail confirmado com sucesso!', userId: result.userId, email: result.email });
 }));
 
 // Reenvio seguro com rate-limit e cooldown de 60s
@@ -134,7 +142,7 @@ apiRouter.post('/auth/resend-verification', handler(async (req, res) => {
   }
 
   const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
-  const sent = await emailVerificationService.sendVerification(users[0].id, email, ip);
+  const sent = await emailVerificationService.sendVerification(users[0].id, email, ip, req.body?.planId);
   if (!sent) {
     return res.status(503).json({
       success: false,
@@ -145,6 +153,7 @@ apiRouter.post('/auth/resend-verification', handler(async (req, res) => {
 }));
 
 apiRouter.get('/auth/verification-status', requireAuth, handler(async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   const { emailVerificationService } = await import('../services/emailVerificationService.js');
   const verified = await emailVerificationService.isUserVerified(req.user!.id);
   res.json({ verified });
@@ -441,12 +450,18 @@ apiRouter.get('/payments/config', handler(async (_req, res) => {
   res.json(await paymentService.gatewayConfig());
 }));
 
+apiRouter.get('/payments/quote', requireAuth, handler(async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(await paymentService.checkoutQuote(req.user!.id, String(req.query.planId || ''), String(req.query.method || '')));
+}));
+
 apiRouter.get('/account/companies', requireAuth, handler(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json(await listOwnedCompanies(req.user!.id));
 }));
 
 apiRouter.post('/checkout/company', requireAuth, handler(async (req, res) => {
+  await requireVerifiedEmail(req.user!.id);
   const contact = checkoutContact(req.body?.contact ?? {});
   if (!['plan_bronze', 'plan_gold_vip', 'plan_diamond_extremo'].includes(req.body?.planId)) {
     return res.status(400).json({ error: 'Plano inválido.' });
@@ -465,6 +480,7 @@ apiRouter.post('/checkout/company', requireAuth, handler(async (req, res) => {
 }));
 
 apiRouter.post('/payments/card', requireAuth, requireCompanyAccess, handler(async (req, res) => {
+  await requireVerifiedEmail(req.user!.id);
   const companyId = (req.companyIds && req.companyIds[0]) || String(req.body?.companyId ?? '');
   const planId = typeof req.body?.planId === 'string' ? req.body.planId : '';
   if (!planId) return res.status(400).json({ error: 'Plano obrigatório.' });
@@ -474,6 +490,7 @@ apiRouter.post('/payments/card', requireAuth, requireCompanyAccess, handler(asyn
 // Create a real PIX charge. Company access is verified (anti-IDOR); the payer
 // email defaults to the session user.
 apiRouter.post('/payments/pix', requireAuth, requireCompanyAccess, handler(async (req, res) => {
+  await requireVerifiedEmail(req.user!.id);
   const companyId = (req.companyIds && req.companyIds[0]) || String(req.body?.companyId ?? req.body?.company_id ?? '');
   const planId = String(req.body?.planId ?? '');
   if (!planId) return res.status(400).json({ error: 'planId obrigatório.' });
@@ -481,7 +498,7 @@ apiRouter.post('/payments/pix', requireAuth, requireCompanyAccess, handler(async
   const requestId = typeof req.body?.requestId === 'string' ? req.body.requestId : undefined;
   const payerName = typeof req.body?.payerName === 'string' ? req.body.payerName : undefined;
   const payerDoc = req.body?.payerDoc && typeof req.body.payerDoc === 'object' ? req.body.payerDoc : undefined;
-  res.json(await paymentService.createPixPayment(req.user!.id, companyId, planId, payerEmail, payerName, payerDoc, requestId));
+  res.json(await paymentService.createPixPayment(req.user!.id, companyId, planId, payerEmail, payerName, payerDoc, requestId, { couponCode: req.body?.couponCode, quotedAmount: req.body?.quotedAmount }));
 }));
 
 // Resume card/pix checkout after a reload without replaying an SDK token or charging again.
@@ -492,13 +509,13 @@ apiRouter.get('/payments/attempt/active', requireAuth, attachCompanyScope, handl
   
   const pool = (await import('../mysql.js')).pool;
   // Reading checkout state must never cancel a potentially successful charge.
-  const [rows]: any = await pool.query(`SELECT s.id AS subscriptionId, s.status, s.companyId, s.planId, s.paymentMethod,
+  const [rows]: any = await pool.query(`SELECT s.id AS subscriptionId, s.status, s.companyId, s.planId, s.paymentMethod, s.amount,
     NULL AS expiresAt,
     s.createdAt
     FROM subscriptions s WHERE s.companyId=? AND s.planId=?
     AND (s.paymentMethod='credit_card' OR (s.paymentMethod='pix' AND NOT EXISTS (SELECT 1 FROM payment_logs pl WHERE pl.subscriptionId=s.id)))
     AND (
-      s.status='pending'
+      (s.status='pending')
       OR (s.status='active' AND (s.nextBillingDate IS NULL OR s.nextBillingDate > UTC_TIMESTAMP()) AND s.createdAt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 MINUTE))
     )
     ORDER BY s.createdAt DESC LIMIT 1`, [companyId, planId]);
@@ -515,6 +532,7 @@ apiRouter.get('/payments/attempt/active', requireAuth, attachCompanyScope, handl
     companyId: result.companyId,
     planId: result.planId,
     paymentMethod: result.paymentMethod,
+    amount: Number(result.amount),
     expiresAt: null
   });
 }));

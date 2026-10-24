@@ -176,7 +176,7 @@ export interface CompanyEntitlements {
     hasUsedTrial?: boolean;
     subscriptionId?: string | null;
     subscriptionStatus?: string | null;
-    paymentType?: 'subscription' | 'onetime_pix' | null;
+    paymentType?: 'subscription' | 'onetime_pix' | 'onetime_card' | null;
     paymentMethod?: string | null;
     nextBillingDate?: string | null;
     contractedPrice?: number | null;
@@ -461,7 +461,9 @@ export class EntitlementService {
         hasUsedTrial,
         subscriptionId: activeSub?.id ?? null,
         subscriptionStatus: activeSub?.status ?? null,
-        paymentType: activeSub?.payment_type ?? (activeSub?.paymentMethod === 'pix' ? 'onetime_pix' : activeSub ? 'subscription' : null),
+        paymentType: activeSub?.payment_type === 'portal_test_card_v1' ? 'onetime_card'
+          : activeSub?.payment_type === 'portal_test_pix_v1' ? 'onetime_pix'
+          : activeSub?.payment_type ?? (activeSub?.paymentMethod === 'pix' ? 'onetime_pix' : activeSub ? 'subscription' : null),
         paymentMethod: activeSub?.paymentMethod ?? null,
         nextBillingDate: activeSub?.nextBillingDate ? new Date(activeSub.nextBillingDate).toISOString() : null,
         contractedPrice: activeSub?.contracted_price ? Number(activeSub.contracted_price) : activeSub?.amount ? Number(activeSub.amount) : null,

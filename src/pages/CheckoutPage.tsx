@@ -14,7 +14,9 @@ import {
   AlertTriangle,
   RefreshCw,
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  Zap,
+  ArrowRight
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/apiClient';
@@ -29,6 +31,14 @@ interface Gateway {
   publicKey: string;
   pixEnabled: boolean;
   cardEnabled: boolean;
+}
+
+interface CheckoutQuote {
+  amount: number;
+  originalAmount: number;
+  couponCode: string | null;
+  expiresAt?: string;
+  notice?: string;
 }
 
 interface Plan {
@@ -60,6 +70,304 @@ type CheckoutState =
   | 'expired'
   | 'unavailable';
 
+interface PaymentCountdownTimerProps {
+  secondsRemaining: number | null;
+  checkingStatus: boolean;
+  onCheckStatus: () => void;
+  isExpired?: boolean;
+  onStartNewAttempt?: () => void;
+}
+
+function PaymentCountdownTimer({
+  secondsRemaining,
+  checkingStatus,
+  onCheckStatus,
+  isExpired,
+  onStartNewAttempt
+}: PaymentCountdownTimerProps) {
+  const minutes = secondsRemaining !== null ? Math.floor(secondsRemaining / 60) : 5;
+  const seconds = secondsRemaining !== null ? secondsRemaining % 60 : 0;
+  const isExpiringSoon = secondsRemaining !== null && secondsRemaining < 60;
+  const hasExpired = isExpired || (secondsRemaining !== null && secondsRemaining <= 0);
+
+  return (
+    <div className="mt-5 rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white p-5 sm:p-7 shadow-xl border border-slate-800 relative overflow-hidden">
+      {/* Luz ambiente decorativa */}
+      <div className="absolute -top-12 -right-12 w-48 h-48 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+
+      {/* Top Header com Status Ativo */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800/80">
+        <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 w-fit">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span className="text-[11px] font-black tracking-wider uppercase text-emerald-400">
+            Aguardando Pagamento em Tempo Real
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-400">
+          <ShieldCheck size={14} className="text-emerald-400 shrink-0" />
+          <span>Sessão Criptografada • Pagamento Seguro</span>
+        </div>
+      </div>
+
+      {/* Informações do Prazo */}
+      <div className="py-4 text-center space-y-2">
+        <div className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+          {hasExpired ? 'Tentativa expirada' : isExpiringSoon ? 'Atenção ao tempo' : 'Prazo de conclusão'}
+        </div>
+        <p className="text-xs sm:text-sm text-slate-300 max-w-md mx-auto leading-relaxed">
+          Tempo restante para concluir esta tentativa de pagamento:
+        </p>
+
+        {/* Display Numérico Digital dos Minutos e Segundos */}
+        {!hasExpired ? (
+          <div className="flex items-center justify-center gap-2 sm:gap-3 pt-2 pb-1">
+            <div className="flex flex-col items-center">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-slate-900 border border-slate-700/80 flex items-center justify-center text-3xl sm:text-4xl font-black font-mono tracking-tight text-white shadow-inner">
+                {String(minutes).padStart(2, '0')}
+              </div>
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest mt-1.5">Minutos</span>
+            </div>
+
+            <div className="text-2xl sm:text-3xl font-black text-slate-600 mb-5 animate-pulse">:</div>
+
+            <div className="flex flex-col items-center">
+              <div
+                className={`w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-slate-900 border flex items-center justify-center text-3xl sm:text-4xl font-black font-mono tracking-tight shadow-inner transition-colors ${
+                  isExpiringSoon
+                    ? 'border-red-500 text-red-400 bg-red-950/40 animate-pulse'
+                    : 'border-slate-700/80 text-emerald-400'
+                }`}
+              >
+                {String(seconds).padStart(2, '0')}
+              </div>
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest mt-1.5">Segundos</span>
+            </div>
+          </div>
+        ) : (
+          <div className="py-3">
+            <span className="px-4 py-2 rounded-xl bg-red-500/20 border border-red-500/40 text-red-300 font-bold text-xs sm:text-sm inline-block">
+              Tentativa expirada. Inicie uma nova contratação abaixo.
+            </span>
+          </div>
+        )}
+
+        {/* Barra sutil de progresso */}
+        {!hasExpired && secondsRemaining !== null && (
+          <div className="w-full max-w-xs mx-auto bg-slate-800 rounded-full h-1.5 overflow-hidden mt-3">
+            <div
+              className={`h-full rounded-full transition-all duration-1000 ${
+                isExpiringSoon ? 'bg-red-500' : 'bg-gradient-to-r from-emerald-500 to-teal-400'
+              }`}
+              style={{ width: `${Math.min(100, Math.max(0, (secondsRemaining / 1800) * 100))}%` }}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Botões de Ação */}
+      <div className="pt-2 flex flex-col sm:flex-row gap-3">
+        <button
+          type="button"
+          onClick={onCheckStatus}
+          disabled={checkingStatus || hasExpired}
+          className="flex-1 py-3.5 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-sm transition-all duration-200 flex items-center justify-center gap-2.5 shadow-lg shadow-emerald-500/20 active:scale-[0.99] cursor-pointer disabled:opacity-50"
+        >
+          <RefreshCw size={16} className={checkingStatus ? 'animate-spin text-slate-950' : 'text-slate-950'} />
+          <span>{checkingStatus ? 'Consultando provedor…' : 'Verificar pagamento agora'}</span>
+        </button>
+
+        {onStartNewAttempt && (
+          <button
+            type="button"
+            onClick={onStartNewAttempt}
+            className="px-5 py-3.5 rounded-2xl border border-slate-700 bg-slate-800/80 hover:bg-slate-700 text-slate-200 font-bold text-xs sm:text-sm transition-all cursor-pointer"
+          >
+            Nova tentativa
+          </button>
+        )}
+      </div>
+
+      {/* Micro-benefícios de Confiança */}
+      <div className="grid grid-cols-3 gap-2 pt-4 mt-4 border-t border-slate-800/60 text-center text-[10px] font-semibold text-slate-400">
+        <div className="flex flex-col items-center gap-1">
+          <span className="text-emerald-400 text-xs">⚡</span>
+          <span>Reconhecimento Automático</span>
+        </div>
+        <div className="flex flex-col items-center gap-1">
+          <span className="text-emerald-400 text-xs">🛡️</span>
+          <span>Transação Segura</span>
+        </div>
+        <div className="flex flex-col items-center gap-1">
+          <span className="text-emerald-400 text-xs">✨</span>
+          <span>Ativação Instantânea</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface ThankYouApprovedPageProps {
+  plan: Plan | null;
+  companyName: string;
+  subscriptionId: string;
+  reservedAmount: number | null;
+  method: 'card' | 'pix';
+  onNavigateTab: (tab: string) => void;
+}
+
+function ThankYouApprovedPage({
+  plan,
+  companyName,
+  subscriptionId,
+  reservedAmount,
+  method,
+  onNavigateTab
+}: ThankYouApprovedPageProps) {
+  const [secondsLeft, setSecondsLeft] = useState(3);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          clearPendingPurchase();
+          onNavigateTab('painel');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [onNavigateTab]);
+
+  const handleGoToPanelNow = () => {
+    clearPendingPurchase();
+    onNavigateTab('painel');
+  };
+
+  const isDiamond = plan?.id?.includes('diamond');
+  const isGold = plan?.id?.includes('gold');
+
+  return (
+    <div className="min-h-[75vh] flex items-center justify-center py-10 px-4 sm:px-6">
+      <div className="max-w-xl w-full bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-10 text-center shadow-xl relative overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+        {/* Glow de fundo */}
+        <div className="absolute -top-16 -right-16 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Ícone de Sucesso com Pulso */}
+        <div className="relative mx-auto w-20 h-20 sm:w-24 sm:h-24 mb-6">
+          <div className="absolute inset-0 bg-emerald-500/20 rounded-full blur-xl animate-pulse" />
+          <div className="relative w-full h-full bg-gradient-to-tr from-emerald-600 to-teal-500 text-white rounded-full flex items-center justify-center shadow-xl shadow-emerald-500/30">
+            <CheckCircle2 size={48} strokeWidth={2.5} />
+          </div>
+          <div className="absolute -top-1 -right-1 bg-amber-400 text-slate-950 p-1.5 rounded-full shadow-md">
+            <Sparkles size={16} />
+          </div>
+        </div>
+
+        {/* Título Oficial Exato para testes e acessibilidade */}
+        <h1 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight mb-2">
+          Pagamento confirmado com sucesso!
+        </h1>
+
+        <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto leading-relaxed mb-6">
+          Obrigado por sua contratação! O plano{' '}
+          <span className="font-extrabold text-slate-900">{plan?.displayName || plan?.name}</span>{' '}
+          foi ativado com sucesso para{' '}
+          <span className="font-extrabold text-slate-900">{companyName}</span>.
+        </p>
+
+        {/* Card Resumo da Transação */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 border border-slate-200 text-left space-y-3 mb-6 text-xs sm:text-sm">
+          <div className="flex items-center justify-between pb-2.5 border-b border-slate-200">
+            <span className="text-slate-500 font-medium">Plano Contratado</span>
+            <span className="font-black text-slate-900 flex items-center gap-1.5">
+              {plan?.displayName || plan?.name}
+              <span
+                className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                  isDiamond
+                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                    : isGold
+                    ? 'bg-indigo-100 text-indigo-800 border border-indigo-300'
+                    : 'bg-slate-200 text-slate-800'
+                }`}
+              >
+                {isDiamond ? 'Diamond' : isGold ? 'Gold VIP' : 'Ativo'}
+              </span>
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between pb-2.5 border-b border-slate-200">
+            <span className="text-slate-500 font-medium">Empresa</span>
+            <span className="font-bold text-slate-900 truncate max-w-[220px]">{companyName}</span>
+          </div>
+
+          <div className="flex items-center justify-between pb-2.5 border-b border-slate-200">
+            <span className="text-slate-500 font-medium">Forma de Pagamento</span>
+            <span className="font-semibold text-slate-800">
+              {method === 'pix' ? 'Pix Oficial Instantâneo' : 'Cartão de Crédito'}
+            </span>
+          </div>
+
+          {reservedAmount !== null && (
+            <div className="flex items-center justify-between pb-2.5 border-b border-slate-200">
+              <span className="text-slate-500 font-medium">Valor</span>
+              <span className="font-black text-emerald-700">
+                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(reservedAmount)}
+              </span>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between">
+            <span className="text-slate-500 font-medium">Status</span>
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              Ativado no Sistema
+            </span>
+          </div>
+        </div>
+
+        {/* Caixa de Redirecionamento Automático em 3 Segundos */}
+        <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 mb-6 space-y-2">
+          <div className="flex items-center justify-center gap-2 text-xs sm:text-sm font-bold text-emerald-950">
+            <Clock size={16} className="text-emerald-700 animate-spin" />
+            <span>
+              Redirecionando para o seu Painel em {secondsLeft} {secondsLeft === 1 ? 'segundo' : 'segundos'}...
+            </span>
+          </div>
+
+          {/* Barra de Progresso Suave (3s -> 0s) */}
+          <div className="w-full bg-emerald-200/60 rounded-full h-2 overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-emerald-600 to-teal-500 rounded-full transition-all duration-1000 ease-linear"
+              style={{ width: `${Math.max(0, Math.min(100, ((3 - secondsLeft) / 3) * 100))}%` }}
+            />
+          </div>
+          <p className="text-[11px] text-emerald-800">
+            Você será direcionado automaticamente para personalizar seu anúncio e fotos.
+          </p>
+        </div>
+
+        {/* Botão de Escape / Acesso Imediato */}
+        <button
+          type="button"
+          onClick={handleGoToPanelNow}
+          className="w-full py-4 px-6 rounded-2xl bg-slate-950 hover:bg-slate-800 text-white font-black text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-slate-950/20 active:scale-[0.99] cursor-pointer"
+        >
+          <span>Acessar meu painel e completar anúncio</span>
+          <ArrowRight size={16} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) => void }) {
   const { user, isAuthenticated } = useAuth();
   const [intent] = useState(readPendingPurchase);
@@ -84,6 +392,25 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
   const [copied, setCopied] = useState(false);
   const [attemptExpiresAt, setAttemptExpiresAt] = useState<string | null>(null);
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
+  const [quoteState, setQuoteState] = useState<{ scope: string; quote: CheckoutQuote } | null>(null);
+  const [quoteError, setQuoteError] = useState('');
+  const [reservedAmount, setReservedAmount] = useState<number | null>(null);
+  const quoteScope = `${user?.id || ''}:${plan?.id || ''}:${method}`;
+  const currentQuote = quoteState?.scope === quoteScope ? quoteState.quote : null;
+  const payableAmount = reservedAmount ?? currentQuote?.amount ?? plan?.price ?? 0;
+
+  useEffect(() => {
+    setQuoteError('');
+    if (!isAuthenticated || !plan) return;
+    let active = true;
+    api.get<CheckoutQuote>(`/api/payments/quote?planId=${encodeURIComponent(plan.id)}&method=${method}`)
+      .then(quote => {
+        if (!Number.isFinite(quote.amount) || quote.amount < 0) throw new Error('Valor indisponível.');
+        if (active) setQuoteState({ scope: quoteScope, quote });
+      })
+      .catch(() => { if (active) { setQuoteState(null); setQuoteError('Não foi possível confirmar o valor. Recarregue antes de pagar.'); } });
+    return () => { active = false; };
+  }, [isAuthenticated, quoteScope]);
 
   const formRef = useRef<HTMLFormElement>(null);
   const preparedCompany = useRef('');
@@ -99,6 +426,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
   };
 
   const handleStartNewAttempt = () => {
+    setReservedAmount(null);
     setSubscriptionId('');
     setPix(null);
     setAttemptExpiresAt(null);
@@ -199,6 +527,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
       .then((existing) => {
         if (!canceled && existing && existing.qrCode) {
           setPix(existing);
+          setReservedAmount(existing.amount);
           setSubscriptionId(existing.subscriptionId);
           setAttemptExpiresAt(existing.expirationDate);
           setMethod('pix');
@@ -216,22 +545,20 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
   useEffect(() => {
     if (!isAuthenticated || !plan || !companyChoice || pix || subscriptionId) return;
     let active = true;
-    api.get<{ subscriptionId: string; status: string; paymentMethod: string; expiresAt?: string } | null>(`/api/payments/attempt/active?companyId=${encodeURIComponent(companyChoice)}&planId=${encodeURIComponent(plan.id)}`)
+    api.get<{ subscriptionId: string; status: string; paymentMethod: string; amount: number; expiresAt?: string } | null>(`/api/payments/attempt/active?companyId=${encodeURIComponent(companyChoice)}&planId=${encodeURIComponent(plan.id)}`)
       .then(attempt => {
         if (!active || !attempt?.subscriptionId) return;
-        setSubscriptionId(attempt.subscriptionId);
-        setMethod(attempt.paymentMethod === 'pix' ? 'pix' : 'card');
-        if (attempt.expiresAt) {
-          setAttemptExpiresAt(attempt.expiresAt);
-        }
         if (attempt.status === 'active') {
+          setSubscriptionId(attempt.subscriptionId);
+          setReservedAmount(Number(attempt.amount));
           setCheckoutState('approved');
           clearPendingPurchase();
-        } else if (attempt.status === 'expired') {
-          setCheckoutState('expired');
-          setError('Tempo esgotado. Esta tentativa de contratação expirou. Para continuar, inicie novamente o processo.');
-        } else {
-          setCheckoutState(attempt.paymentMethod === 'pix' ? 'pending_pix' : 'processing');
+        } else if (attempt.status === 'pending' && (attempt.paymentMethod === 'card' || attempt.paymentMethod === 'credit_card')) {
+          setSubscriptionId(attempt.subscriptionId);
+          setReservedAmount(Number(attempt.amount));
+          setMethod('card');
+          if (attempt.expiresAt) setAttemptExpiresAt(attempt.expiresAt);
+          setCheckoutState('processing');
         }
       }).catch(() => { /* Preserve the selected purchase during a transient failure. */ });
     return () => { active = false; };
@@ -320,6 +647,8 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
   // Gerar QR Code Pix Oficial
   const generatePix = async () => {
     if (submitLock.current || !plan) return;
+    if (!currentQuote) { setError('Aguarde a confirmação do valor antes de pagar.'); return; }
+    const purchaseQuote = currentQuote;
     submitLock.current = true;
     setBusy(true);
     setError('');
@@ -348,7 +677,9 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
         email,
         name,
         undefined,
-        pixReqId
+        pixReqId,
+        purchaseQuote.couponCode || undefined,
+        purchaseQuote.amount
       );
 
       if (!details.qrCode) {
@@ -356,6 +687,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
       }
 
       setPix(details);
+      setReservedAmount(details.amount);
       setSubscriptionId(details.subscriptionId);
       setAttemptExpiresAt(details.expirationDate || null);
       setCheckoutState('pending_pix');
@@ -372,6 +704,8 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
     if (submitLock.current || !plan) {
       throw new Error('Aguarde o processamento da tentativa atual.');
     }
+    if (!currentQuote) throw new Error('Aguarde a confirmação do valor antes de pagar.');
+    const purchaseQuote = currentQuote;
     submitLock.current = true;
     setBusy(true);
     setCheckoutState('processing');
@@ -394,6 +728,8 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
           companyId,
           planId: plan.id,
           requestId: requestId.current,
+          couponCode: purchaseQuote.couponCode || undefined,
+          quotedAmount: purchaseQuote.amount,
           formData: { ...formData, payer: { ...payer, email } }
         }
       );
@@ -406,6 +742,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
       }
 
       setSubscriptionId(result.subscriptionId);
+      setReservedAmount(purchaseQuote.amount);
       setAttemptExpiresAt(result.expiresAt || null);
       // Gateway approval alone is not proof of activation. Only the backend
       // status poll/reconciliation may show success after the DB transaction.
@@ -480,6 +817,21 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
 
   const isFree = plan?.price === 0;
 
+  if (checkoutState === 'approved') {
+    return (
+      <div className="min-h-screen bg-slate-50/50 py-8 md:py-14 px-4 sm:px-6">
+        <ThankYouApprovedPage
+          plan={plan}
+          companyName={selectedCompanyName}
+          subscriptionId={subscriptionId}
+          reservedAmount={reservedAmount}
+          method={method}
+          onNavigateTab={onNavigateTab}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50/50 py-8 md:py-14 px-4 sm:px-6">
       <div className="max-w-5xl mx-auto">
@@ -505,8 +857,8 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
               <span className="text-xs text-slate-400 font-medium">Itapoá Online</span>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight">
-              Finalize a contratação
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight uppercase">
+              Finalize sua assinatura
             </h1>
             <p className="text-sm text-slate-500 mt-1 mb-6">
               Complete os dados de contato. Você poderá preencher fotos, horário e cardápio logo após a confirmação.
@@ -523,31 +875,6 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                 <div className="flex-1">
                   <p className="font-bold">Aviso no pagamento</p>
                   <p className="mt-0.5 leading-relaxed">{error}</p>
-                </div>
-              </div>
-            )}
-
-            {/* ESTADO: APROVADO COM SUCESSO */}
-            {checkoutState === 'approved' && (
-              <div className="py-8 px-6 bg-emerald-50 border border-emerald-200 rounded-2xl text-center space-y-4">
-                <div className="w-16 h-16 bg-emerald-600 text-white rounded-full flex items-center justify-center mx-auto shadow-sm">
-                  <CheckCircle2 size={36} />
-                </div>
-                <h2 className="text-2xl font-black text-emerald-950">Pagamento confirmado com sucesso!</h2>
-                <p className="text-sm text-emerald-800 max-w-md mx-auto leading-relaxed">
-                  O plano <span className="font-bold">{plan?.displayName || plan?.name}</span> foi ativado para{' '}
-                  <span className="font-bold">{selectedCompanyName}</span>.
-                </p>
-                <div className="pt-4">
-                  <button
-                    onClick={() => {
-                      clearPendingPurchase();
-                      onNavigateTab('painel');
-                    }}
-                    className="w-full sm:w-auto px-8 py-4 rounded-xl bg-slate-950 text-white font-bold hover:bg-slate-800 transition shadow-sm"
-                  >
-                    Acessar meu painel e completar anúncio
-                  </button>
                 </div>
               </div>
             )}
@@ -640,36 +967,6 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                       />
                     </div>
                   </div>
-
-                  {/* Seleção de empresa vinculada (se o anunciante já tiver empresas cadastradas) */}
-                  {companies.length > 0 && (
-                    <div>
-                      <label htmlFor="checkout-company" className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                        Vincular ao anúncio da empresa
-                      </label>
-                      <div className="relative">
-                        <select
-                          id="checkout-company"
-                          value={companyChoice}
-                          onChange={(e) => {
-                            setCompanyChoice(e.target.value);
-                            preparedCompany.current = '';
-                            requestId.current = crypto.randomUUID();
-                          }}
-                          disabled={busy || Boolean(subscriptionId)}
-                          className="w-full px-4 py-3 text-base rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-950 focus:border-transparent transition bg-slate-50/30 appearance-none"
-                        >
-                          <option value="">Novo anúncio comercial (completar no painel)</option>
-                          {companies.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                        <Building2 size={18} className="absolute right-4 top-3.5 text-slate-400 pointer-events-none" />
-                      </div>
-                    </div>
-                  )}
                 </form>
 
                 {/* Bloco de Autenticação Necessária */}
@@ -712,37 +1009,63 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                   /* Pagamento Pago: Cartão ou Pix */
                   <div className="mt-8 pt-6 border-t border-slate-200">
                     {/* Seletor de método de pagamento (Cartão vs Pix) */}
+                    {/* Seletor de método de pagamento (Cartão vs Pix) */}
                     {!subscriptionId && (
                       <div className="mb-6">
-                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2.5">
                           Forma de pagamento
                         </label>
-                        <div className="grid grid-cols-2 gap-3" role="group" aria-label="Selecione o meio de pagamento">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="group" aria-label="Selecione o meio de pagamento">
                           <button
                             type="button"
-                            aria-pressed={method === 'card'}
-                            onClick={() => setMethod('card')}
-                            disabled={busy}
-                            className={`flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl font-bold border transition ${
-                              method === 'card'
-                                ? 'border-[#C8102E] bg-red-50/50 text-[#C8102E] shadow-sm'
-                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                            }`}
-                          >
-                            <CreditCard size={18} /> Cartão de crédito
-                          </button>
-                          <button
-                            type="button"
+                            aria-label="Pix oficial"
                             aria-pressed={method === 'pix'}
                             onClick={() => setMethod('pix')}
                             disabled={busy}
-                            className={`flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl font-bold border transition ${
+                            className={`flex items-center gap-3 p-4 rounded-2xl font-bold border-2 transition text-left cursor-pointer ${
                               method === 'pix'
-                                ? 'border-[#C8102E] bg-red-50/50 text-[#C8102E] shadow-sm'
+                                ? 'border-emerald-600 bg-emerald-50/50 text-emerald-950 shadow-sm'
                                 : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                             }`}
                           >
-                            <QrCode size={18} /> Pix oficial
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                              method === 'pix' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              <QrCode size={20} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-black">PIX</span>
+                                <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Instantâneo</span>
+                              </div>
+                              <span className="text-xs text-slate-500 font-normal block truncate">Pagamento instantâneo via QR Code</span>
+                            </div>
+                          </button>
+
+                          <button
+                            type="button"
+                            aria-label="Cartão de crédito"
+                            aria-pressed={method === 'card'}
+                            onClick={() => setMethod('card')}
+                            disabled={busy}
+                            className={`flex items-center gap-3 p-4 rounded-2xl font-bold border-2 transition text-left cursor-pointer ${
+                              method === 'card'
+                                ? 'border-[#C8102E] bg-red-50/50 text-slate-950 shadow-sm'
+                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                              method === 'card' ? 'bg-[#C8102E] text-white' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              <CreditCard size={20} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-black">CARTÃO DE CRÉDITO</span>
+                                <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">Seguro</span>
+                              </div>
+                              <span className="text-xs text-slate-500 font-normal block truncate">Pagamento seguro sem renovação</span>
+                            </div>
                           </button>
                         </div>
                       </div>
@@ -812,13 +1135,9 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                               <div className="bg-white p-3 rounded-2xl shadow-inner border border-slate-100">
                                 <img
                                   src={`data:image/png;base64,${pix.qrCodeBase64}`}
-                                  alt="QR Code Pix do Mercado Pago"
+                                  alt="QR Code Pix Oficial"
                                   className="w-48 h-48 sm:w-56 sm:h-56 object-contain"
                                 />
-                              </div>
-                              <div className="flex items-center gap-1.5 mt-3 text-[11px] font-semibold text-slate-500">
-                                <ShieldCheck size={14} className="text-emerald-600" />
-                                <span>Mercado Pago Oficial • Banco Central do Brasil</span>
                               </div>
                             </div>
                           </div>
@@ -867,112 +1186,61 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                           </div>
                         </div>
 
-                        {/* Validade de 5 minutos e status de reconciliação */}
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-200 text-xs">
-                          <div className="flex items-center gap-2.5 text-slate-600">
-                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border shadow-xs ${
-                              secondsRemaining !== null && secondsRemaining < 60
-                                ? 'bg-red-100 text-red-600 border-red-300 animate-pulse'
-                                : 'bg-amber-50 text-amber-600 border-amber-200/60'
-                            }`}>
-                              <Clock size={16} />
-                            </div>
-                            <div>
-                              <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                                {secondsRemaining !== null && secondsRemaining < 60 ? 'Atenção ao tempo' : 'Prazo de conclusão'}
-                              </div>
-                              <div className="font-mono font-bold text-slate-900 text-sm">
-                                {secondsRemaining !== null && secondsRemaining > 0 ? (
-                                  <span className={secondsRemaining < 60 ? 'text-red-600 font-black' : 'text-slate-950'}>
-                                    Tempo restante para concluir esta tentativa de pagamento: {formatCountdown(secondsRemaining)}
-                                  </span>
-                                ) : (
-                                  <span className="text-red-600 font-sans text-xs font-bold">Tentativa expirada</span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
+                        {/* Redesign Premium: Contador e Status em Tempo Real (exibido EXCLUSIVAMENTE para PIX válido) */}
+                        <PaymentCountdownTimer
+                          secondsRemaining={secondsRemaining}
+                          checkingStatus={checkingStatus}
+                          onCheckStatus={handleCheckStatusNow}
+                          isExpired={checkoutState === 'expired'}
+                        />
 
+                        {/* Botão de escape para alternar método */}
+                        <div className="pt-2 text-center">
                           <button
                             type="button"
-                            onClick={handleCheckStatusNow}
-                            disabled={checkingStatus}
-                            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition disabled:opacity-60 cursor-pointer"
+                            onClick={handleStartNewAttempt}
+                            className="text-xs font-bold text-slate-500 hover:text-slate-800 underline transition cursor-pointer"
                           >
-                            <RefreshCw size={13} className={checkingStatus ? 'animate-spin text-emerald-600' : 'text-slate-600'} />
-                            {checkingStatus ? 'Consultando provedor…' : 'Verificar pagamento agora'}
+                            Escolher outra forma de pagamento ou gerar novo código Pix
                           </button>
                         </div>
                       </div>
                     )}
 
-                    {subscriptionId && !pix && (
-                      <div role="status" className="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 space-y-5 shadow-sm">
-                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200/80 w-fit">
-                          <Clock size={14} className="text-amber-600" />
-                          Aguardando confirmação do pagamento
+                    {/* Tentativa de Cartão em processamento (sem cronômetro de 5 minutos) */}
+                    {subscriptionId && !pix && checkoutState !== 'approved' && (
+                      <div role="status" className="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 space-y-5 shadow-sm text-center">
+                        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200/80 mx-auto">
+                          <Loader2 size={14} className="animate-spin text-amber-600" />
+                          Processando pagamento
                         </div>
 
                         <div>
                           <h2 className="text-xl sm:text-2xl font-black text-slate-950 tracking-tight">
                             Aguardando confirmação do pagamento
                           </h2>
-                          <p className="text-xs sm:text-sm text-slate-500 mt-1 leading-relaxed">
-                            A ativação depende da confirmação do Mercado Pago e do processamento no servidor. Não refaça a cobrança enquanto esta tentativa estiver em análise.
+                          <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
+                            A ativação depende da confirmação da operadora e do processamento no servidor.
                           </p>
                         </div>
 
-                        {/* Contador regressivo de 5 minutos */}
-                        <div className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition ${
-                          secondsRemaining !== null && secondsRemaining < 60
-                            ? 'bg-red-50 border-red-300 text-red-900 ring-2 ring-red-400/30'
-                            : 'bg-slate-50 border-slate-200 text-slate-700'
-                        }`}>
-                          <div className="flex items-center gap-3">
-                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${
-                              secondsRemaining !== null && secondsRemaining < 60
-                                ? 'bg-red-600 text-white animate-pulse'
-                                : 'bg-slate-900 text-white'
-                            }`}>
-                              <Clock size={18} />
-                            </div>
-                            <div>
-                              <span className="text-[11px] font-bold uppercase tracking-wider block text-slate-500">
-                                {secondsRemaining !== null && secondsRemaining < 60 ? 'Menos de 1 minuto restante!' : 'Prazo de conclusão'}
-                              </span>
-                              <span className="text-xs sm:text-sm font-semibold">
-                                Tempo restante para concluir esta tentativa de pagamento:
-                              </span>
-                            </div>
-                          </div>
-                          <div className={`font-mono text-lg sm:text-xl font-black px-3.5 py-1.5 rounded-xl text-center self-start sm:self-auto ${
-                            secondsRemaining !== null && secondsRemaining < 60
-                              ? 'text-red-600 bg-red-100 font-black'
-                              : 'text-slate-950 bg-white border border-slate-200'
-                          }`}>
-                            {formatCountdown(secondsRemaining)}
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                        <div className="pt-2 flex flex-col sm:flex-row gap-3 justify-center">
                           <button
                             type="button"
                             onClick={handleCheckStatusNow}
                             disabled={checkingStatus}
-                            className="flex-1 py-3 px-5 rounded-xl bg-slate-950 text-white font-bold hover:bg-slate-800 transition disabled:opacity-50 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer shadow-sm"
+                            className="py-3 px-6 rounded-xl bg-slate-950 text-white font-bold hover:bg-slate-800 transition disabled:opacity-50 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer shadow-sm"
                           >
                             <RefreshCw size={14} className={checkingStatus ? 'animate-spin' : ''} />
                             {checkingStatus ? 'Consultando provedor…' : 'Verificar pagamento agora'}
                           </button>
-                          {checkoutState === 'rejected' && (
-                            <button
-                              type="button"
-                              onClick={handleStartNewAttempt}
-                              className="px-5 py-3 rounded-xl border border-slate-300 text-slate-700 font-bold hover:bg-slate-50 text-xs sm:text-sm transition cursor-pointer"
-                            >
-                              Iniciar nova contratação
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={handleStartNewAttempt}
+                            className="py-3 px-5 rounded-xl border border-slate-300 text-slate-700 font-bold hover:bg-slate-50 text-xs sm:text-sm transition cursor-pointer"
+                          >
+                            Trocar método de pagamento
+                          </button>
                         </div>
                       </div>
                     )}
@@ -982,10 +1250,10 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                       <>
                         {/* Aba Cartão (mantida no DOM com visibilidade controlada para estabilidade) */}
                         <div className={method === 'card' ? 'block' : 'hidden'} aria-hidden={method !== 'card'}>
-                          {gateway?.cardEnabled ? (
+                          {gateway?.cardEnabled && currentQuote && !quoteError ? (
                             <MercadoPagoCard
                               publicKey={gateway.publicKey}
-                              amount={plan.price}
+                              amount={currentQuote.amount}
                               email={user?.email || email}
                               disabled={busy}
                               onSubmit={payCard}
@@ -1023,7 +1291,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
 
                             <button
                               type="button"
-                              disabled={busy || !gateway?.pixEnabled}
+                              disabled={busy || !gateway?.pixEnabled || !currentQuote || Boolean(quoteError)}
                               onClick={generatePix}
                               className="w-full py-4 px-6 rounded-2xl bg-slate-950 text-white font-bold hover:bg-slate-800 transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
                             >
@@ -1078,8 +1346,6 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                 <span className="text-xs font-semibold text-slate-900">
                   {isFree
                     ? 'Gratuito (Sem renovação)'
-                    : method === 'card'
-                    ? 'Assinatura mensal recorrente'
                     : 'Pagamento avulso (30 dias)'}
                 </span>
               </div>
@@ -1096,14 +1362,22 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
               <div className="flex justify-between items-baseline">
                 <span className="text-sm font-bold text-slate-900">Total a pagar:</span>
                 <span className="text-2xl font-black text-slate-950">
-                  {plan ? money(plan.price) : '…'}
+                  {plan ? money(payableAmount) : '…'}
                 </span>
               </div>
+              {isAuthenticated && !subscriptionId && (
+                <div aria-live="polite" className="mt-3 text-xs text-slate-700">
+                  {!currentQuote && !quoteError && <p>Confirmando valor no servidor…</p>}
+                  {quoteError && <p role="alert">{quoteError}</p>}
+                  {currentQuote?.couponCode && <p>Cupom {currentQuote.couponCode} aplicado automaticamente: de {money(currentQuote.originalAmount)} por {money(currentQuote.amount)}. Uma tentativa nesta modalidade; válido até {new Date(currentQuote.expiresAt!).toLocaleString('pt-BR')}.</p>}
+                  {currentQuote?.notice && <p>{currentQuote.notice}</p>}
+                </div>
+              )}
               <p className="text-[11px] text-slate-400 mt-1">
                 {isFree
                   ? 'Nenhuma cobrança bancária.'
                   : method === 'card'
-                  ? 'Cobrança mensal no cartão. Cancele quando quiser no painel.'
+                  ? 'Pagamento único no cartão, sem renovação automática.'
                   : 'Pagamento avulso via Pix sem renovação automática.'}
               </p>
             </div>
@@ -1111,7 +1385,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
             <div className="pt-4 border-t border-slate-100 flex items-start gap-2 text-xs text-slate-500 leading-relaxed">
               <LockKeyhole size={16} className="text-slate-400 shrink-0 mt-0.5" />
               <span>
-                Pagamento processado em ambiente seguro com certificação oficial do Mercado Pago.
+                Pagamento processado pelo Mercado Pago. A ativação depende da confirmação do pagamento.
               </span>
             </div>
           </aside>

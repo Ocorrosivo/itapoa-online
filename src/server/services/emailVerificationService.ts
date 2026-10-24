@@ -2,6 +2,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { pool } from '../mysql.js';
 import { env } from '../config/env.js';
 import { mailService } from './mailService.js';
+import { registrationPlan } from '../../lib/registrationPlan.js';
+import type { PoolConnection } from 'mysql2/promise';
 
 export class VerificationError extends Error {
   constructor(public status: number, message: string) {
@@ -41,13 +43,12 @@ export class EmailVerificationService {
    * Cria ou substitui um token de confirmação pendente para um usuário recém-cadastrado.
    * Invalida qualquer token anterior para garantir uso único do token mais recente.
    */
-  async createVerificationToken(userId: string, email: string): Promise<string> {
-    await this.initTable();
+  async createVerificationToken(userId: string, email: string, connection?: PoolConnection): Promise<string> {
     const rawToken = randomBytes(32).toString('hex');
     const hash = tokenHash(rawToken);
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 horas
 
-    await pool.query(
+    await (connection || pool).query(
       `INSERT INTO user_email_verifications (user_id, email, token_hash, expires_at, created_at, verified_at)
        VALUES (?, ?, ?, ?, NOW(), NULL)
        ON DUPLICATE KEY UPDATE
@@ -65,26 +66,32 @@ export class EmailVerificationService {
   /**
    * Envia ou reenvia o e-mail de confirmação com link seguro.
    */
-  async sendVerification(userId: string, email: string, ip: string): Promise<boolean> {
+  async sendToken(email: string, token: string, planInput?: unknown): Promise<boolean> {
+    const fragment = new URLSearchParams({ token });
+    const plan = registrationPlan(planInput);
+    if (plan) fragment.set('plan', plan);
+    const url = `${env.appUrl.replace(/\/$/, '')}/confirmar-email#${fragment}`;
+    return (await mailService.sendVerification(email, url)).accepted;
+  }
+
+  async sendVerification(userId: string, email: string, ip: string, planInput?: unknown): Promise<boolean> {
     this.limiter.consume(`ip:${ip}`, 10);
     this.limiter.consume(`user:${userId}`, 3);
 
+    // A resend must never revoke an already confirmed account.
+    if (await this.isUserVerified(userId)) return true;
     // Cooldown de 60 segundos por conta
     const [recent]: any = await pool.query(
       `SELECT created_at FROM user_email_verifications WHERE user_id = ? AND created_at > DATE_SUB(NOW(), INTERVAL 60 SECOND) LIMIT 1`,
       [userId]
-    ).catch(() => [[]]);
+    );
 
     if (recent && recent.length > 0) {
       throw new VerificationError(429, 'Aguarde 1 minuto antes de solicitar um novo e-mail de confirmação.');
     }
 
     const token = await this.createVerificationToken(userId, email);
-    // Link com fragmento (#token=) para não ser enviado em requisições GET por scanners de antivírus/e-mail
-    const verificationUrl = `${env.appUrl.replace(/\/$/, '')}/confirmar-email#token=${token}`;
-
-    const sent = await mailService.sendVerification(email, verificationUrl);
-    return sent.accepted;
+    return this.sendToken(email, token, planInput);
   }
 
   /**

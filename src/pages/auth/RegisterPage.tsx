@@ -48,9 +48,9 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateTab }) => 
 
     setIsSubmitting(true);
     try {
-      const data = await api.post<{ success: boolean; token: string; user: User }>(
+      const data = await api.post<{ success: boolean; token: string; user: User; verificationEmailSent: boolean }>(
         '/api/auth/register',
-        { name, email, phone, city, password, role: 'advertiser' }
+        { name, email, phone, city, password, role: 'advertiser', planId: pending?.planId }
       );
 
       if (!data?.token || !data?.user) {
@@ -59,12 +59,8 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateTab }) => 
       }
 
       adoptSession(data.token, data.user);
-      // Resume pending purchase (plan preserved without secrets)
-      if (readPendingPurchase()) {
-        onNavigateTab('planos');
-      } else {
-        onNavigateTab('painel');
-      }
+      // Never claim delivery or expose payment before ownership is confirmed.
+      onNavigateTab('confirmar-email');
     } catch (err) {
       setErrorMsg(err instanceof ApiError ? err.message : 'Erro de conexão ao realizar cadastro.');
     } finally {

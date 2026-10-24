@@ -51,7 +51,7 @@ interface EntitlementDetails {
     hasUsedTrial?: boolean;
     subscriptionId?: string | null;
     subscriptionStatus?: string | null;
-    paymentType?: 'subscription' | 'onetime_pix' | null;
+    paymentType?: 'subscription' | 'onetime_pix' | 'onetime_card' | null;
     paymentMethod?: string | null;
     nextBillingDate?: string | null;
     contractedPrice?: number | null;
@@ -103,6 +103,7 @@ export const BillingSubscriptionView: React.FC<BillingSubscriptionViewProps> = (
   const isOrganicBronze = grantType === 'bronze' || isBronze;
 
   const isPixOnetime = entitlements?.grantDetails?.paymentType === 'onetime_pix' || entitlements?.grantDetails?.paymentMethod === 'pix';
+  const isOnetime = isPixOnetime || entitlements?.grantDetails?.paymentType === 'onetime_card';
   const trialEndsAt = entitlements?.grantDetails?.trialEndsAt || (company as any).trial_ends_at;
   const trialEligible = entitlements?.grantDetails?.trialEligible ?? false;
   const hasUsedTrial = entitlements?.grantDetails?.hasUsedTrial ?? Boolean((company as any).has_used_trial || (company as any).trial_ends_at);
@@ -305,12 +306,12 @@ export const BillingSubscriptionView: React.FC<BillingSubscriptionViewProps> = (
                     Concessão Administrativa
                   </span>
                 )}
-                {isPaidSubscription && isPixOnetime && (
+                {isPaidSubscription && isOnetime && (
                   <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
-                    Acesso Pago (Pix Avulso)
+                    Acesso Pago ({isPixOnetime ? 'Pix' : 'Cartão'} Avulso)
                   </span>
                 )}
-                {isPaidSubscription && !isPixOnetime && (
+                {isPaidSubscription && !isOnetime && (
                   <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
                     <CreditCard className="w-3 h-3" /> Assinatura Ativa (Cartão)
                   </span>
@@ -330,9 +331,9 @@ export const BillingSubscriptionView: React.FC<BillingSubscriptionViewProps> = (
                 {isTrial 
                   ? 'Teste sem cobrança — Retorna ao Bronze gratuito ao término.' 
                   : isDiamond 
-                    ? `R$ ${contractedPrice ? contractedPrice.toFixed(2).replace('.', ',') : '99,90'} / mês` 
+                    ? `R$ ${contractedPrice ? contractedPrice.toFixed(2).replace('.', ',') : '99,90'} ${isOnetime ? 'por período' : '/ mês'}`
                     : isGold 
-                      ? `R$ ${contractedPrice ? contractedPrice.toFixed(2).replace('.', ',') : '49,90'} / mês` 
+                      ? `R$ ${contractedPrice ? contractedPrice.toFixed(2).replace('.', ',') : '49,90'} ${isOnetime ? 'por período' : '/ mês'}`
                       : 'Gratuito — Presença essencial no guia'}
               </p>
             </div>
@@ -353,7 +354,7 @@ export const BillingSubscriptionView: React.FC<BillingSubscriptionViewProps> = (
               </>
             )}
 
-            {isPaidSubscription && isPixOnetime && (
+            {isPaidSubscription && isOnetime && (
               <>
                 <span className="font-bold text-emerald-400 flex items-center gap-1.5">
                   <Calendar className="w-3.5 h-3.5 text-emerald-400" />
@@ -362,11 +363,11 @@ export const BillingSubscriptionView: React.FC<BillingSubscriptionViewProps> = (
                 <span className="text-white font-mono font-bold">
                   {formatDate(nextBillingDate) || 'Vigência de 30 dias'}
                 </span>
-                <span className="text-[10px] text-slate-400">Pix avulso — sem renovação automática</span>
+                <span className="text-[10px] text-slate-400">{isPixOnetime ? 'Pix' : 'Cartão'} avulso — sem renovação automática</span>
               </>
             )}
 
-            {isPaidSubscription && !isPixOnetime && (
+            {isPaidSubscription && !isOnetime && (
               <>
                 <span className="font-bold text-blue-400 flex items-center gap-1.5">
                   <CreditCard className="w-3.5 h-3.5 text-blue-400" />

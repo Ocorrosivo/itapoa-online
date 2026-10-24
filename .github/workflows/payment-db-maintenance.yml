@@ -246,6 +246,12 @@ jobs:
               const db=await mysql.createConnection({host:process.env.DB_HOST,port:Number(process.env.DB_PORT||3306),user:process.env.DB_USER,password:process.env.DB_PASSWORD,database:process.env.DB_NAME});
               try{
                 const [identity]=await db.query('SELECT DATABASE() db, VERSION() version');
+                // Diagnose only the privately configured test account. No email,
+                // password, hash or reset token is printed or changed.
+                if(process.env.PAYMENT_TEST_ACCOUNT_EMAIL){
+                  const [account]=await db.query("SELECT COUNT(*) matches, SUM(password IS NOT NULL AND password <> '') passwordsPresent, SUM(password REGEXP '^[$]2[aby][$][0-9]{2}[$]') supportedHashes FROM users WHERE LOWER(TRIM(email))=?",[process.env.PAYMENT_TEST_ACCOUNT_EMAIL.trim().toLowerCase()]);
+                  console.log(JSON.stringify({testAccount:{matches:Number(account[0].matches),passwordPresent:Number(account[0].passwordsPresent)===1,bcryptFormatSupported:Number(account[0].supportedHashes)===1}}));
+                }
                 const [tables]=await db.query('SELECT TABLE_NAME name,ENGINE engine FROM information_schema.tables WHERE TABLE_SCHEMA=DATABASE()');
                 const counts={};for(const t of ['users','companies','companies_users','subscriptions','payment_logs','media_items'])counts[t]=(await db.query('SELECT COUNT(*) n FROM `'+t+'`'))[0][0].n;
                 const orphans={};for(const [key,sql]of Object.entries({members:'SELECT COUNT(*) n FROM companies_users cu LEFT JOIN companies c ON c.id=cu.company_id LEFT JOIN users u ON u.id=cu.user_id WHERE c.id IS NULL OR u.id IS NULL',subscriptions:'SELECT COUNT(*) n FROM subscriptions s LEFT JOIN companies c ON c.id=s.companyId LEFT JOIN users u ON u.id=s.userId WHERE c.id IS NULL OR u.id IS NULL'}))orphans[key]=(await db.query(sql))[0][0].n;

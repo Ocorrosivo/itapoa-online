@@ -160,3 +160,21 @@ Conferência de dependências imediatamente antes de publicar encontrou aviso
 alto novo em body-parser 1.20.8 (GHSA-27r3-jxmh-p828). Atualização compatível para
 1.20.9 via npm audit fix alterou somente essa dependência no lockfile. Nova
 consulta npm audit completa: zero vulnerabilidades reportadas.
+
+## 23/10 — publicação e conferência visual adicional
+
+PR #21 integrado em `fe5baf47d8710ee247c38bc07cdfbeb00eaee118`.
+Publicação `40038757483`: sucesso, saúde pública HTTP 200/banco conectado e SHA
+exato. Só depois disso as variáveis financeiras foram salvas, reabertas e
+aplicadas pelo Easypanel. Inspeção `40039721810`: token aceito em GET /users/me
+HTTP 200; modo production e segredo de webhook presentes; nenhuma cobrança.
+Pix/cartão habilitados pela API. Execução oficial `40039736400`: sucesso após
+aplicar variáveis. Volume e banco preservados; contagens inalteradas.
+
+Conferência visual de /planos → /checkout encontrou texto incorreto de recorrência
+no cartão. Backend usa /v1/payments, pagamento único com período contratado;
+não cria preapproval/renovação automática. Texto corrigido para pagamento avulso,
+retirada alegação não comprovada de certificação do site pelo gateway e teste
+de navegador acrescentado para ambas as modalidades, sem enviar pagamento.
+Esse complemento ainda depende de validação e publicação próprias; não confundir
+a configuração financeira disponível com homologação real de liquidação/webhook.
