@@ -111,6 +111,17 @@ export const Header: React.FC<HeaderProps> = ({
     };
   }, []);
 
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+    };
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   useEffect(() => {
     return () => clearCloseTimeout();
   }, []);
@@ -139,8 +150,12 @@ export const Header: React.FC<HeaderProps> = ({
       <header
         className={`sticky top-0 z-40 transition-all duration-300 ${
           currentTab === 'home'
-            ? 'bg-slate-950/70 backdrop-blur-md border-b border-white/10 text-white shadow-xl'
-            : 'bg-[#0A0915] border-b border-slate-800 text-white shadow-xl'
+            ? isScrolled
+              ? 'bg-[#0A0915]/90 backdrop-blur-md border-b border-white/10 text-white shadow-xl'
+              : 'bg-transparent border-b border-transparent text-white shadow-none -mb-14 sm:-mb-16'
+            : isScrolled
+              ? 'bg-[#0A0915]/95 backdrop-blur-md border-b border-slate-800 text-white shadow-xl'
+              : 'bg-[#0A0915] border-b border-slate-800 text-white shadow-none'
         }`}
       >
         <div className="max-w-7xl mx-auto px-4 py-2 sm:py-2.5">
