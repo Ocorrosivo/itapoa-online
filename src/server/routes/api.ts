@@ -515,7 +515,7 @@ apiRouter.get('/payments/attempt/active', requireAuth, attachCompanyScope, handl
     FROM subscriptions s WHERE s.companyId=? AND s.planId=?
     AND (s.paymentMethod='credit_card' OR (s.paymentMethod='pix' AND NOT EXISTS (SELECT 1 FROM payment_logs pl WHERE pl.subscriptionId=s.id)))
     AND (
-      (s.status='pending' AND s.createdAt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 15 MINUTE))
+      (s.status='pending')
       OR (s.status='active' AND (s.nextBillingDate IS NULL OR s.nextBillingDate > UTC_TIMESTAMP()) AND s.createdAt >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 MINUTE))
     )
     ORDER BY s.createdAt DESC LIMIT 1`, [companyId, planId]);

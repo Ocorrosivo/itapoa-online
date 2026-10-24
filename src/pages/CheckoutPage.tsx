@@ -1217,7 +1217,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
 
                         <div>
                           <h2 className="text-xl sm:text-2xl font-black text-slate-950 tracking-tight">
-                            Processando pagamento com cartão
+                            Aguardando confirmação do pagamento
                           </h2>
                           <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
                             A ativação depende da confirmação da operadora e do processamento no servidor.
@@ -1232,7 +1232,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                             className="py-3 px-6 rounded-xl bg-slate-950 text-white font-bold hover:bg-slate-800 transition disabled:opacity-50 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer shadow-sm"
                           >
                             <RefreshCw size={14} className={checkingStatus ? 'animate-spin' : ''} />
-                            {checkingStatus ? 'Consultando provedor…' : 'Verificar status agora'}
+                            {checkingStatus ? 'Consultando provedor…' : 'Verificar pagamento agora'}
                           </button>
                           <button
                             type="button"
