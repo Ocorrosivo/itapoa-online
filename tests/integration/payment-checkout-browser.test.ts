@@ -9,6 +9,8 @@ let h: Awaited<ReturnType<typeof createPaymentHarness>>, browser: Browser, conte
 before(async () => { h=await createPaymentHarness(); browser=await chromium.launch({headless:true}); });
 beforeEach(async () => {
   if(context) await context.close(); await h.reset();
+  process.env.PAYMENT_TEST_ACCOUNT_EMAIL='';
+  process.env.PAYMENT_TEST_STARTS_AT='';process.env.PAYMENT_TEST_EXPIRES_AT='';
   context=await browser.newContext({viewport:{width:1366,height:900}});
   await context.addInitScript(({token}) => {
     localStorage.setItem('saas_token',token);
@@ -27,6 +29,36 @@ async function checkout(page:Page) {
   await page.locator('#checkout-company').selectOption('a');
 }
 const confirmed = (page:Page)=>page.getByRole('heading',{name:'Pagamento confirmado com sucesso!',exact:true});
+
+test('restricted offers switch server totals by method and keep the frozen Pix amount on reload', async () => {
+  process.env.PAYMENT_TEST_ACCOUNT_EMAIL='a@example.test';
+  const start=Date.now()-1000;
+  process.env.PAYMENT_TEST_STARTS_AT=new Date(start).toISOString();
+  process.env.PAYMENT_TEST_EXPIRES_AT=new Date(start+86400000).toISOString();
+  const page=await context.newPage();await checkout(page);
+  await expect(page.getByText(/Cupom TESTECARTAO2 aplicado automaticamente/)).toBeVisible();
+  await expect(page.getByText('R$ 2,00',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Pix oficial',exact:true}).click();
+  await expect(page.getByText(/Cupom TESTEPIX1 aplicado automaticamente/)).toBeVisible();
+  await expect(page.getByText('R$ 1,00',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:/Gerar QR Code Pix/i}).click();
+  await expect(page.getByLabel('Pix Copia e Cola')).toHaveValue('SYNTHETIC-PIX-NOT-PAYABLE');
+  assert.equal(h.calls.filter(c=>c.method==='POST')[0].body.transaction_amount,1);
+  await page.reload();
+  await expect(page.getByLabel('Pix Copia e Cola')).toHaveValue('SYNTHETIC-PIX-NOT-PAYABLE');
+  await expect(page.getByText('R$ 1,00',{exact:true})).toBeVisible();
+  assert.equal(h.calls.filter(c=>c.method==='POST').length,1);
+});
+
+test('failed quote prevents a financial submission rather than silently charging the list price', async () => {
+  await context.route('**/api/payments/quote?**',route=>route.abort('failed'));
+  const page=await context.newPage();await checkout(page);
+  await expect(page.getByText('Não foi possível confirmar o valor. Recarregue antes de pagar.',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Pagar com SDK simulado'})).toHaveCount(0);
+  await page.getByRole('button',{name:'Pix oficial',exact:true}).click();
+  await expect(page.getByRole('button',{name:/Gerar QR Code Pix/i})).toBeDisabled();
+  assert.equal(h.calls.filter(c=>c.method==='POST').length,0);
+});
 test('card and Pix disclose single-payment terms without promising automatic renewal', async () => {
   const page=await context.newPage();await checkout(page);
   await expect(page.getByText('Pagamento avulso (30 dias)',{exact:true})).toBeVisible();

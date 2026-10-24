@@ -72,7 +72,9 @@ export class BillingService {
     payerEmail: string,
     payerName?: string,
     payerDoc?: { type?: string; number?: string },
-    requestId?: string
+    requestId?: string,
+    couponCode?: string,
+    quotedAmount?: number
   ): Promise<PixDetails> {
     const res = await api.post<PixApiResponse>('/api/payments/pix', {
       companyId,
@@ -80,7 +82,9 @@ export class BillingService {
       payerEmail,
       payerName,
       payerDoc,
-      requestId
+      requestId,
+      couponCode,
+      quotedAmount
     });
 
     return BillingService.toPixDetails(res);

@@ -441,6 +441,11 @@ apiRouter.get('/payments/config', handler(async (_req, res) => {
   res.json(await paymentService.gatewayConfig());
 }));
 
+apiRouter.get('/payments/quote', requireAuth, handler(async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(await paymentService.checkoutQuote(req.user!.id, String(req.query.planId || ''), String(req.query.method || '')));
+}));
+
 apiRouter.get('/account/companies', requireAuth, handler(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json(await listOwnedCompanies(req.user!.id));
@@ -481,7 +486,7 @@ apiRouter.post('/payments/pix', requireAuth, requireCompanyAccess, handler(async
   const requestId = typeof req.body?.requestId === 'string' ? req.body.requestId : undefined;
   const payerName = typeof req.body?.payerName === 'string' ? req.body.payerName : undefined;
   const payerDoc = req.body?.payerDoc && typeof req.body.payerDoc === 'object' ? req.body.payerDoc : undefined;
-  res.json(await paymentService.createPixPayment(req.user!.id, companyId, planId, payerEmail, payerName, payerDoc, requestId));
+  res.json(await paymentService.createPixPayment(req.user!.id, companyId, planId, payerEmail, payerName, payerDoc, requestId, { couponCode: req.body?.couponCode, quotedAmount: req.body?.quotedAmount }));
 }));
 
 // Resume card/pix checkout after a reload without replaying an SDK token or charging again.
@@ -492,7 +497,7 @@ apiRouter.get('/payments/attempt/active', requireAuth, attachCompanyScope, handl
   
   const pool = (await import('../mysql.js')).pool;
   // Reading checkout state must never cancel a potentially successful charge.
-  const [rows]: any = await pool.query(`SELECT s.id AS subscriptionId, s.status, s.companyId, s.planId, s.paymentMethod,
+  const [rows]: any = await pool.query(`SELECT s.id AS subscriptionId, s.status, s.companyId, s.planId, s.paymentMethod, s.amount,
     NULL AS expiresAt,
     s.createdAt
     FROM subscriptions s WHERE s.companyId=? AND s.planId=?
@@ -515,6 +520,7 @@ apiRouter.get('/payments/attempt/active', requireAuth, attachCompanyScope, handl
     companyId: result.companyId,
     planId: result.planId,
     paymentMethod: result.paymentMethod,
+    amount: Number(result.amount),
     expiresAt: null
   });
 }));

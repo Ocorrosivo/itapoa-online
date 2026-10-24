@@ -31,6 +31,14 @@ interface Gateway {
   cardEnabled: boolean;
 }
 
+interface CheckoutQuote {
+  amount: number;
+  originalAmount: number;
+  couponCode: string | null;
+  expiresAt?: string;
+  notice?: string;
+}
+
 interface Plan {
   id: string;
   name: string;
@@ -84,6 +92,25 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
   const [copied, setCopied] = useState(false);
   const [attemptExpiresAt, setAttemptExpiresAt] = useState<string | null>(null);
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
+  const [quoteState, setQuoteState] = useState<{ scope: string; quote: CheckoutQuote } | null>(null);
+  const [quoteError, setQuoteError] = useState('');
+  const [reservedAmount, setReservedAmount] = useState<number | null>(null);
+  const quoteScope = `${user?.id || ''}:${plan?.id || ''}:${method}`;
+  const currentQuote = quoteState?.scope === quoteScope ? quoteState.quote : null;
+  const payableAmount = reservedAmount ?? currentQuote?.amount ?? plan?.price ?? 0;
+
+  useEffect(() => {
+    setQuoteError('');
+    if (!isAuthenticated || !plan) return;
+    let active = true;
+    api.get<CheckoutQuote>(`/api/payments/quote?planId=${encodeURIComponent(plan.id)}&method=${method}`)
+      .then(quote => {
+        if (!Number.isFinite(quote.amount) || quote.amount < 0) throw new Error('Valor indisponível.');
+        if (active) setQuoteState({ scope: quoteScope, quote });
+      })
+      .catch(() => { if (active) { setQuoteState(null); setQuoteError('Não foi possível confirmar o valor. Recarregue antes de pagar.'); } });
+    return () => { active = false; };
+  }, [isAuthenticated, quoteScope]);
 
   const formRef = useRef<HTMLFormElement>(null);
   const preparedCompany = useRef('');
@@ -99,6 +126,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
   };
 
   const handleStartNewAttempt = () => {
+    setReservedAmount(null);
     setSubscriptionId('');
     setPix(null);
     setAttemptExpiresAt(null);
@@ -199,6 +227,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
       .then((existing) => {
         if (!canceled && existing && existing.qrCode) {
           setPix(existing);
+          setReservedAmount(existing.amount);
           setSubscriptionId(existing.subscriptionId);
           setAttemptExpiresAt(existing.expirationDate);
           setMethod('pix');
@@ -216,10 +245,11 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
   useEffect(() => {
     if (!isAuthenticated || !plan || !companyChoice || pix || subscriptionId) return;
     let active = true;
-    api.get<{ subscriptionId: string; status: string; paymentMethod: string; expiresAt?: string } | null>(`/api/payments/attempt/active?companyId=${encodeURIComponent(companyChoice)}&planId=${encodeURIComponent(plan.id)}`)
+    api.get<{ subscriptionId: string; status: string; paymentMethod: string; amount: number; expiresAt?: string } | null>(`/api/payments/attempt/active?companyId=${encodeURIComponent(companyChoice)}&planId=${encodeURIComponent(plan.id)}`)
       .then(attempt => {
         if (!active || !attempt?.subscriptionId) return;
         setSubscriptionId(attempt.subscriptionId);
+        setReservedAmount(Number(attempt.amount));
         setMethod(attempt.paymentMethod === 'pix' ? 'pix' : 'card');
         if (attempt.expiresAt) {
           setAttemptExpiresAt(attempt.expiresAt);
@@ -320,6 +350,8 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
   // Gerar QR Code Pix Oficial
   const generatePix = async () => {
     if (submitLock.current || !plan) return;
+    if (!currentQuote) { setError('Aguarde a confirmação do valor antes de pagar.'); return; }
+    const purchaseQuote = currentQuote;
     submitLock.current = true;
     setBusy(true);
     setError('');
@@ -348,7 +380,9 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
         email,
         name,
         undefined,
-        pixReqId
+        pixReqId,
+        purchaseQuote.couponCode || undefined,
+        purchaseQuote.amount
       );
 
       if (!details.qrCode) {
@@ -356,6 +390,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
       }
 
       setPix(details);
+      setReservedAmount(details.amount);
       setSubscriptionId(details.subscriptionId);
       setAttemptExpiresAt(details.expirationDate || null);
       setCheckoutState('pending_pix');
@@ -372,6 +407,8 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
     if (submitLock.current || !plan) {
       throw new Error('Aguarde o processamento da tentativa atual.');
     }
+    if (!currentQuote) throw new Error('Aguarde a confirmação do valor antes de pagar.');
+    const purchaseQuote = currentQuote;
     submitLock.current = true;
     setBusy(true);
     setCheckoutState('processing');
@@ -394,6 +431,8 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
           companyId,
           planId: plan.id,
           requestId: requestId.current,
+          couponCode: purchaseQuote.couponCode || undefined,
+          quotedAmount: purchaseQuote.amount,
           formData: { ...formData, payer: { ...payer, email } }
         }
       );
@@ -406,6 +445,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
       }
 
       setSubscriptionId(result.subscriptionId);
+      setReservedAmount(purchaseQuote.amount);
       setAttemptExpiresAt(result.expiresAt || null);
       // Gateway approval alone is not proof of activation. Only the backend
       // status poll/reconciliation may show success after the DB transaction.
@@ -982,10 +1022,10 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                       <>
                         {/* Aba Cartão (mantida no DOM com visibilidade controlada para estabilidade) */}
                         <div className={method === 'card' ? 'block' : 'hidden'} aria-hidden={method !== 'card'}>
-                          {gateway?.cardEnabled ? (
+                          {gateway?.cardEnabled && currentQuote && !quoteError ? (
                             <MercadoPagoCard
                               publicKey={gateway.publicKey}
-                              amount={plan.price}
+                              amount={currentQuote.amount}
                               email={user?.email || email}
                               disabled={busy}
                               onSubmit={payCard}
@@ -1023,7 +1063,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
 
                             <button
                               type="button"
-                              disabled={busy || !gateway?.pixEnabled}
+                              disabled={busy || !gateway?.pixEnabled || !currentQuote || Boolean(quoteError)}
                               onClick={generatePix}
                               className="w-full py-4 px-6 rounded-2xl bg-slate-950 text-white font-bold hover:bg-slate-800 transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
                             >
@@ -1094,9 +1134,17 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
               <div className="flex justify-between items-baseline">
                 <span className="text-sm font-bold text-slate-900">Total a pagar:</span>
                 <span className="text-2xl font-black text-slate-950">
-                  {plan ? money(plan.price) : '…'}
+                  {plan ? money(payableAmount) : '…'}
                 </span>
               </div>
+              {isAuthenticated && !subscriptionId && (
+                <div aria-live="polite" className="mt-3 text-xs text-slate-700">
+                  {!currentQuote && !quoteError && <p>Confirmando valor no servidor…</p>}
+                  {quoteError && <p role="alert">{quoteError}</p>}
+                  {currentQuote?.couponCode && <p>Cupom {currentQuote.couponCode} aplicado automaticamente: de {money(currentQuote.originalAmount)} por {money(currentQuote.amount)}. Uma tentativa nesta modalidade; válido até {new Date(currentQuote.expiresAt!).toLocaleString('pt-BR')}.</p>}
+                  {currentQuote?.notice && <p>{currentQuote.notice}</p>}
+                </div>
+              )}
               <p className="text-[11px] text-slate-400 mt-1">
                 {isFree
                   ? 'Nenhuma cobrança bancária.'
