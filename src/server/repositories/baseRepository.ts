@@ -14,6 +14,7 @@ import { pool } from '../mysql.js';
 const TABLE_COLUMNS: Record<string, string[]> = {
   users: ['id', 'name', 'email', 'role', 'phone', 'city', 'avatarUrl', 'created_at', 'updated_at'],
   companies: [
+    'instagram', 'facebook', 'tiktok', 'website',
     'id', 'name', 'slug', 'logo', 'coverImage', 'categoryId', 'cityId', 'description',
     'detailedDescription', 'rating', 'reviewCount', 'phone', 'whatsapp', 'address', 'hours',
     'latitude', 'longitude', 'isSponsored', 'planLevel', 'features', 'views', 'clicksWhatsapp',

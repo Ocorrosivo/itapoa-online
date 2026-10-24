@@ -426,6 +426,9 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
   };
 
   const handleStartNewAttempt = () => {
+    if (companyChoice && plan) {
+      BillingService.cancelAttempt(companyChoice, plan.id).catch(() => {});
+    }
     setReservedAmount(null);
     setSubscriptionId('');
     setPix(null);
@@ -864,18 +867,46 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
               Complete os dados de contato. Você poderá preencher fotos, horário e cardápio logo após a confirmação.
             </p>
 
-            {/* Alerta de erro acessível */}
+            {/* Alerta de erro acessível com ação de descarte automático */}
             {error && (
               <div
                 role="alert"
                 aria-live="assertive"
-                className="flex items-start gap-3 p-4 mb-6 rounded-2xl bg-red-50 border border-red-200 text-red-900 text-sm"
+                className="p-5 mb-6 rounded-2xl bg-red-50 border border-red-200 text-red-900 text-sm space-y-3"
               >
-                <AlertTriangle size={20} className="text-red-600 shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="font-bold">Aviso no pagamento</p>
-                  <p className="mt-0.5 leading-relaxed">{error}</p>
+                <div className="flex items-start gap-3">
+                  <AlertTriangle size={20} className="text-red-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-bold text-red-950">Aviso no pagamento</p>
+                    <p className="mt-0.5 leading-relaxed text-red-900 text-xs sm:text-sm">{error}</p>
+                  </div>
                 </div>
+                {(error.toLowerCase().includes('tentativa') || error.toLowerCase().includes('cobrança') || error.toLowerCase().includes('andamento') || error.toLowerCase().includes('reconciliação')) && (
+                  <div className="flex flex-wrap gap-2 pt-2 border-t border-red-200/70">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (companyChoice && plan) {
+                          await BillingService.cancelAttempt(companyChoice, plan.id);
+                        }
+                        handleStartNewAttempt();
+                      }}
+                      className="px-4 py-2 rounded-xl bg-red-700 hover:bg-red-800 text-white font-bold text-xs transition cursor-pointer shadow-sm"
+                    >
+                      Descartar tentativa anterior e tentar novamente
+                    </button>
+                    {subscriptionId && (
+                      <button
+                        type="button"
+                        onClick={handleCheckStatusNow}
+                        disabled={checkingStatus}
+                        className="px-3.5 py-2 rounded-xl bg-white border border-red-300 text-red-950 hover:bg-red-100 font-bold text-xs transition cursor-pointer"
+                      >
+                        {checkingStatus ? 'Consultando provedor…' : 'Consultar status no provedor'}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

@@ -20,3 +20,12 @@ playwright/.cache/
 skills-lock.json
 .playwright-mcp/
 .vite/
+
+# Ruflo local secrets and runtime data
+.env
+.env.local
+.env.*.local
+.claude-flow/
+.swarm/
+.agents/
+

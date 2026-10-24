@@ -475,7 +475,9 @@ class PaymentService {
       const matches = Array.isArray(search.results) ? search.results.filter((payment: any) => payment.external_reference === subscriptionId) : [];
       if (matches.length > 1) throw new PaymentError(409, 'Mais de um pagamento encontrado. Aguarde a conferência do suporte.');
       if (matches.length === 1) return settlePayment(String(matches[0].id), token, subscriptionId);
-      return { status: rows[0].status, reconciled: false, message: 'Aguardando identificação do pagamento no gateway. Não inicie outra cobrança.' };
+      // Nenhum pagamento localizado no Mercado Pago: descarta automaticamente a tentativa órfã para liberar o cliente
+      await pool.query("UPDATE subscriptions SET status = 'canceled' WHERE id = ? AND status = 'pending'", [subscriptionId]);
+      return { status: 'canceled', reconciled: true, message: 'Tentativa anterior sem registro no gateway descartada com sucesso. Você já pode iniciar um novo pagamento.' };
     }
     return settlePayment(String(logs[0].gateway_reference), await this.accessToken(), subscriptionId);
   }

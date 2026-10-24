@@ -7,6 +7,7 @@
 
 import { CompanyRepository } from '../repositories/companyRepository.js';
 import { ListOptions } from '../repositories/baseRepository.js';
+import { companyContactLinks } from './companyContactLinks.js';
 
 const PLAN_WEIGHT: Record<string, number> = {
   diamond_extremo: 3,
@@ -97,7 +98,8 @@ export class CompanyService {
       planLevel,
       features: Array.isArray(data.features) ? data.features : [],
       views: 0,
-      clicksWhatsapp: 0
+      clicksWhatsapp: 0,
+      ...companyContactLinks(data)
     };
 
     return CompanyRepository.createWithOwner(company, ownerUserId);
@@ -113,6 +115,7 @@ export class CompanyService {
       'description','detailedDescription','phone','whatsapp','address','hours',
       'latitude','longitude','features'];
     const profile = Object.fromEntries(Object.entries(data).filter(([key]) => editable.includes(key)));
+    Object.assign(profile, companyContactLinks(data));
     return CompanyRepository.update(id, profile);
   }
 

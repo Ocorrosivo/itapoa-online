@@ -537,6 +537,23 @@ apiRouter.get('/payments/attempt/active', requireAuth, attachCompanyScope, handl
   });
 }));
 
+// Descartar/cancelar uma tentativa pendente não paga para liberar nova contratação imediatamente
+apiRouter.post('/payments/attempt/cancel', requireAuth, attachCompanyScope, handler(async (req, res) => {
+  const companyId = String(req.body?.companyId ?? '');
+  const planId = String(req.body?.planId ?? '');
+  if (!companyId || !planId) return res.status(400).json({ error: 'companyId e planId obrigatórios.' });
+  if (req.user!.role !== 'admin_master' && !(req.companyIds ?? []).includes(companyId)) {
+    return res.status(403).json({ error: 'Acesso negado.' });
+  }
+
+  const pool = (await import('../mysql.js')).pool;
+  await pool.query(
+    "UPDATE subscriptions SET status='canceled' WHERE companyId=? AND planId=? AND status='pending'",
+    [companyId, planId]
+  );
+  res.json({ success: true, message: 'Tentativa anterior descartada com sucesso. Você já pode iniciar um novo pagamento.' });
+}));
+
 // Recover a valid PIX attempt after a reload without creating a duplicate charge.
 apiRouter.get('/payments/pix/active', requireAuth, attachCompanyScope, handler(async (req, res) => {
   const companyId = String(req.query.companyId ?? req.query.company_id ?? '');

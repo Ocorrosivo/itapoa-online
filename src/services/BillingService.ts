@@ -120,6 +120,15 @@ export class BillingService {
     );
   }
 
+  /** Cancela e descarta uma tentativa pendente para liberar novo pagamento imediatamente */
+  static async cancelAttempt(companyId: string, planId: string): Promise<void> {
+    try {
+      await api.post('/api/payments/attempt/cancel', { companyId, planId });
+    } catch {
+      // Ignora falhas transitórias
+    }
+  }
+
   /** Consulta elegibilidade para 7 dias de experiência Gold. */
   static async checkTrialEligibility(companyId: string): Promise<{
     eligible: boolean;
