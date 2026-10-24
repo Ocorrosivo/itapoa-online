@@ -25,6 +25,7 @@ export class AuthError extends Error {
 export interface AuthResult {
   token: string;
   user: AuthenticatedUser;
+  verificationEmailSent?: boolean;
 }
 
 const normalizeEmail = (email: unknown): string =>
@@ -101,7 +102,12 @@ export class AuthService {
     const id = `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
-    await pool.query(
+    const { emailVerificationService } = await import('./emailVerificationService.js');
+    const connection = await pool.getConnection();
+    let verificationToken: string;
+    try {
+      await connection.beginTransaction();
+      await connection.query(
       `INSERT INTO users (id, name, email, password, role, phone, city)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -113,14 +119,22 @@ export class AuthService {
         typeof payload.phone === 'string' ? payload.phone : null,
         typeof payload.city === 'string' ? payload.city : null
       ]
-    );
+      );
+      // Account and verification obligation are atomic. A missing table cannot
+      // accidentally grant the new account the legacy-user exemption.
+      verificationToken = await emailVerificationService.createVerificationToken(id, email, connection);
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally { connection.release(); }
 
-    // Inicializar token de confirmação e enviar e-mail em background
-    const { emailVerificationService } = await import('./emailVerificationService.js');
-    const clientIp = typeof payload.ip === 'string' ? payload.ip : '127.0.0.1';
-    emailVerificationService.sendVerification(id, email, clientIp).catch((err) => {
-      console.warn('[auth] Could not send initial verification email:', err?.message || err);
-    });
+    let verificationEmailSent = false;
+    try {
+      verificationEmailSent = await emailVerificationService.sendToken(email, verificationToken, payload.planId);
+    } catch {
+      console.warn('[auth] Initial verification mail unavailable; account remains pending');
+    }
 
     const user: AuthenticatedUser = {
       id,
@@ -131,7 +145,7 @@ export class AuthService {
       emailVerified: false
     };
 
-    return { token: signToken({ id, email, role }), user };
+    return { token: signToken({ id, email, role }), user, verificationEmailSent };
   }
 
   /** Returns the authenticated user's own profile. */

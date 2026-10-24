@@ -47,6 +47,13 @@ apiRouter.use('/auth', passwordRecoveryRouter);
 
 const ADMIN_ONLY = ['admin_master'];
 
+async function requireVerifiedEmail(userId: string) {
+  const { emailVerificationService } = await import('../services/emailVerificationService.js');
+  if (!await emailVerificationService.isUserVerified(userId)) {
+    throw new VerificationError(403, 'Confirme seu e-mail antes de continuar a contratação.');
+  }
+}
+
 /**
  * Single error funnel. Known service errors keep their status; anything else
  * becomes a 500 with a generic body so internals never reach the client.
@@ -106,8 +113,8 @@ apiRouter.post('/auth/login', handler(async (req, res) => {
 
 apiRouter.post('/auth/register', handler(async (req, res) => {
   const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
-  const { token, user } = await authService.register({ ...(req.body ?? {}), ip });
-  res.json({ success: true, token, user });
+  const { token, user, verificationEmailSent } = await authService.register({ ...(req.body ?? {}), ip });
+  res.json({ success: true, token, user, verificationEmailSent });
 }));
 
 // Confirmação de e-mail via POST (anti-scanner: nunca consome em GET)
@@ -115,7 +122,8 @@ apiRouter.post('/auth/verify-email', handler(async (req, res) => {
   const { emailVerificationService } = await import('../services/emailVerificationService.js');
   const token = req.body?.token;
   const result = await emailVerificationService.verifyToken(token);
-  res.json({ success: true, message: 'E-mail confirmado com sucesso!', email: result.email });
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ success: true, message: 'E-mail confirmado com sucesso!', userId: result.userId, email: result.email });
 }));
 
 // Reenvio seguro com rate-limit e cooldown de 60s
@@ -134,7 +142,7 @@ apiRouter.post('/auth/resend-verification', handler(async (req, res) => {
   }
 
   const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
-  const sent = await emailVerificationService.sendVerification(users[0].id, email, ip);
+  const sent = await emailVerificationService.sendVerification(users[0].id, email, ip, req.body?.planId);
   if (!sent) {
     return res.status(503).json({
       success: false,
@@ -145,6 +153,7 @@ apiRouter.post('/auth/resend-verification', handler(async (req, res) => {
 }));
 
 apiRouter.get('/auth/verification-status', requireAuth, handler(async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   const { emailVerificationService } = await import('../services/emailVerificationService.js');
   const verified = await emailVerificationService.isUserVerified(req.user!.id);
   res.json({ verified });
@@ -452,6 +461,7 @@ apiRouter.get('/account/companies', requireAuth, handler(async (req, res) => {
 }));
 
 apiRouter.post('/checkout/company', requireAuth, handler(async (req, res) => {
+  await requireVerifiedEmail(req.user!.id);
   const contact = checkoutContact(req.body?.contact ?? {});
   if (!['plan_bronze', 'plan_gold_vip', 'plan_diamond_extremo'].includes(req.body?.planId)) {
     return res.status(400).json({ error: 'Plano inválido.' });
@@ -470,6 +480,7 @@ apiRouter.post('/checkout/company', requireAuth, handler(async (req, res) => {
 }));
 
 apiRouter.post('/payments/card', requireAuth, requireCompanyAccess, handler(async (req, res) => {
+  await requireVerifiedEmail(req.user!.id);
   const companyId = (req.companyIds && req.companyIds[0]) || String(req.body?.companyId ?? '');
   const planId = typeof req.body?.planId === 'string' ? req.body.planId : '';
   if (!planId) return res.status(400).json({ error: 'Plano obrigatório.' });
@@ -479,6 +490,7 @@ apiRouter.post('/payments/card', requireAuth, requireCompanyAccess, handler(asyn
 // Create a real PIX charge. Company access is verified (anti-IDOR); the payer
 // email defaults to the session user.
 apiRouter.post('/payments/pix', requireAuth, requireCompanyAccess, handler(async (req, res) => {
+  await requireVerifiedEmail(req.user!.id);
   const companyId = (req.companyIds && req.companyIds[0]) || String(req.body?.companyId ?? req.body?.company_id ?? '');
   const planId = String(req.body?.planId ?? '');
   if (!planId) return res.status(400).json({ error: 'planId obrigatório.' });

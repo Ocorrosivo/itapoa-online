@@ -26,7 +26,10 @@ async function checkout(page:Page) {
   if(await choose.isVisible()) await choose.click();
   await expect(page.locator('#checkout-phone')).toBeVisible();
   await page.locator('#checkout-phone').fill('(47) 99999-0000');
-  await page.locator('#checkout-company').selectOption('a');
+  const companySelect = page.locator('#checkout-company');
+  if (await companySelect.count() > 0 && await companySelect.isVisible()) {
+    await companySelect.selectOption('a');
+  }
 }
 const confirmed = (page:Page)=>page.getByRole('heading',{name:'Pagamento confirmado com sucesso!',exact:true});
 
