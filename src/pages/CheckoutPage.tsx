@@ -548,20 +548,17 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
     api.get<{ subscriptionId: string; status: string; paymentMethod: string; amount: number; expiresAt?: string } | null>(`/api/payments/attempt/active?companyId=${encodeURIComponent(companyChoice)}&planId=${encodeURIComponent(plan.id)}`)
       .then(attempt => {
         if (!active || !attempt?.subscriptionId) return;
-        setSubscriptionId(attempt.subscriptionId);
-        setReservedAmount(Number(attempt.amount));
-        setMethod(attempt.paymentMethod === 'pix' ? 'pix' : 'card');
-        if (attempt.expiresAt) {
-          setAttemptExpiresAt(attempt.expiresAt);
-        }
         if (attempt.status === 'active') {
+          setSubscriptionId(attempt.subscriptionId);
+          setReservedAmount(Number(attempt.amount));
           setCheckoutState('approved');
           clearPendingPurchase();
-        } else if (attempt.status === 'expired') {
-          setCheckoutState('expired');
-          setError('Tempo esgotado. Esta tentativa de contratação expirou. Para continuar, inicie novamente o processo.');
-        } else {
-          setCheckoutState(attempt.paymentMethod === 'pix' ? 'pending_pix' : 'processing');
+        } else if (attempt.status === 'pending' && attempt.paymentMethod === 'card') {
+          setSubscriptionId(attempt.subscriptionId);
+          setReservedAmount(Number(attempt.amount));
+          setMethod('card');
+          if (attempt.expiresAt) setAttemptExpiresAt(attempt.expiresAt);
+          setCheckoutState('processing');
         }
       }).catch(() => { /* Preserve the selected purchase during a transient failure. */ });
     return () => { active = false; };
@@ -860,8 +857,8 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
               <span className="text-xs text-slate-400 font-medium">Itapoá Online</span>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight">
-              Finalize a contratação
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight uppercase">
+              Finalize sua assinatura
             </h1>
             <p className="text-sm text-slate-500 mt-1 mb-6">
               Complete os dados de contato. Você poderá preencher fotos, horário e cardápio logo após a confirmação.
@@ -1012,37 +1009,63 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                   /* Pagamento Pago: Cartão ou Pix */
                   <div className="mt-8 pt-6 border-t border-slate-200">
                     {/* Seletor de método de pagamento (Cartão vs Pix) */}
+                    {/* Seletor de método de pagamento (Cartão vs Pix) */}
                     {!subscriptionId && (
                       <div className="mb-6">
-                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2">
+                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-2.5">
                           Forma de pagamento
                         </label>
-                        <div className="grid grid-cols-2 gap-3" role="group" aria-label="Selecione o meio de pagamento">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="group" aria-label="Selecione o meio de pagamento">
                           <button
                             type="button"
-                            aria-pressed={method === 'card'}
-                            onClick={() => setMethod('card')}
-                            disabled={busy}
-                            className={`flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl font-bold border transition ${
-                              method === 'card'
-                                ? 'border-[#C8102E] bg-red-50/50 text-[#C8102E] shadow-sm'
-                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                            }`}
-                          >
-                            <CreditCard size={18} /> Cartão de crédito
-                          </button>
-                          <button
-                            type="button"
+                            aria-label="Pix oficial"
                             aria-pressed={method === 'pix'}
                             onClick={() => setMethod('pix')}
                             disabled={busy}
-                            className={`flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl font-bold border transition ${
+                            className={`flex items-center gap-3 p-4 rounded-2xl font-bold border-2 transition text-left cursor-pointer ${
                               method === 'pix'
-                                ? 'border-[#C8102E] bg-red-50/50 text-[#C8102E] shadow-sm'
+                                ? 'border-emerald-600 bg-emerald-50/50 text-emerald-950 shadow-sm'
                                 : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                             }`}
                           >
-                            <QrCode size={18} /> Pix oficial
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                              method === 'pix' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              <QrCode size={20} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-black">PIX</span>
+                                <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Instantâneo</span>
+                              </div>
+                              <span className="text-xs text-slate-500 font-normal block truncate">Pagamento instantâneo via QR Code</span>
+                            </div>
+                          </button>
+
+                          <button
+                            type="button"
+                            aria-label="Cartão de crédito"
+                            aria-pressed={method === 'card'}
+                            onClick={() => setMethod('card')}
+                            disabled={busy}
+                            className={`flex items-center gap-3 p-4 rounded-2xl font-bold border-2 transition text-left cursor-pointer ${
+                              method === 'card'
+                                ? 'border-[#C8102E] bg-red-50/50 text-slate-950 shadow-sm'
+                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                              method === 'card' ? 'bg-[#C8102E] text-white' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              <CreditCard size={20} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-black">CARTÃO DE CRÉDITO</span>
+                                <span className="text-[10px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">Seguro</span>
+                              </div>
+                              <span className="text-xs text-slate-500 font-normal block truncate">Pagamento seguro sem renovação</span>
+                            </div>
                           </button>
                         </div>
                       </div>
@@ -1163,40 +1186,62 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                           </div>
                         </div>
 
-                        {/* Redesign Premium: Contador e Status em Tempo Real */}
+                        {/* Redesign Premium: Contador e Status em Tempo Real (exibido EXCLUSIVAMENTE para PIX válido) */}
                         <PaymentCountdownTimer
                           secondsRemaining={secondsRemaining}
                           checkingStatus={checkingStatus}
                           onCheckStatus={handleCheckStatusNow}
                           isExpired={checkoutState === 'expired'}
                         />
+
+                        {/* Botão de escape para alternar método */}
+                        <div className="pt-2 text-center">
+                          <button
+                            type="button"
+                            onClick={handleStartNewAttempt}
+                            className="text-xs font-bold text-slate-500 hover:text-slate-800 underline transition cursor-pointer"
+                          >
+                            Escolher outra forma de pagamento ou gerar novo código Pix
+                          </button>
+                        </div>
                       </div>
                     )}
 
-                    {subscriptionId && !pix && (
-                      <div role="status" className="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 space-y-5 shadow-sm">
-                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200/80 w-fit">
-                          <Clock size={14} className="text-amber-600" />
-                          Aguardando confirmação do pagamento
+                    {/* Tentativa de Cartão em processamento (sem cronômetro de 5 minutos) */}
+                    {subscriptionId && !pix && checkoutState === 'processing' && (
+                      <div role="status" className="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 space-y-5 shadow-sm text-center">
+                        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200/80 mx-auto">
+                          <Loader2 size={14} className="animate-spin text-amber-600" />
+                          Processando pagamento
                         </div>
 
                         <div>
                           <h2 className="text-xl sm:text-2xl font-black text-slate-950 tracking-tight">
-                            Aguardando confirmação do pagamento
+                            Processando pagamento com cartão
                           </h2>
-                          <p className="text-xs sm:text-sm text-slate-500 mt-1 leading-relaxed">
-                            A ativação depende da confirmação do Mercado Pago e do processamento no servidor. Não refaça a cobrança enquanto esta tentativa estiver em análise.
+                          <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
+                            A ativação depende da confirmação da operadora e do processamento no servidor.
                           </p>
                         </div>
 
-                        {/* Redesign Premium: Contador e Status em Tempo Real */}
-                        <PaymentCountdownTimer
-                          secondsRemaining={secondsRemaining}
-                          checkingStatus={checkingStatus}
-                          onCheckStatus={handleCheckStatusNow}
-                          isExpired={checkoutState === 'expired'}
-                          onStartNewAttempt={checkoutState === 'rejected' ? handleStartNewAttempt : undefined}
-                        />
+                        <div className="pt-2 flex flex-col sm:flex-row gap-3 justify-center">
+                          <button
+                            type="button"
+                            onClick={handleCheckStatusNow}
+                            disabled={checkingStatus}
+                            className="py-3 px-6 rounded-xl bg-slate-950 text-white font-bold hover:bg-slate-800 transition disabled:opacity-50 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer shadow-sm"
+                          >
+                            <RefreshCw size={14} className={checkingStatus ? 'animate-spin' : ''} />
+                            {checkingStatus ? 'Consultando provedor…' : 'Verificar status agora'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleStartNewAttempt}
+                            className="py-3 px-5 rounded-xl border border-slate-300 text-slate-700 font-bold hover:bg-slate-50 text-xs sm:text-sm transition cursor-pointer"
+                          >
+                            Trocar método de pagamento
+                          </button>
+                        </div>
                       </div>
                     )}
 
