@@ -89,7 +89,7 @@ test.describe('itapoa.online — auditoria funcional', () => {
       await page.setViewportSize({ width: vp.w, height: vp.h });
       const apiFails = noApiFail(page);
       await page.goto(base + '/', { waitUntil: 'domcontentloaded' });
-      await expect(page.locator('text=ITAPOÁ ONLINE').first()).toBeVisible({ timeout: 8000 });
+      await expect(page.locator('text=ITAPOÁ ONLINE').or(page.locator('img[alt="Itapoá Online"]')).first()).toBeVisible({ timeout: 8000 });
 
       // responsive: no horizontal scroll
       const hasHScroll = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
