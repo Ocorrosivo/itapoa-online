@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS companies (
     whatsapp VARCHAR(50),
     instagram VARCHAR(255) NULL,
     facebook VARCHAR(255) NULL,
+    tiktok VARCHAR(255) NULL,
     website VARCHAR(512) NULL,
     address VARCHAR(255),
     hours TEXT,

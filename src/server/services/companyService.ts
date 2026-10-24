@@ -110,7 +110,7 @@ export class CompanyService {
   async updateCompany(id: string, data: Record<string, any>) {
     // Self-service profile completion must never grant paid placement or change identity.
     const editable = ['name','slug','logo','coverImage','categoryId','cityId',
-      'description','detailedDescription','phone','whatsapp','instagram','facebook','website',
+      'description','detailedDescription','phone','whatsapp','instagram','facebook','tiktok','website',
       'address','hours',
       'latitude','longitude','features'];
     const profile = Object.fromEntries(Object.entries(data).filter(([key]) => editable.includes(key)));
