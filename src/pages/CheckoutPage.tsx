@@ -553,7 +553,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
           setReservedAmount(Number(attempt.amount));
           setCheckoutState('approved');
           clearPendingPurchase();
-        } else if (attempt.status === 'pending' && attempt.paymentMethod === 'card') {
+        } else if (attempt.status === 'pending' && (attempt.paymentMethod === 'card' || attempt.paymentMethod === 'credit_card')) {
           setSubscriptionId(attempt.subscriptionId);
           setReservedAmount(Number(attempt.amount));
           setMethod('card');
@@ -1208,7 +1208,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                     )}
 
                     {/* Tentativa de Cartão em processamento (sem cronômetro de 5 minutos) */}
-                    {subscriptionId && !pix && checkoutState === 'processing' && (
+                    {subscriptionId && !pix && checkoutState !== 'approved' && (
                       <div role="status" className="rounded-3xl border border-slate-200 bg-white p-6 sm:p-8 space-y-5 shadow-sm text-center">
                         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200/80 mx-auto">
                           <Loader2 size={14} className="animate-spin text-amber-600" />
