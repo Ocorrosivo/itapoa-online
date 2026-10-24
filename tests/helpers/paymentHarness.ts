@@ -33,6 +33,7 @@ export async function createPaymentHarness(uploadDirectory?: string) {
     MERCADOPAGO_WEBHOOK_SECRET: 'fixture-webhook-signature-only', MERCADOPAGO_MODE: 'test',
     // Never inherit a real SMTP transport from the operator's shell.
     SMTP_HOST: '',
+    PAYMENT_TEST_ACCOUNT_EMAIL: '', PAYMENT_TEST_STARTS_AT: '', PAYMENT_TEST_EXPIRES_AT: '',
   });
   const admin = await mysql.createConnection({ host: '127.0.0.1', port, user: 'root', password });
   await admin.query(`CREATE DATABASE \`${database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
