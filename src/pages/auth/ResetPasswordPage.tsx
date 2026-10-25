@@ -4,7 +4,7 @@ import { api } from '../../lib/apiClient';
 import { useAuth } from '../../context/AuthContext';
 
 export const ResetPasswordPage: React.FC<{ onNavigateTab: (tab: string) => void }> = ({ onNavigateTab }) => {
-  // Keep the secret only in memory. A GET never consumes a link (mail scanners).
+  // Mantém o segredo apenas em memória; um GET nunca consome o link
   const [token, setToken] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('token') || '');
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
@@ -60,131 +60,120 @@ export const ResetPasswordPage: React.FC<{ onNavigateTab: (tab: string) => void 
   const validLink = /^[a-f0-9]{64}$/.test(token);
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center px-4 py-16 font-sans relative overflow-hidden">
-      {/* Luz ambiente de fundo */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[30rem] h-[30rem] bg-[#C8102E]/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-10 right-1/4 w-80 h-80 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
-
-      {/* Botão de retorno superior */}
-      <div className="absolute top-6 left-6 z-20">
+    <main className="min-h-screen bg-[#F6F8FC] text-[#101828] flex flex-col justify-center items-center px-4 py-12 font-sans relative">
+      {/* Botão sutil de retorno no topo */}
+      <div className="w-full max-w-md mb-4 flex items-center justify-between">
         <button
           type="button"
           onClick={() => onNavigateTab('home')}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-slate-300 hover:text-white text-xs font-bold transition shadow-sm cursor-pointer hover:bg-slate-800"
+          className="inline-flex items-center gap-2 text-xs font-semibold text-[#667085] hover:text-[#101828] transition cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Voltar ao Portal</span>
         </button>
+
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#667085]">
+          <ShieldCheck size={14} className="text-[#00B894]" />
+          <span>Ambiente Seguro</span>
+        </div>
       </div>
 
-      <div className="w-full max-w-md bg-slate-900/95 backdrop-blur-xl border border-slate-800/90 rounded-3xl p-8 sm:p-10 shadow-2xl space-y-6 relative z-10">
+      {/* Card Principal — Tema Claro & Minimalista */}
+      <div className="w-full max-w-md bg-white border border-[#E5EAF1] rounded-2xl p-7 sm:p-9 shadow-xs space-y-6">
+        
         {/* Logotipo e Cabeçalho */}
         <div className="text-center space-y-3">
           <button
             type="button"
             onClick={() => onNavigateTab('home')}
-            className="mx-auto block transition-transform hover:scale-105"
+            className="mx-auto block transition-opacity hover:opacity-85 cursor-pointer"
             aria-label="Voltar à página inicial"
           >
             <img
               src="/logotipo.png"
               alt="Itapoá Online"
-              className="h-14 w-auto object-contain drop-shadow-md mx-auto"
+              className="h-12 w-auto object-contain mx-auto"
             />
           </button>
-          <span className="text-[10px] font-black tracking-widest text-[#C8102E] uppercase block">
-            SEGURANÇA & RECUPERAÇÃO DE CONTA
+
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-slate-100 text-[#080F24]">
+            Segurança da Conta
           </span>
-          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+
+          <h1 className="text-2xl font-black text-[#101828] tracking-tight">
             {done ? 'Senha Atualizada!' : 'Definir Nova Senha'}
           </h1>
-          <p className="text-xs sm:text-sm text-slate-400 max-w-sm mx-auto leading-relaxed">
+
+          <p className="text-xs sm:text-sm text-[#667085] max-w-sm mx-auto leading-relaxed">
             {done
-              ? 'Sua nova senha foi salva com segurança. Utilize-a para acessar seu painel comercial.'
+              ? 'Sua senha foi redefinida com segurança. Entre agora com sua nova credencial.'
               : 'Escolha uma nova senha forte e exclusiva para proteger o acesso à sua empresa.'}
           </p>
         </div>
 
-        {/* ESTADO 1: SENHA REDEFINIDA COM SUCESSO (Visual Premium) */}
+        {error && (
+          <div role="alert" className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-center gap-2.5">
+            <AlertTriangle size={16} className="text-red-600 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
         {done ? (
-          <div className="space-y-6 pt-2">
-            <div className="rounded-2xl bg-emerald-950/50 border border-emerald-500/30 p-6 text-center space-y-3">
-              <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto shadow-inner border border-emerald-500/40">
-                <CheckCircle2 size={36} className="animate-pulse" />
+          /* Estado de Sucesso */
+          <div className="space-y-5 pt-1 animate-in fade-in">
+            <div className="rounded-xl bg-[#ECFDF5] border border-[#A7F3D0] p-5 text-center space-y-2">
+              <div className="w-12 h-12 bg-emerald-100 text-[#00B894] rounded-full flex items-center justify-center mx-auto">
+                <CheckCircle2 size={28} />
               </div>
-              <h2 className="text-lg font-bold text-emerald-200">
-                Acesso redefinido com sucesso!
-              </h2>
-              <p className="text-xs text-emerald-300/80 leading-relaxed">
-                Todas as sessões anteriores foram encerradas com segurança. Você já pode fazer login com suas novas credenciais.
+              <h2 className="text-sm font-bold text-[#065F46]">Senha redefinida com sucesso!</h2>
+              <p className="text-xs text-[#065F46]/90">
+                Sua credencial já está ativa para autenticação no portal.
               </p>
             </div>
 
             <button
               type="button"
               onClick={() => onNavigateTab('login')}
-              className="w-full py-4 px-6 rounded-2xl bg-[#C8102E] hover:bg-[#A00D24] text-white font-bold transition flex items-center justify-center gap-2 text-sm shadow-lg shadow-red-950/40 cursor-pointer"
+              className="w-full h-[48px] rounded-xl bg-[#080F24] hover:bg-slate-800 text-white font-bold transition flex items-center justify-center gap-2 text-xs sm:text-sm shadow-xs cursor-pointer"
             >
-              <LogIn size={18} />
-              <span>Entrar no Painel Agora</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onNavigateTab('home')}
-              className="w-full text-center text-xs text-slate-400 hover:text-white transition block pt-1 cursor-pointer"
-            >
-              Voltar à página inicial do portal
+              <LogIn size={16} />
+              <span>Entrar com a nova senha</span>
             </button>
           </div>
         ) : !validLink ? (
-          /* ESTADO 2: LINK INVÁLIDO OU EXPIRADO */
-          <div className="space-y-6">
-            <div className="rounded-2xl bg-amber-950/40 border border-amber-600/40 p-5 text-center space-y-3">
-              <div className="w-12 h-12 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center mx-auto border border-amber-500/30">
-                <AlertTriangle size={24} />
-              </div>
-              <p className="text-sm font-bold text-amber-200">Link expirado ou já utilizado</p>
-              <p className="text-xs text-amber-300/70 leading-relaxed">
+          /* Link expirado ou ausente */
+          <div className="space-y-5 pt-1">
+            <div className="p-5 rounded-xl bg-amber-50 border border-amber-200 text-center space-y-2">
+              <AlertTriangle size={24} className="text-amber-600 mx-auto" />
+              <h2 className="text-xs font-bold uppercase tracking-wider text-amber-900">Link expirado ou já utilizado</h2>
+              <p className="text-xs text-amber-800 leading-relaxed">
                 Por motivos de segurança, os links de redefinição têm uso único e validade de 15 minutos.
               </p>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2 pt-1">
               <button
                 type="button"
                 onClick={() => onNavigateTab('esqueci-senha')}
-                className="w-full py-3.5 px-6 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold transition text-xs sm:text-sm cursor-pointer shadow-sm"
+                className="w-full h-[48px] rounded-xl bg-[#080F24] hover:bg-slate-800 text-white font-bold transition text-xs sm:text-sm shadow-xs cursor-pointer"
               >
                 Solicitar novo link de recuperação
               </button>
               <button
                 type="button"
                 onClick={() => onNavigateTab('login')}
-                className="w-full py-3 px-6 rounded-xl border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800/50 transition text-xs font-semibold cursor-pointer"
+                className="w-full h-[44px] rounded-xl border border-[#E5EAF1] bg-white text-[#101828] font-bold hover:bg-slate-50 transition text-xs cursor-pointer"
               >
                 Voltar ao login
               </button>
             </div>
           </div>
         ) : (
-          /* ESTADO 3: FORMULÁRIO DE NOVA SENHA */
-          <form onSubmit={submit} className="space-y-5">
-            <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 text-xs text-slate-400 flex items-center gap-2.5">
-              <ShieldCheck size={16} className="text-emerald-400 shrink-0" />
-              <span>Link válido por 15 minutos de uso único criptografado.</span>
-            </div>
-
-            {error && (
-              <div role="alert" className="p-4 rounded-xl bg-red-950/70 border border-red-800/80 text-red-200 text-xs flex items-center gap-2.5">
-                <AlertTriangle size={16} className="text-red-400 shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
-
+          /* Formulário de Criação da Nova Senha */
+          <form onSubmit={submit} className="space-y-4 pt-1">
             <div className="space-y-1.5">
-              <label htmlFor="new-password" className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
-                Nova Senha (Mínimo 8 caracteres)
+              <label htmlFor="new-password" className="block text-xs font-bold text-[#101828] uppercase tracking-wider">
+                Nova Senha (mínimo 8 caracteres)
               </label>
               <div className="relative">
                 <input
@@ -197,22 +186,22 @@ export const ResetPasswordPage: React.FC<{ onNavigateTab: (tab: string) => void 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full rounded-xl p-3.5 pr-12 bg-slate-950 border border-slate-800 focus:border-[#C8102E] focus:outline-none transition text-sm text-white placeholder-slate-600"
+                  className="w-full h-[48px] rounded-xl px-4 pr-11 bg-white border border-[#E5EAF1] focus:border-[#080F24] focus:ring-1 focus:ring-[#080F24] focus:outline-none transition text-sm text-[#101828] placeholder-[#667085]/60"
                 />
                 <button
                   type="button"
                   aria-label={visible ? 'Ocultar senha' : 'Mostrar senha'}
                   aria-pressed={visible}
                   onClick={() => setVisible(!visible)}
-                  className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-200 transition cursor-pointer"
+                  className="absolute right-3.5 top-3.5 text-[#667085] hover:text-[#101828] transition cursor-pointer"
                 >
-                  {visible ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {visible ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="confirm-password" className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+              <label htmlFor="confirm-password" className="block text-xs font-bold text-[#101828] uppercase tracking-wider">
                 Confirmar Nova Senha
               </label>
               <input
@@ -225,31 +214,31 @@ export const ResetPasswordPage: React.FC<{ onNavigateTab: (tab: string) => void 
                 value={confirmation}
                 onChange={(e) => setConfirmation(e.target.value)}
                 placeholder="••••••••"
-                className="w-full rounded-xl p-3.5 bg-slate-950 border border-slate-800 focus:border-[#C8102E] focus:outline-none transition text-sm text-white placeholder-slate-600"
+                className="w-full h-[48px] rounded-xl px-4 bg-white border border-[#E5EAF1] focus:border-[#080F24] focus:ring-1 focus:ring-[#080F24] focus:outline-none transition text-sm text-[#101828] placeholder-[#667085]/60"
               />
             </div>
 
             <button
               type="submit"
               disabled={busy}
-              className="w-full py-4 px-6 rounded-2xl bg-[#C8102E] hover:bg-[#A00D24] text-white font-bold transition flex items-center justify-center gap-2 text-sm shadow-lg shadow-red-950/40 disabled:opacity-50 cursor-pointer"
+              className="w-full h-[48px] rounded-xl bg-[#080F24] hover:bg-slate-800 text-white font-bold transition flex items-center justify-center gap-2 text-xs sm:text-sm shadow-xs disabled:opacity-50 cursor-pointer"
             >
-              <KeyRound size={18} />
+              <KeyRound size={16} />
               <span>{busy ? 'Salvando com segurança…' : 'Salvar Nova Senha'}</span>
             </button>
 
-            <div className="pt-2 text-center space-y-2">
+            <div className="pt-2 text-center space-y-1.5">
               <button
                 type="button"
                 onClick={() => onNavigateTab('esqueci-senha')}
-                className="text-xs text-slate-400 hover:text-slate-200 underline transition cursor-pointer block mx-auto"
+                className="text-xs text-[#667085] hover:text-[#101828] underline transition cursor-pointer block mx-auto"
               >
                 Solicitar novo link de recuperação
               </button>
               <button
                 type="button"
                 onClick={() => onNavigateTab('login')}
-                className="text-xs text-slate-400 hover:text-slate-200 underline transition cursor-pointer block mx-auto"
+                className="text-xs text-[#667085] hover:text-[#101828] underline transition cursor-pointer block mx-auto"
               >
                 Voltar ao login
               </button>
@@ -260,4 +249,3 @@ export const ResetPasswordPage: React.FC<{ onNavigateTab: (tab: string) => void 
     </main>
   );
 };
-

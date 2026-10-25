@@ -497,9 +497,9 @@ export const AppRoutes: React.FC = () => {
 
   if (!activeCompanySlug && !activeBairroSlug && !activePraiaSlug &&
     !activeInstitutional && !activeCampaignSlug && (isAuthTab(currentTab) || currentTab === 'checkout')) {
-    const isCheckout = currentTab === 'checkout';
+    const isDark = currentTab === 'login/admin';
     return (
-      <div className={`min-h-screen ${isCheckout ? 'bg-[#F6F8FC]' : 'bg-slate-950'} flex flex-col font-sans`}>
+      <div className={`min-h-screen ${isDark ? 'bg-slate-950 text-white' : 'bg-[#F6F8FC] text-[#101828]'} flex flex-col font-sans`}>
         {renderContent()}
         <AIModal isOpen={isAIModalOpen} onClose={() => setIsAIModalOpen(false)} />
       </div>

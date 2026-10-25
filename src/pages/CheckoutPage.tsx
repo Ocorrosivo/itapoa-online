@@ -462,9 +462,13 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
   const requestId = useRef(crypto.randomUUID());
   const submitLock = useRef(false);
 
-  const handleStartNewAttempt = () => {
+  const handleStartNewAttempt = async () => {
     if (companyChoice && plan) {
-      BillingService.cancelAttempt(companyChoice, plan.id).catch(() => {});
+      try { await BillingService.cancelAttempt(companyChoice, plan.id); }
+      catch (error) {
+        setError(error instanceof Error ? error.message : 'Não foi possível confirmar o encerramento da tentativa.');
+        return;
+      }
     }
     setReservedAmount(null);
     setSubscriptionId('');
@@ -974,12 +978,7 @@ export function CheckoutPage({ onNavigateTab }: { onNavigateTab: (tab: string) =
                 <div className="flex flex-wrap gap-2 pt-2 border-t border-red-200/70">
                   <button
                     type="button"
-                    onClick={async () => {
-                      if (companyChoice && plan) {
-                        await BillingService.cancelAttempt(companyChoice, plan.id);
-                      }
-                      handleStartNewAttempt();
-                    }}
+                    onClick={handleStartNewAttempt}
                     className="px-4 py-2 rounded-xl bg-red-700 hover:bg-red-800 text-white font-bold text-xs transition cursor-pointer shadow-xs"
                   >
                     Descartar tentativa anterior e tentar novamente

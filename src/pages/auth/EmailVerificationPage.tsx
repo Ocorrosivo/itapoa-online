@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, AlertTriangle, Mail, ArrowRight, RefreshCw } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Mail, ArrowRight, RefreshCw, ShieldCheck } from 'lucide-react';
 import { api } from '../../lib/apiClient';
 import { readPendingPurchase } from '../../lib/pendingPurchase';
 
@@ -67,161 +67,146 @@ export const EmailVerificationPage: React.FC<{ onNavigateTab: (tab: string) => v
   const validTokenFormat = /^[a-f0-9]{64}$/i.test(token);
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center px-4 py-16 font-sans relative overflow-hidden">
-      {/* Luz ambiente de fundo */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[30rem] h-[30rem] bg-[#C8102E]/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-10 right-1/4 w-80 h-80 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
-
-      {/* Botão de retorno superior */}
-      <div className="absolute top-6 left-6 z-20">
+    <main className="min-h-screen bg-[#F6F8FC] text-[#101828] flex flex-col justify-center items-center px-4 py-12 font-sans relative">
+      {/* Botão sutil de retorno no topo */}
+      <div className="w-full max-w-md mb-4 flex items-center justify-between">
         <button
           type="button"
           onClick={() => onNavigateTab('home')}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-slate-300 hover:text-white text-xs font-bold transition shadow-sm cursor-pointer hover:bg-slate-800"
+          className="inline-flex items-center gap-2 text-xs font-semibold text-[#667085] hover:text-[#101828] transition cursor-pointer"
         >
           <ArrowRight className="w-4 h-4 rotate-180" />
           <span>Voltar ao Portal</span>
         </button>
+
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#667085]">
+          <ShieldCheck size={14} className="text-[#00B894]" />
+          <span>Ambiente Seguro</span>
+        </div>
       </div>
 
-      <div className="w-full max-w-md bg-slate-900/95 backdrop-blur-xl border border-slate-800/90 rounded-3xl p-8 sm:p-10 shadow-2xl space-y-6 relative z-10">
+      {/* Card Principal — Tema Claro & Minimalista */}
+      <div className="w-full max-w-md bg-white border border-[#E5EAF1] rounded-2xl p-7 sm:p-9 shadow-xs space-y-6">
+        
         {/* Logotipo e Cabeçalho */}
         <div className="text-center space-y-3">
           <button
             type="button"
             onClick={() => onNavigateTab('home')}
-            className="mx-auto block transition-transform hover:scale-105"
+            className="mx-auto block transition-opacity hover:opacity-85 cursor-pointer"
             aria-label="Voltar à página inicial"
           >
             <img
               src="/logotipo.png"
               alt="Itapoá Online"
-              className="h-14 w-auto object-contain drop-shadow-md mx-auto"
+              className="h-12 w-auto object-contain mx-auto"
             />
           </button>
-          <span className="text-[10px] font-black tracking-widest text-[#C8102E] uppercase block">
-            ATIVAÇÃO SEGURA DE CONTA
+
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-slate-100 text-[#080F24]">
+            Confirmação de Conta
           </span>
-          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            {success ? 'E-mail Confirmado!' : 'Confirmação de E-mail'}
+
+          <h1 className="text-2xl font-black text-[#101828] tracking-tight">
+            {success ? 'E-mail Confirmado!' : 'Validar seu E-mail'}
           </h1>
-          <p className="text-xs sm:text-sm text-slate-400 max-w-sm mx-auto leading-relaxed">
+
+          <p className="text-xs sm:text-sm text-[#667085] max-w-sm mx-auto leading-relaxed">
             {success
-              ? 'Sua conta empresarial foi ativada com sucesso. Você já pode prosseguir para seu painel ou pagamento.'
-              : 'Clique no botão abaixo para validar seu endereço de e-mail e liberar o acesso com segurança.'}
+              ? 'Sua conta foi ativada com sucesso no Itapoá Online. Você já pode acessar todos os recursos do portal.'
+              : 'Clique no botão abaixo para concluir a validação e ativar os recursos comerciais da sua empresa.'}
           </p>
         </div>
 
         {error && (
-          <div role="alert" className="p-4 rounded-xl bg-red-950/70 border border-red-800/80 text-red-200 text-xs flex items-center gap-2.5">
-            <AlertTriangle size={16} className="text-red-400 shrink-0" />
+          <div role="alert" className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-center gap-2.5">
+            <AlertTriangle size={16} className="text-red-600 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
+        {resendMsg && (
+          <div role="status" className="p-3.5 rounded-xl bg-[#ECFDF5] border border-[#A7F3D0] text-[#065F46] text-xs flex items-center gap-2.5">
+            <CheckCircle2 size={16} className="text-[#00B894] shrink-0" />
+            <span>{resendMsg}</span>
+          </div>
+        )}
+
         {success ? (
-          <div className="space-y-4 pt-2">
-            <div className="rounded-2xl bg-emerald-950/50 border border-emerald-500/30 p-6 text-center space-y-3">
-              <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto shadow-inner border border-emerald-500/40">
-                <CheckCircle2 size={36} className="animate-pulse" />
+          /* Estado de Sucesso */
+          <div className="space-y-4 pt-1 animate-in fade-in">
+            <div className="rounded-xl bg-[#ECFDF5] border border-[#A7F3D0] p-5 text-center space-y-2">
+              <div className="w-12 h-12 bg-emerald-100 text-[#00B894] rounded-full flex items-center justify-center mx-auto">
+                <CheckCircle2 size={28} />
               </div>
-              <h2 className="text-lg font-bold text-emerald-200">Conta Ativada com Sucesso!</h2>
-              <p className="text-xs text-emerald-300/80 leading-relaxed">
-                Seu e-mail foi validado no portal. Seu plano e dados cadastrais estão preservados.
+              <h2 className="text-sm font-bold text-[#065F46]">E-mail verificado com sucesso!</h2>
+              <p className="text-xs text-[#065F46]/90">
+                Sua empresa agora tem acesso total ao catálogo e painel administrativo.
               </p>
             </div>
 
-            {pending ? (
-              <button
-                type="button"
-                onClick={() => onNavigateTab('checkout')}
-                className="w-full flex items-center justify-center gap-2 py-4 px-6 rounded-2xl bg-[#C8102E] hover:bg-[#A00D24] text-white font-bold transition text-sm shadow-lg shadow-red-950/40 cursor-pointer"
-              >
-                <span>Continuar para o Pagamento</span>
-                <ArrowRight size={18} />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => onNavigateTab('painel')}
-                className="w-full py-4 px-6 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold transition text-sm cursor-pointer shadow-sm"
-              >
-                Acessar meu Painel
-              </button>
-            )}
-
             <button
               type="button"
-              onClick={() => onNavigateTab('home')}
-              className="w-full text-center text-xs text-slate-400 hover:text-white transition block pt-1 cursor-pointer"
+              onClick={() => onNavigateTab(pending ? 'checkout' : 'painel')}
+              className="w-full h-[48px] rounded-xl bg-[#080F24] hover:bg-slate-800 text-white font-bold transition flex items-center justify-center gap-2 text-xs sm:text-sm shadow-xs cursor-pointer"
             >
-              Voltar à página inicial do portal
+              <span>{pending ? 'Continuar com o plano selecionado' : 'Acessar meu painel'}</span>
+              <ArrowRight size={16} />
             </button>
           </div>
         ) : validTokenFormat ? (
-          <div className="space-y-4">
-            <p className="text-xs text-slate-400 text-center leading-relaxed">
-              A confirmação exige sua ação direta para evitar ativações acidentais por antivírus ou scanners de e-mail.
-            </p>
+          /* Token presente para confirmação */
+          <div className="space-y-4 pt-1">
             <button
               type="button"
-              disabled={busy}
               onClick={handleConfirm}
-              className="w-full py-4 px-6 rounded-2xl bg-[#C8102E] hover:bg-[#A00D24] text-white font-bold transition flex items-center justify-center gap-2 text-sm shadow-lg shadow-red-950/40 disabled:opacity-50 cursor-pointer"
+              disabled={busy}
+              className="w-full h-[48px] rounded-xl bg-[#080F24] hover:bg-slate-800 text-white font-bold transition flex items-center justify-center gap-2 text-xs sm:text-sm shadow-xs disabled:opacity-50 cursor-pointer"
             >
-              <CheckCircle2 size={18} />
-              <span>{busy ? 'Validando token…' : 'Confirmar meu E-mail Agora'}</span>
+              <CheckCircle2 size={16} />
+              <span>{busy ? 'Validando e-mail…' : 'Confirmar e ativar minha conta'}</span>
             </button>
           </div>
         ) : (
-          <div className="space-y-5">
-            <div className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800 text-sm space-y-3">
-              <p className="font-semibold text-slate-200">Precisa de um novo link?</p>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Se você não recebeu a mensagem ou o link expirou, informe seu e-mail comercial abaixo para reenviarmos:
-              </p>
-              <form onSubmit={handleResend} className="space-y-3 pt-1">
+          /* Solicitar Reenvio */
+          <form onSubmit={handleResend} className="space-y-4 pt-1">
+            <div className="space-y-1.5">
+              <label htmlFor="resend-email" className="block text-xs font-bold text-[#101828] uppercase tracking-wider">
+                E-mail para reenvio
+              </label>
+              <div className="relative">
                 <input
+                  id="resend-email"
                   type="email"
                   required
-                  placeholder="seu-email@empresa.com.br"
                   value={resendEmail}
                   onChange={(e) => setResendEmail(e.target.value)}
-                  className="w-full p-3.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:border-[#C8102E] focus:outline-none"
+                  placeholder="seuemail@empresa.com.br"
+                  className="w-full h-[48px] rounded-xl px-4 pr-11 bg-white border border-[#E5EAF1] focus:border-[#080F24] focus:ring-1 focus:ring-[#080F24] focus:outline-none transition text-sm text-[#101828] placeholder-[#667085]/60"
                 />
-                <button
-                  type="submit"
-                  disabled={resendBusy || !resendEmail}
-                  className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 font-bold text-xs sm:text-sm transition disabled:opacity-50 cursor-pointer"
-                >
-                  <RefreshCw size={16} className={resendBusy ? 'animate-spin' : ''} />
-                  <span>{resendBusy ? 'Reenviando…' : 'Reenviar E-mail de Confirmação'}</span>
-                </button>
-              </form>
-              {resendMsg && (
-                <p role="status" className="text-xs text-emerald-400 mt-2 font-medium">
-                  {resendMsg}
-                </p>
-              )}
+                <Mail size={16} className="absolute right-3.5 top-3.5 text-[#667085] pointer-events-none" />
+              </div>
             </div>
 
-            <div className="flex justify-between items-center text-xs text-slate-400 pt-1">
+            <button
+              type="submit"
+              disabled={resendBusy}
+              className="w-full h-[48px] rounded-xl bg-[#080F24] hover:bg-slate-800 text-white font-bold transition flex items-center justify-center gap-2 text-xs sm:text-sm shadow-xs disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw size={15} className={resendBusy ? 'animate-spin' : ''} />
+              <span>{resendBusy ? 'Enviando…' : 'Reenviar link de confirmação'}</span>
+            </button>
+
+            <div className="pt-2 text-center">
               <button
                 type="button"
                 onClick={() => onNavigateTab('login')}
-                className="hover:text-white underline transition cursor-pointer"
+                className="text-xs text-[#667085] hover:text-[#101828] underline transition cursor-pointer"
               >
-                Ir para Login
-              </button>
-              <button
-                type="button"
-                onClick={() => onNavigateTab('home')}
-                className="hover:text-white underline transition cursor-pointer"
-              >
-                Página Inicial
+                Voltar ao login
               </button>
             </div>
-          </div>
+          </form>
         )}
       </div>
     </main>

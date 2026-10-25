@@ -2,16 +2,23 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * Dedicated Login Page Component - /login
+ * Tema Claro & Minimalista — Redesign Premium
  */
 
 import React, { useState } from 'react';
-import { Mail, Lock, LogIn, ArrowLeft, ShieldCheck, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, LogIn, ArrowLeft, ShieldCheck, Eye, EyeOff, Sparkles } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { readPendingPurchase } from '../../lib/pendingPurchase';
 
 interface LoginPageProps {
   onNavigateTab: (tab: string) => void;
 }
+
+const PLAN_PRETTY_NAMES: Record<string, string> = {
+  plan_bronze: 'Bronze (Presença Essencial)',
+  plan_gold_vip: 'Gold VIP (Destaque Comercial)',
+  plan_diamond_extremo: 'Diamond Extremo (Liderança Regional)'
+};
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateTab }) => {
   const { login } = useAuth();
@@ -34,9 +41,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateTab }) => {
         return;
       }
 
-      // Resume pending purchase if present — do not require new selection
       if (readPendingPurchase()) {
-        onNavigateTab('planos');
+        onNavigateTab('checkout');
         return;
       }
       const role = authenticated.role;
@@ -48,71 +54,86 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateTab }) => {
     }
   };
 
+  const planName = pending?.planId ? (PLAN_PRETTY_NAMES[pending.planId] || pending.planId) : null;
+
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center px-4 py-16 font-sans relative overflow-hidden">
-
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-[#C8102E]/20 rounded-full blur-3xl pointer-events-none" />
-
-      <div className="absolute top-6 left-6">
+    <main className="min-h-screen bg-[#F6F8FC] text-[#101828] flex flex-col justify-center items-center px-4 py-12 font-sans relative">
+      {/* Barra superior de navegação */}
+      <div className="w-full max-w-md mb-4 flex items-center justify-between">
         <button
+          type="button"
           onClick={() => onNavigateTab('home')}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white text-xs font-bold transition shadow"
+          className="inline-flex items-center gap-2 text-xs font-semibold text-[#667085] hover:text-[#101828] transition cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Voltar ao Portal</span>
         </button>
+
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#667085]">
+          <ShieldCheck size={14} className="text-[#00B894]" />
+          <span>Ambiente Seguro</span>
+        </div>
       </div>
 
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6 relative z-10">
-
+      {/* Card Principal — Tema Claro & Minimalista */}
+      <div className="w-full max-w-md bg-white border border-[#E5EAF1] rounded-2xl p-7 sm:p-9 shadow-xs space-y-6">
+        
+        {/* Logotipo e Cabeçalho */}
         <div className="text-center space-y-3">
           <button
             type="button"
             onClick={() => onNavigateTab('home')}
-            className="mx-auto block"
+            className="mx-auto block transition-opacity hover:opacity-85 cursor-pointer"
             aria-label="Voltar à página inicial"
           >
             <img
               src="/logotipo.png"
               alt="Itapoá Online"
-              className="h-14 w-auto object-contain drop-shadow-md"
+              className="h-12 w-auto object-contain mx-auto"
             />
           </button>
-          <span className="text-[10px] font-black tracking-widest text-[#C8102E] uppercase block">
-            PORTAL & MARKETPLACE PARCEIRO
+
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-slate-100 text-[#080F24]">
+            Portal & Marketplace Parceiro
           </span>
-          <h1 className="text-2xl font-black text-white tracking-tight">
+
+          <h1 className="text-2xl font-black text-[#101828] tracking-tight">
             Acesso ao Painel
           </h1>
-          <p className="text-xs text-slate-400">
+
+          <p className="text-xs sm:text-sm text-[#667085] max-w-sm mx-auto leading-relaxed">
             Entre com seus dados para gerenciar o mini-site da sua empresa ou administração.
           </p>
-          {pending && (
-            <div className="p-3 rounded-xl bg-cyan-950/50 border border-cyan-800 text-cyan-200 text-xs text-left">
-              Você tem um plano reservado (<strong>{pending.planId}</strong>). Após entrar, voltará direto à compra sem nova seleção.
+
+          {planName && (
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs text-left flex items-start gap-2.5">
+              <Sparkles size={16} className="text-amber-600 shrink-0 mt-0.5" />
+              <div className="leading-relaxed">
+                Você tem o plano <strong className="font-extrabold text-amber-950">{planName}</strong> reservado. Após entrar, voltará direto à finalização sem nova seleção.
+              </div>
             </div>
           )}
         </div>
 
         {errorMsg && (
-          <div className="p-4 bg-red-950/80 border border-red-800 text-red-300 rounded-xl text-xs font-bold text-center">
+          <div role="alert" className="p-3.5 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs font-semibold text-center">
             {errorMsg}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+            <label className="text-[11px] font-bold text-[#101828] uppercase tracking-wider block mb-1.5">
               E-mail de Acesso
             </label>
             <div className="relative flex items-center">
-              <Mail className="w-4 h-4 text-slate-500 absolute left-3.5" />
+              <Mail className="w-4 h-4 text-[#667085] absolute left-3.5 pointer-events-none" />
               <input
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="seu.email@empresa.com.br"
-                className="w-full pl-10 pr-4 py-3.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#C8102E]"
+                className="w-full h-[48px] pl-10 pr-4 bg-white border border-[#E5EAF1] rounded-xl text-sm text-[#101828] placeholder-[#667085]/60 focus:outline-none focus:border-[#080F24] focus:ring-1 focus:ring-[#080F24] transition"
                 required
               />
             </div>
@@ -120,31 +141,31 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateTab }) => {
 
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              <label className="text-[11px] font-bold text-[#101828] uppercase tracking-wider block">
                 Senha
               </label>
               <button
                 type="button"
                 onClick={() => onNavigateTab('esqueci-senha')}
-                className="text-[10px] text-[#C8102E] font-bold hover:underline"
+                className="text-xs text-[#080F24] font-bold hover:underline cursor-pointer"
               >
                 Esqueceu a senha?
               </button>
             </div>
             <div className="relative flex items-center">
-              <Lock className="w-4 h-4 text-slate-500 absolute left-3.5" />
+              <Lock className="w-4 h-4 text-[#667085] absolute left-3.5 pointer-events-none" />
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-10 pr-11 py-3.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#C8102E]"
+                className="w-full h-[48px] pl-10 pr-11 bg-white border border-[#E5EAF1] rounded-xl text-sm text-[#101828] placeholder-[#667085]/60 focus:outline-none focus:border-[#080F24] focus:ring-1 focus:ring-[#080F24] transition"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 p-1 text-slate-400 hover:text-white transition cursor-pointer"
+                className="absolute right-3.5 p-1 text-[#667085] hover:text-[#101828] transition cursor-pointer"
                 title={showPassword ? 'Ocultar senha' : 'Ver senha'}
                 aria-label={showPassword ? 'Ocultar senha' : 'Ver senha'}
               >
@@ -156,19 +177,19 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateTab }) => {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-4 bg-[#C8102E] hover:bg-red-700 text-white font-extrabold text-xs rounded-xl shadow-xl transition uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer mt-2"
+            className="w-full h-[48px] bg-[#080F24] hover:bg-slate-800 text-white font-bold text-xs sm:text-sm rounded-xl shadow-xs transition flex items-center justify-center gap-2 cursor-pointer mt-3 disabled:opacity-50"
           >
             <LogIn className="w-4 h-4" />
-            <span>{isSubmitting ? 'Autenticando...' : 'ENTRAR NO PAINEL ➔'}</span>
+            <span>{isSubmitting ? 'Autenticando…' : 'Entrar no painel →'}</span>
           </button>
         </form>
 
-        <div className="pt-4 border-t border-slate-800 text-center text-xs text-slate-400 space-y-2">
+        <div className="pt-4 border-t border-[#E5EAF1] text-center text-xs text-[#667085] space-y-2">
           <p>
             Ainda não possui conta de parceiro?{' '}
             <button
               onClick={() => onNavigateTab('cadastro')}
-              className="text-white font-bold hover:underline"
+              className="text-[#101828] font-bold hover:underline cursor-pointer"
             >
               Cadastre sua Empresa
             </button>
@@ -176,14 +197,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigateTab }) => {
           <p>
             <button
               onClick={() => onNavigateTab('login/admin')}
-              className="text-slate-500 hover:text-white transition text-[11px] font-mono flex items-center justify-center gap-1 mx-auto"
+              className="text-[#667085] hover:text-[#101828] transition text-[11px] font-medium flex items-center justify-center gap-1 mx-auto cursor-pointer"
             >
-              <ShieldCheck className="w-3.5 h-3.5" /> Acesso Restrito Admin Master
+              <ShieldCheck className="w-3.5 h-3.5 text-[#00B894]" /> Acesso Restrito Admin Master
             </button>
           </p>
         </div>
 
       </div>
-    </div>
+    </main>
   );
 };

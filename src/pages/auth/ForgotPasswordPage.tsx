@@ -43,91 +43,101 @@ export const ForgotPasswordPage: React.FC<Props> = ({ onNavigateTab }) => {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white flex flex-col justify-center items-center px-4 py-16 font-sans relative overflow-hidden">
-      {/* Luz ambiente de fundo */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[30rem] h-[30rem] bg-[#C8102E]/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-10 right-1/4 w-80 h-80 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
-
-      {/* Botão de retorno superior */}
-      <div className="absolute top-6 left-6 z-20">
+    <main className="min-h-screen bg-[#F6F8FC] text-[#101828] flex flex-col justify-center items-center px-4 py-12 font-sans relative">
+      {/* Botão sutil de retorno no topo */}
+      <div className="w-full max-w-md mb-4 flex items-center justify-between">
         <button
           type="button"
           onClick={() => onNavigateTab('login')}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-slate-300 hover:text-white text-xs font-bold transition shadow-sm cursor-pointer hover:bg-slate-800"
+          className="inline-flex items-center gap-2 text-xs font-semibold text-[#667085] hover:text-[#101828] transition cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Voltar ao Login</span>
+          <span>Voltar ao login</span>
         </button>
+
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#667085]">
+          <ShieldCheck size={14} className="text-[#00B894]" />
+          <span>Ambiente Seguro</span>
+        </div>
       </div>
 
-      <div className="w-full max-w-md bg-slate-900/95 backdrop-blur-xl border border-slate-800/90 rounded-3xl p-8 sm:p-10 shadow-2xl space-y-6 relative z-10">
+      {/* Card Principal — Tema Claro & Minimalista */}
+      <div className="w-full max-w-md bg-white border border-[#E5EAF1] rounded-2xl p-7 sm:p-9 shadow-xs space-y-6">
+        
         {/* Logotipo e Cabeçalho */}
         <div className="text-center space-y-3">
           <button
             type="button"
             onClick={() => onNavigateTab('home')}
-            className="mx-auto block transition-transform hover:scale-105"
+            className="mx-auto block transition-opacity hover:opacity-85 cursor-pointer"
             aria-label="Voltar à página inicial"
           >
             <img
               src="/logotipo.png"
               alt="Itapoá Online"
-              className="h-14 w-auto object-contain drop-shadow-md mx-auto"
+              className="h-12 w-auto object-contain mx-auto"
             />
           </button>
-          <span className="text-[10px] font-black tracking-widest text-[#C8102E] uppercase block">
-            RECUPERAÇÃO DE ACESSO
+
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-slate-100 text-[#080F24]">
+            Recuperação de Acesso
           </span>
-          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+
+          <h1 className="text-2xl font-black text-[#101828] tracking-tight">
             Esqueceu sua senha?
           </h1>
-          <p className="text-xs sm:text-sm text-slate-400 max-w-sm mx-auto leading-relaxed">
-            Informe o e-mail cadastrado da sua empresa para receber o link seguro de redefinição de senha.
+
+          <p className="text-xs sm:text-sm text-[#667085] max-w-sm mx-auto leading-relaxed">
+            Informe o e-mail cadastrado da sua empresa para receber o link seguro de redefinição.
           </p>
         </div>
 
         {available === false && (
-          <div role="alert" className="p-4 rounded-xl bg-amber-950/50 border border-amber-600/50 text-amber-200 text-xs flex items-start gap-2.5">
-            <AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
-            <span>Recuperação por e-mail temporariamente em manutenção. Utilize o suporte direto no final desta tela.</span>
+          <div role="alert" className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
+            <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+            <span className="leading-relaxed">
+              Recuperação por e-mail temporariamente indisponível. Fale diretamente com o suporte abaixo.
+            </span>
           </div>
         )}
 
         {error && (
-          <div role="alert" className="p-4 rounded-xl bg-red-950/70 border border-red-800/80 text-red-200 text-xs flex items-center gap-2.5">
-            <AlertTriangle size={16} className="text-red-400 shrink-0" />
+          <div role="alert" className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-center gap-2.5">
+            <AlertTriangle size={16} className="text-red-600 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
         {message ? (
-          <div className="space-y-6 pt-2">
-            <div className="rounded-2xl bg-emerald-950/50 border border-emerald-500/30 p-6 text-center space-y-3">
-              <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto border border-emerald-500/40">
-                <CheckCircle2 size={36} />
+          /* Estado de Sucesso — Card Minimalista Claro */
+          <div className="space-y-5 pt-1 animate-in fade-in">
+            <div className="rounded-xl bg-[#ECFDF5] border border-[#A7F3D0] p-5 text-left space-y-2">
+              <div className="flex items-center gap-2 text-[#065F46] font-bold text-sm">
+                <CheckCircle2 size={18} className="text-[#00B894] shrink-0" />
+                <span>Solicitação recebida</span>
               </div>
-              <h2 className="text-lg font-bold text-emerald-200">Solicitação Enviada!</h2>
-              <p className="text-xs text-emerald-300/80 leading-relaxed">
+              <p className="text-xs text-[#065F46]/90 leading-relaxed">
                 {message}
               </p>
-              <p className="text-[11px] text-slate-400 pt-1">
-                Verifique sua caixa de entrada e pasta de spam. O link possui validade de 15 minutos.
+              <p className="text-[11px] text-[#047857] pt-1">
+                Confira também a pasta de spam. O link é válido por 15 minutos.
               </p>
             </div>
 
             <button
               type="button"
               onClick={() => onNavigateTab('login')}
-              className="w-full py-4 px-6 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold transition text-xs sm:text-sm cursor-pointer shadow-sm"
+              className="w-full py-3.5 px-5 rounded-xl bg-[#080F24] hover:bg-slate-800 text-white font-bold text-xs sm:text-sm transition cursor-pointer shadow-xs"
             >
-              Voltar ao Login
+              Voltar ao login
             </button>
           </div>
         ) : (
-          <form onSubmit={submit} className="space-y-5">
+          /* Formulário de Envio */
+          <form onSubmit={submit} className="space-y-4 pt-1">
             <div className="space-y-1.5">
-              <label htmlFor="recovery-email" className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
-                E-mail Comercial Cadastrado
+              <label htmlFor="recovery-email" className="block text-xs font-bold text-[#101828] uppercase tracking-wider">
+                E-mail cadastrado
               </label>
               <div className="relative">
                 <input
@@ -139,44 +149,44 @@ export const ForgotPasswordPage: React.FC<Props> = ({ onNavigateTab }) => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="contato@suaempresa.com.br"
-                  className="w-full rounded-xl p-3.5 pr-12 bg-slate-950 border border-slate-800 focus:border-[#C8102E] focus:outline-none transition text-sm text-white placeholder-slate-600"
+                  className="w-full h-[48px] rounded-xl px-4 pr-11 bg-white border border-[#E5EAF1] focus:border-[#080F24] focus:ring-1 focus:ring-[#080F24] focus:outline-none transition text-sm text-[#101828] placeholder-[#667085]/60"
                 />
-                <Mail size={18} className="absolute right-3.5 top-3.5 text-slate-500 pointer-events-none" />
+                <Mail size={16} className="absolute right-3.5 top-3.5 text-[#667085] pointer-events-none" />
               </div>
             </div>
 
             <button
               type="submit"
               disabled={!available || submitting}
-              className="w-full py-4 px-6 rounded-2xl bg-[#C8102E] hover:bg-[#A00D24] text-white font-bold transition flex items-center justify-center gap-2 text-sm shadow-lg shadow-red-950/40 disabled:opacity-50 cursor-pointer"
+              className="w-full h-[48px] rounded-xl bg-[#080F24] hover:bg-slate-800 text-white font-bold transition flex items-center justify-center gap-2 text-xs sm:text-sm shadow-xs disabled:opacity-50 cursor-pointer"
             >
-              <KeyRound size={18} />
-              <span>{submitting ? 'Enviando link seguro…' : 'Enviar Link de Recuperação'}</span>
+              <KeyRound size={16} />
+              <span>{submitting ? 'Enviando link seguro…' : 'Enviar link de recuperação'}</span>
             </button>
           </form>
         )}
 
-        {/* Suporte Direto e Atendimento */}
-        <div className="border-t border-slate-800/80 pt-5 space-y-3">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-            Precisa de auxílio imediato?
+        {/* Atendimento e Suporte Manual */}
+        <div className="border-t border-[#E5EAF1] pt-5 space-y-3">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-[#667085]">
+            Atendimento manual (não envia o link automaticamente)
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
             <a
               href="https://wa.me/5547997190413"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-800/40 text-emerald-300 hover:bg-emerald-900/40 transition cursor-pointer font-semibold"
+              className="flex items-center gap-2 p-2.5 rounded-xl bg-[#F0FDF4] border border-[#DCFCE7] text-[#15803D] hover:bg-[#DCFCE7] transition cursor-pointer font-semibold"
             >
-              <MessageCircle size={16} className="text-emerald-400" />
-              <span>WhatsApp Suporte</span>
+              <MessageCircle size={15} className="text-[#16A34A] shrink-0" />
+              <span className="truncate">WhatsApp do suporte</span>
             </a>
             <a
               href="mailto:contato@itapoa.online?subject=Ajuda%20para%20recuperar%20acesso"
-              className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-slate-300 hover:bg-slate-800 transition cursor-pointer font-semibold"
+              className="flex items-center gap-2 p-2.5 rounded-xl bg-[#F8FAFC] border border-[#E5EAF1] text-[#334155] hover:bg-[#F1F5F9] transition cursor-pointer font-semibold"
             >
-              <Mail size={16} className="text-slate-400" />
-              <span>E-mail Oficial</span>
+              <Mail size={15} className="text-[#64748B] shrink-0" />
+              <span className="truncate">Escrever para o suporte</span>
             </a>
           </div>
         </div>
@@ -184,4 +194,3 @@ export const ForgotPasswordPage: React.FC<Props> = ({ onNavigateTab }) => {
     </main>
   );
 };
-
