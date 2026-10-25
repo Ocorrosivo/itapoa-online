@@ -118,14 +118,17 @@ export class CompanyService {
    * runs; the repository drops any column outside the whitelist.
    */
   async updateCompany(id: string, data: Record<string, any>) {
+    let existing: any = null;
+    try {
+      if (CompanyRepository && typeof CompanyRepository.findById === 'function') {
+        existing = await CompanyRepository.findById(id);
+      }
+    } catch {
+      existing = null;
+    }
+
     if (data.cityId !== undefined && data.cityId !== null) {
       const cityId = String(data.cityId).trim();
-      let existing: any = null;
-      try {
-        existing = await CompanyRepository.findById(id);
-      } catch {
-        existing = null;
-      }
       // Allow Itapoá or Curitiba, or preserve existing historical cityId
       if (cityId && !ALLOWED_COMPANY_CITIES.includes(cityId) && (!existing || cityId !== existing.cityId)) {
         throw new ServiceError(400, 'Cidade não permitida. Apenas Itapoá e Curitiba são aceitas.');
