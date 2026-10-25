@@ -45,6 +45,7 @@ const normalizeCompany = (raw: any): Company => {
     whatsapp: raw.whatsapp ?? '',
     instagram: raw.instagram ?? '',
     facebook: raw.facebook ?? '',
+    tiktok: (raw as any).tiktok ?? '',
     website: raw.website ?? '',
     address: raw.address ?? '',
     hours: raw.hours ?? '',
