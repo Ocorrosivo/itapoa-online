@@ -66,15 +66,15 @@ export class EmailVerificationService {
   /**
    * Envia ou reenvia o e-mail de confirmação com link seguro.
    */
-  async sendToken(email: string, token: string, planInput?: unknown): Promise<boolean> {
+  async sendToken(email: string, token: string, planInput?: unknown, name?: string): Promise<boolean> {
     const fragment = new URLSearchParams({ token });
     const plan = registrationPlan(planInput);
     if (plan) fragment.set('plan', plan);
     const url = `${env.appUrl.replace(/\/$/, '')}/confirmar-email#${fragment}`;
-    return (await mailService.sendVerification(email, url)).accepted;
+    return (await mailService.sendVerification(email, url, name)).accepted;
   }
 
-  async sendVerification(userId: string, email: string, ip: string, planInput?: unknown): Promise<boolean> {
+  async sendVerification(userId: string, email: string, ip: string, planInput?: unknown, name?: string): Promise<boolean> {
     this.limiter.consume(`ip:${ip}`, 10);
     this.limiter.consume(`user:${userId}`, 3);
 
@@ -90,8 +90,16 @@ export class EmailVerificationService {
       throw new VerificationError(429, 'Aguarde 1 minuto antes de solicitar um novo e-mail de confirmação.');
     }
 
+    let recipientName = name;
+    if (!recipientName) {
+      try {
+        const [u]: any = await pool.query('SELECT name FROM users WHERE id = ? LIMIT 1', [userId]);
+        if (u?.[0]?.name) recipientName = u[0].name;
+      } catch {}
+    }
+
     const token = await this.createVerificationToken(userId, email);
-    return this.sendToken(email, token, planInput);
+    return this.sendToken(email, token, planInput, recipientName);
   }
 
   /**

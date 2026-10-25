@@ -1,5 +1,6 @@
 import { pool } from '../mysql.js';
 import { PaymentError } from './paymentError.js';
+import { mailService } from './mailService.js';
 
 /** Decimal amounts are compared as integer cents, never with an epsilon. */
 export function paymentCents(value: unknown): number {
@@ -129,6 +130,38 @@ export async function settlePayment(paymentId: string, token: string, expectedSu
     await connection.query(`UPDATE companies SET planLevel=?, access_grant_type=?, isSponsored=?,
       has_used_trial=IF(?='active', 1, has_used_trial) WHERE id=?`, [companyTier, grant, companyTier === 'bronze' ? 0 : 1, nextStatus, companyId]);
     await connection.commit();
+
+    if (nextStatus === 'active' && !previous?.activated_at) {
+      void (async () => {
+        try {
+          const [uRows]: any = await pool.query(
+            `SELECT u.name, u.email, c.name AS company_name
+               FROM subscriptions s
+               JOIN users u ON u.id = s.userId
+          LEFT JOIN companies c ON c.id = s.companyId
+              WHERE s.id = ? LIMIT 1`,
+            [subscriptionId]
+          );
+          if (uRows && uRows.length > 0 && uRows[0].email) {
+            const row = uRows[0];
+            const planDisplay = sub.planId === 'plan_diamond_extremo' ? 'Diamond Extremo' : 'Gold VIP';
+            const orderId = `PED-${String(subscriptionId).slice(-8).toUpperCase()}`;
+            const amountStr = (paidCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            await mailService.sendPaymentApproved({
+              to: row.email,
+              name: row.name,
+              companyName: row.company_name || 'Sua Empresa',
+              planName: planDisplay,
+              orderId,
+              amount: amountStr,
+            });
+          }
+        } catch (mailErr) {
+          console.warn('[mail] Failed to send payment approval email:', mailErr);
+        }
+      })();
+    }
+
     return { status: nextStatus, reconciled: nextStatus === 'active', message: nextStatus === 'active' ? 'Pagamento confirmado no gateway e plano ativo no banco.' : 'Pagamento consultado; nenhum acesso pago concedido.' };
   } catch (error) {
     await connection.rollback();

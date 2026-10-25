@@ -131,7 +131,7 @@ export class AuthService {
 
     let verificationEmailSent = false;
     try {
-      verificationEmailSent = await emailVerificationService.sendToken(email, verificationToken, payload.planId);
+      verificationEmailSent = await emailVerificationService.sendToken(email, verificationToken, payload.planId, name);
     } catch {
       console.warn('[auth] Initial verification mail unavailable; account remains pending');
     }
