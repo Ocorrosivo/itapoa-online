@@ -2,6 +2,13 @@ node_modules
 dist
 .git
 .claude
+.agents
+.claude-flow
+.swarm
+docs
+coverage
+.mcp.json
+.github
 .vscode
 *.log
 .env

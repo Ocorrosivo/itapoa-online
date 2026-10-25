@@ -27,8 +27,10 @@ async function checkout(page:Page) {
   await expect(page.locator('#checkout-phone')).toBeVisible();
   await page.locator('#checkout-phone').fill('(47) 99999-0000');
   const companySelect = page.locator('#checkout-company');
-  if (await companySelect.count() > 0 && await companySelect.isVisible()) {
+  await expect(page.getByRole('complementary')).toContainText('Company a');
+  if (await companySelect.isVisible()) {
     await companySelect.selectOption('a');
+    await expect(companySelect).toHaveValue('a');
   }
 }
 const confirmed = (page:Page)=>page.getByRole('heading',{name:'Pagamento confirmado com sucesso!',exact:true});
@@ -43,13 +45,13 @@ test('restricted offers switch server totals by method and keep the frozen Pix a
   await expect(page.getByText('R$ 2,00',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Pix oficial',exact:true}).click();
   await expect(page.getByText(/Cupom TESTEPIX1 aplicado automaticamente/)).toBeVisible();
-  await expect(page.getByText('R$ 1,00',{exact:true})).toBeVisible();
+  await expect(page.getByRole('complementary').getByText('R$ 1,00',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:/Gerar QR Code Pix/i}).click();
   await expect(page.getByLabel('Pix Copia e Cola')).toHaveValue('SYNTHETIC-PIX-NOT-PAYABLE');
   assert.equal(h.calls.filter(c=>c.method==='POST')[0].body.transaction_amount,1);
   await page.reload();
   await expect(page.getByLabel('Pix Copia e Cola')).toHaveValue('SYNTHETIC-PIX-NOT-PAYABLE');
-  await expect(page.getByText('R$ 1,00',{exact:true})).toBeVisible();
+  await expect(page.getByRole('complementary').getByText('R$ 1,00',{exact:true})).toBeVisible();
   assert.equal(h.calls.filter(c=>c.method==='POST').length,1);
 });
 

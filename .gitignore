@@ -21,10 +21,7 @@ skills-lock.json
 .playwright-mcp/
 .vite/
 
-# Ruflo local secrets and runtime data
-.env
-.env.local
-.env.*.local
+# Ruflo local secrets and runtime data (environment files already excluded above)
 .claude-flow/
 .swarm/
 .agents/
