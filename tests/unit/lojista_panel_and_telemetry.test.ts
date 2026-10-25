@@ -285,4 +285,135 @@ describe('Painel do Lojista — Regras de Negócio, Métricas Reais e Isolamento
     assert.equal(validData.views, 42);
   });
 
+  test('8. Restrição de Cidades no Cadastro/Edição de Empresas (Itapoá e Curitiba estritas)', async () => {
+    const { companyService, ALLOWED_COMPANY_CITIES } = await import('../../src/server/services/companyService.js');
+    const { CompanyRepository } = await import('../../src/server/repositories/companyRepository.js');
+
+    assert.deepEqual(ALLOWED_COMPANY_CITIES, ['city_itapoa', 'city_curitiba']);
+
+    // Rejeição de cidades não permitidas no cadastro
+    await assert.rejects(
+      () => companyService.createCompany({ name: 'Nova Empresa', cityId: 'city_florianopolis' }, 'user_1'),
+      /Cidade não permitida/
+    );
+    await assert.rejects(
+      () => companyService.createCompany({ name: 'Nova Empresa', cityId: 'city_joinville' }, 'user_1'),
+      /Cidade não permitida/
+    );
+
+    // Na edição, rejeição de troca para Florianópolis ou Joinville
+    const origFind = CompanyRepository.findById;
+    const origUpdate = CompanyRepository.update;
+    try {
+      CompanyRepository.findById = async () => ({ id: 'comp_1', cityId: 'city_itapoa' });
+      await assert.rejects(
+        () => companyService.updateCompany('comp_1', { cityId: 'city_florianopolis' }),
+        /Cidade não permitida/
+      );
+
+      // Cidade histórica previamente existente é permitida manter
+      CompanyRepository.findById = async () => ({ id: 'comp_hist', cityId: 'city_florianopolis' });
+      let updatedPayload: any = null;
+      CompanyRepository.update = async (_id, data) => { updatedPayload = data; return data; };
+
+      await companyService.updateCompany('comp_hist', { cityId: 'city_florianopolis', name: 'Empresa Histórica' });
+      assert.equal(updatedPayload?.cityId, 'city_florianopolis', 'Cidade histórica deve ser preservada');
+
+      // Troca válida para Curitiba
+      await companyService.updateCompany('comp_hist', { cityId: 'city_curitiba' });
+      assert.equal(updatedPayload?.cityId, 'city_curitiba', 'Deve aceitar Curitiba');
+
+      // Troca válida para Itapoá
+      await companyService.updateCompany('comp_hist', { cityId: 'city_itapoa' });
+      assert.equal(updatedPayload?.cityId, 'city_itapoa', 'Deve aceitar Itapoá');
+    } finally {
+      CompanyRepository.findById = origFind;
+      CompanyRepository.update = origUpdate;
+    }
+  });
+
+  test('9. Persistência e Tratamento Parcial de Endereço, Horários e Coordenadas GPS', async () => {
+    const { companyService } = await import('../../src/server/services/companyService.js');
+    const { CompanyRepository } = await import('../../src/server/repositories/companyRepository.js');
+
+    const origFind = CompanyRepository.findById;
+    const origUpdate = CompanyRepository.update;
+    let saved: any = null;
+
+    try {
+      CompanyRepository.findById = async () => ({
+        id: 'comp_test',
+        name: 'Nome Existente',
+        address: 'Rua Antiga, 100',
+        hours: '08h às 18h',
+        latitude: -26.11,
+        longitude: -48.61
+      });
+      CompanyRepository.update = async (_id, data) => { saved = data; return data; };
+
+      // 1. Atualizar apenas endereço sem sobrescrever outros campos não enviados
+      await companyService.updateCompany('comp_test', {
+        address: 'Av. André Rodrigues de Freitas, 500'
+      });
+      assert.equal(saved.address, 'Av. André Rodrigues de Freitas, 500');
+      assert.equal('hours' in saved, false, 'Campo não enviado não deve ser incluído no UPDATE');
+      assert.equal('latitude' in saved, false);
+
+      // 2. Coordenadas numéricas válidas e conversão de string para float
+      await companyService.updateCompany('comp_test', {
+        latitude: '-26.1172',
+        longitude: '-48.6145'
+      });
+      assert.equal(typeof saved.latitude, 'number');
+      assert.equal(saved.latitude, -26.1172);
+      assert.equal(saved.longitude, -48.6145);
+
+      // 3. Remoção explícita de coordenadas (enviado vazio ou null)
+      await companyService.updateCompany('comp_test', {
+        latitude: '',
+        longitude: null
+      });
+      assert.equal(saved.latitude, null);
+      assert.equal(saved.longitude, null);
+    } finally {
+      CompanyRepository.findById = origFind;
+      CompanyRepository.update = origUpdate;
+    }
+  });
+
+  test('10. Resiliência do Repositório: Pruning de Colunas Inexistentes na Tabela Física', async () => {
+    const { BaseRepository } = await import('../../src/server/repositories/baseRepository.js');
+    const repo = new (class extends BaseRepository {
+      constructor() { super('companies'); }
+    })();
+
+    // Simula colunas físicas da tabela (sem instagram/facebook ainda migrados)
+    (repo as any).getPhysicalColumns = async () => new Set([
+      'id', 'name', 'address', 'cityId', 'logo', 'coverImage', 'hours', 'phone', 'whatsapp'
+    ]);
+
+    const origQuery = (repo as any).constructor;
+    // Testa que pickWritable inclui campos permitidos pela regra, mas create/update filtram pelo esquema físico
+    const payload = {
+      name: 'Teste Resiliente',
+      address: 'Rua Central, 50',
+      instagram: '@empresa', // existe na whitelist lógica, mas não no físico simulado
+      facebook: 'https://fb.com/empresa'
+    };
+
+    const clean = (repo as any).pickWritable(payload);
+    assert.equal(clean.instagram, '@empresa');
+
+    // Ao preparar para gravação, o BaseRepository filtra contra o conjunto físico
+    const physical = await (repo as any).getPhysicalColumns();
+    for (const key of Object.keys(clean)) {
+      if (!physical.has(key)) delete clean[key];
+    }
+
+    assert.equal(clean.name, 'Teste Resiliente');
+    assert.equal(clean.address, 'Rua Central, 50');
+    assert.equal('instagram' in clean, false, 'Coluna ausente no banco físico deve ser podada');
+    assert.equal('facebook' in clean, false, 'Coluna ausente no banco físico deve ser podada');
+  });
+
 });

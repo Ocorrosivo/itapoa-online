@@ -257,6 +257,23 @@ export class BaseRepository {
     return rows[0] || null;
   }
 
+  private physicalColumnsCache: Set<string> | null = null;
+
+  async getPhysicalColumns(): Promise<Set<string>> {
+    if (this.physicalColumnsCache) return this.physicalColumnsCache;
+    try {
+      const [rows]: any = await pool.query(`SHOW COLUMNS FROM \`${this.tableName}\``);
+      this.physicalColumnsCache = new Set(rows.map((r: any) => r.Field));
+      return this.physicalColumnsCache;
+    } catch {
+      return new Set(this.allowedColumns);
+    }
+  }
+
+  clearPhysicalColumnsCache(): void {
+    this.physicalColumnsCache = null;
+  }
+
   /** Keeps only whitelisted columns from an untrusted payload. */
   protected pickWritable(data: Record<string, any>): Record<string, any> {
     const clean: Record<string, any> = {};
@@ -269,6 +286,10 @@ export class BaseRepository {
 
   async create(data: Record<string, any>) {
     const clean = this.pickWritable(data);
+    const physical = await this.getPhysicalColumns();
+    for (const key of Object.keys(clean)) {
+      if (!physical.has(key)) delete clean[key];
+    }
     const keys = Object.keys(clean);
     if (keys.length === 0) {
       throw new Error('Nenhum campo válido informado.');
@@ -289,8 +310,14 @@ export class BaseRepository {
   async update(id: string | number, data: Record<string, any>) {
     const clean = this.pickWritable(data);
     delete clean.id; // primary key is never client-mutable
+
+    const physical = await this.getPhysicalColumns();
+    for (const key of Object.keys(clean)) {
+      if (!physical.has(key)) delete clean[key];
+    }
+
     const keys = Object.keys(clean);
-    if (keys.length === 0) return null;
+    if (keys.length === 0) return this.findById(id);
 
     const setClauses = keys.map(k => `\`${k}\` = ?`).join(', ');
     const values = keys.map(k => clean[k]);

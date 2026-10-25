@@ -47,6 +47,7 @@ function FieldRow({ label, children, hint }: { label: string; children: React.Re
 export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMiniSiteViewProps) {
   const { cities, categories, refreshData } = useCompany();
 
+  const ALLOWED_CITIES = ['city_itapoa', 'city_curitiba'];
   const rawPlan = (company.planLevel || 'bronze').toLowerCase();
   const isDiamond = rawPlan === 'diamond' || rawPlan === 'diamond_extremo';
   const isGold = rawPlan === 'gold_vip' || rawPlan === 'ouro';
@@ -162,10 +163,12 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
     try {
       const url = await handleUploadFile(file);
       update('logo', url);
+      setSuccess('Logotipo atualizado! Clique em "Salvar Alterações" para gravar no guia.');
     } catch (err: any) {
       setError(err?.message || 'Não foi possível fazer upload do logo.');
     } finally {
       setLogoUploadBusy(false);
+      if (logoFileRef.current) logoFileRef.current.value = '';
     }
   };
 
@@ -178,10 +181,12 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
     try {
       const url = await handleUploadFile(file);
       update('coverImage', url);
+      setSuccess('Imagem de capa atualizada! Clique em "Salvar Alterações" para gravar no guia.');
     } catch (err: any) {
       setError(err?.message || 'Não foi possível fazer upload da capa.');
     } finally {
       setCoverUploadBusy(false);
+      if (coverFileRef.current) coverFileRef.current.value = '';
     }
   };
 
@@ -377,9 +382,16 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500 transition"
               >
                 <option value="">Selecione a cidade…</option>
-                {cities.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
+                {cities
+                  .filter(c => ALLOWED_CITIES.includes(c.id) || c.id === form.cityId || c.id === company.cityId)
+                  .map(c => {
+                    const isHistorical = !ALLOWED_CITIES.includes(c.id);
+                    return (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {isHistorical ? '(Atual)' : ''}
+                      </option>
+                    );
+                  })}
               </select>
             </FieldRow>
             <FieldRow label="Descrição Curta" hint="Apresentação em 1 ou 2 linhas">
@@ -526,21 +538,28 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {/* Logo */}
-            <div className="space-y-3 bg-slate-800/40 p-4 rounded-2xl border border-slate-700/60">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">Logotipo</label>
-                {logoUploadBusy && <span className="text-xs text-blue-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Enviando…</span>}
-              </div>
+            <div className="space-y-3 bg-slate-800/40 p-5 rounded-2xl border border-slate-700/60 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">Logotipo</label>
+                  {logoUploadBusy && (
+                    <span className="text-xs text-blue-400 font-semibold flex items-center gap-1.5">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Enviando…
+                    </span>
+                  )}
+                </div>
 
-              {form.logo ? (
-                <div className="w-20 h-20 rounded-2xl overflow-hidden bg-slate-950 border border-slate-700 flex items-center justify-center p-1">
-                  <img src={form.logo} alt="Logo preview" className="w-full h-full object-contain" />
-                </div>
-              ) : (
-                <div className="w-20 h-20 rounded-2xl bg-slate-800 border border-dashed border-slate-600 flex items-center justify-center text-slate-500 text-xs text-center p-2">
-                  Sem logo
-                </div>
-              )}
+                {form.logo ? (
+                  <div className="w-24 h-24 rounded-2xl overflow-hidden bg-slate-950 border border-slate-700 flex items-center justify-center p-2 shadow-inner">
+                    <img src={form.logo} alt="Logo da empresa" className="w-full h-full object-contain" />
+                  </div>
+                ) : (
+                  <div className="w-24 h-24 rounded-2xl bg-slate-800/80 border border-dashed border-slate-600 flex flex-col items-center justify-center text-slate-400 text-xs text-center p-2">
+                    <Camera className="w-5 h-5 mb-1 opacity-50" />
+                    <span>Sem logo</span>
+                  </div>
+                )}
+              </div>
 
               <input
                 type="file"
@@ -550,52 +569,52 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
                 onChange={handleLogoFileChange}
               />
 
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => logoFileRef.current?.click()}
                   disabled={logoUploadBusy}
-                  className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer"
+                  className="px-3.5 py-2.5 bg-slate-700 hover:bg-slate-600 active:scale-95 text-white text-xs font-bold rounded-xl transition flex items-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
                 >
-                  <UploadCloud className="w-3.5 h-3.5" /> Escolher arquivo
+                  <UploadCloud className="w-4 h-4 text-blue-400" />
+                  {form.logo ? 'Alterar logotipo' : 'Escolher arquivo'}
                 </button>
                 {form.logo && (
                   <button
                     type="button"
                     onClick={() => update('logo', '')}
-                    className="p-2 text-rose-400 hover:bg-slate-700 rounded-xl transition cursor-pointer"
-                    title="Remover logo"
+                    className="p-2.5 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 border border-transparent hover:border-rose-900/60 rounded-xl transition cursor-pointer"
+                    title="Remover logotipo"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 )}
               </div>
-
-              <input
-                type="url"
-                value={form.logo}
-                onChange={e => update('logo', e.target.value)}
-                placeholder="Ou informe a URL direta da imagem..."
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-blue-500 transition"
-              />
             </div>
 
             {/* Imagem de Capa */}
-            <div className="space-y-3 bg-slate-800/40 p-4 rounded-2xl border border-slate-700/60">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">Imagem de Capa</label>
-                {coverUploadBusy && <span className="text-xs text-blue-400 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Enviando…</span>}
-              </div>
+            <div className="space-y-3 bg-slate-800/40 p-5 rounded-2xl border border-slate-700/60 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">Imagem de Capa</label>
+                  {coverUploadBusy && (
+                    <span className="text-xs text-blue-400 font-semibold flex items-center gap-1.5">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Enviando…
+                    </span>
+                  )}
+                </div>
 
-              {form.coverImage ? (
-                <div className="w-full h-20 rounded-2xl overflow-hidden bg-slate-950 border border-slate-700">
-                  <img src={form.coverImage} alt="Capa preview" className="w-full h-full object-cover" />
-                </div>
-              ) : (
-                <div className="w-full h-20 rounded-2xl bg-slate-800 border border-dashed border-slate-600 flex items-center justify-center text-slate-500 text-xs">
-                  Sem imagem de capa
-                </div>
-              )}
+                {form.coverImage ? (
+                  <div className="w-full h-24 rounded-2xl overflow-hidden bg-slate-950 border border-slate-700 shadow-inner">
+                    <img src={form.coverImage} alt="Capa da empresa" className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <div className="w-full h-24 rounded-2xl bg-slate-800/80 border border-dashed border-slate-600 flex flex-col items-center justify-center text-slate-400 text-xs text-center p-2">
+                    <Camera className="w-5 h-5 mb-1 opacity-50" />
+                    <span>Sem imagem de capa</span>
+                  </div>
+                )}
+              </div>
 
               <input
                 type="file"
@@ -605,40 +624,35 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
                 onChange={handleCoverFileChange}
               />
 
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => coverFileRef.current?.click()}
-                  disabled={coverUploadBusy}
-                  className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer"
-                >
-                  <UploadCloud className="w-3.5 h-3.5" /> Escolher arquivo
-                </button>
-                {form.coverImage && (
+              <div className="space-y-2 pt-2">
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => update('coverImage', '')}
-                    className="p-2 text-rose-400 hover:bg-slate-700 rounded-xl transition cursor-pointer"
-                    title="Remover capa"
+                    onClick={() => coverFileRef.current?.click()}
+                    disabled={coverUploadBusy}
+                    className="px-3.5 py-2.5 bg-slate-700 hover:bg-slate-600 active:scale-95 text-white text-xs font-bold rounded-xl transition flex items-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <UploadCloud className="w-4 h-4 text-purple-400" />
+                    {form.coverImage ? 'Alterar capa' : 'Escolher arquivo'}
                   </button>
+                  {form.coverImage && (
+                    <button
+                      type="button"
+                      onClick={() => update('coverImage', '')}
+                      className="p-2.5 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 border border-transparent hover:border-rose-900/60 rounded-xl transition cursor-pointer"
+                      title="Remover capa"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+
+                {isBronze && (
+                  <p className="text-[10px] text-amber-400/90 leading-tight">
+                    ℹ No plano Bronze, o cabeçalho no guia é clean essencial. A capa panorâmica personalizada com destaque visual é ativada nos planos Gold VIP e Diamond.
+                  </p>
                 )}
               </div>
-
-              <input
-                type="url"
-                value={form.coverImage}
-                onChange={e => update('coverImage', e.target.value)}
-                placeholder="Ou informe a URL direta da capa..."
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-blue-500 transition"
-              />
-
-              {isBronze && (
-                <p className="text-[10px] text-amber-400/90 leading-tight">
-                  ℹ No plano Bronze, o cabeçalho no guia é clean essencial. A capa panorâmica personalizada com destaque visual é ativada nos planos Gold VIP e Diamond.
-                </p>
-              )}
             </div>
           </div>
         </section>

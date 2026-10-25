@@ -9,6 +9,10 @@ import { CompanyRepository } from '../repositories/companyRepository.js';
 import { ListOptions } from '../repositories/baseRepository.js';
 import { companyContactLinks } from './companyContactLinks.js';
 
+import { ServiceError } from './crudService.js';
+
+export const ALLOWED_COMPANY_CITIES = ['city_itapoa', 'city_curitiba'];
+
 const PLAN_WEIGHT: Record<string, number> = {
   diamond_extremo: 3,
   gold_vip: 2,
@@ -71,6 +75,10 @@ export class CompanyService {
       slug = `${slug}-${Date.now().toString(36)}`;
     }
 
+    if (data.cityId && !ALLOWED_COMPANY_CITIES.includes(data.cityId)) {
+      throw new ServiceError(400, 'Cidade não permitida para cadastro. Apenas Itapoá e Curitiba são aceitas.');
+    }
+
     // New self-service listings always start on the free tier. Paid placement
     // is activated only by the verified Mercado Pago webhook.
     const planLevel = 'bronze';
@@ -92,8 +100,8 @@ export class CompanyService {
       whatsapp: typeof data.whatsapp === 'string' ? data.whatsapp.replace(/\D/g, '') : null,
       address: data.address ?? null,
       hours: data.hours ?? null,
-      latitude: data.latitude ?? null,
-      longitude: data.longitude ?? null,
+      latitude: data.latitude !== undefined && data.latitude !== null && data.latitude !== '' ? parseFloat(data.latitude) : null,
+      longitude: data.longitude !== undefined && data.longitude !== null && data.longitude !== '' ? parseFloat(data.longitude) : null,
       isSponsored: (planLevel as string) === 'diamond_extremo' || (planLevel as string) === 'gold_vip' ? 1 : 0,
       planLevel,
       features: Array.isArray(data.features) ? data.features : [],
@@ -110,11 +118,49 @@ export class CompanyService {
    * runs; the repository drops any column outside the whitelist.
    */
   async updateCompany(id: string, data: Record<string, any>) {
+    const existing = await CompanyRepository.findById(id);
+
+    if (data.cityId !== undefined && data.cityId !== null) {
+      const cityId = String(data.cityId).trim();
+      // Allow Itapoá or Curitiba, or preserve existing historical cityId
+      if (cityId && !ALLOWED_COMPANY_CITIES.includes(cityId) && (!existing || cityId !== existing.cityId)) {
+        throw new ServiceError(400, 'Cidade não permitida. Apenas Itapoá e Curitiba são aceitas.');
+      }
+    }
+
     // Self-service profile completion must never grant paid placement or change identity.
     const editable = ['name','slug','logo','coverImage','categoryId','cityId',
       'description','detailedDescription','phone','whatsapp','address','hours',
       'latitude','longitude','features'];
-    const profile = Object.fromEntries(Object.entries(data).filter(([key]) => editable.includes(key)));
+
+    const profile: Record<string, any> = {};
+    for (const key of editable) {
+      if (!Object.prototype.hasOwnProperty.call(data, key)) continue;
+      const val = data[key];
+      if (val === undefined) continue;
+
+      if (key === 'latitude' || key === 'longitude') {
+        if (val === '' || val === null) {
+          profile[key] = null;
+        } else {
+          const num = typeof val === 'number' ? val : parseFloat(val);
+          profile[key] = Number.isFinite(num) ? num : null;
+        }
+      } else if (key === 'whatsapp') {
+        profile[key] = typeof val === 'string' ? val.replace(/\D/g, '') : (val ?? null);
+      } else if (key === 'phone') {
+        profile[key] = typeof val === 'string' ? val.trim() : (val ?? null);
+      } else if (key === 'features') {
+        profile[key] = Array.isArray(val) ? val : existing?.features;
+      } else if (val === null) {
+        profile[key] = null;
+      } else if (typeof val === 'string') {
+        profile[key] = val.trim();
+      } else {
+        profile[key] = val;
+      }
+    }
+
     Object.assign(profile, companyContactLinks(data));
     return CompanyRepository.update(id, profile);
   }

@@ -30,7 +30,7 @@ export function createUploadRouter(directory: string) {
       destination: (_req, _file, callback) => callback(null, directory),
       filename: (_req, file, callback) => callback(null, randomUUID() + types[file.mimetype]),
     }),
-    limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 0 },
+    limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 10 },
     fileFilter: (_req, file, callback) => callback(null, Object.hasOwn(types, file.mimetype)),
   });
 
