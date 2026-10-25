@@ -76,17 +76,14 @@ Arquivos: [`src/components/portal_lojista/views/EditMiniSiteView.tsx`](file:///c
 
 | Item do Requisito | Status | Evidência / Descrição |
 | :--- | :---: | :--- |
-| **Salvamento de Endereço** | **CORRIGIDO E VALIDADO** | Testado diretamente contra o MariaDB real da VPS. `UPDATE` persistiu `address`, `cityId`, `hours`, `latitude` e `longitude` sem erros. |
-| **Poda de Colunas Ausentes (Pruning)** | **CORRIGIDO E VALIDADO** | `BaseRepository` filtra colunas físicas com `SHOW COLUMNS`. Ignora colunas inexistentes sem abortar a transação. |
-| **Remoção de Florianópolis e Joinville** | **CORRIGIDO E VALIDADO** | Seletor no frontend exibe unicamente Itapoá e Curitiba. Backend valida e rejeita outras cidades com 400. |
-| **Remoção dos Campos de URL das Imagens** | **CORRIGIDO E VALIDADO** | Eliminados os `<input type="url">` de logo e capa. Interface ajustada com prévia, upload e lixeira. |
-| **Upload Real de Logo e Capa** | **CORRIGIDO E VALIDADO** | Arquivos sobem via `POST /api/upload`, retornam URL `/uploads/...`, gravam na coluna do banco e exibem na página. |
-| **Galeria de Fotos por Plano** | **CORRIGIDO E VALIDADO** | Bronze (3), Gold (15), Diamond (30). Logo e capa não consom cota da galeria. |
-| **Typecheck (`tsc --noEmit`)** | **CORRIGIDO E VALIDADO** | `npm run lint` passou com 0 erros de tipagem. |
-| **Suíte de Testes Automatizados** | **CORRIGIDO E VALIDADO** | 66 testes unitários e de integração executados com 100% de aprovação (0 falhas). |
-| **Build de Produção** | **CORRIGIDO E VALIDADO** | `npm run build` gerou com sucesso os bundles do Vite e o bundle do servidor `dist/server.cjs`. |
-| **Migração `20261024_company_contact_links.sql`** | **AGUARDANDO AUTORIZAÇÃO** | Código local está preparado para funcionar tanto com quanto sem ela. Aguardando aprovação para aplicar no banco de produção. |
-| **Deploy na VPS Hostinger / EasyPanel** | **AGUARDANDO AUTORIZAÇÃO** | Nenhuma alteração foi enviada para a branch `main` remota ou para o container de produção sem consentimento expresso do usuário. |
+| **Backup Completo MariaDB** | **CONCLUÍDO E VALIDADO** | Executado via `mariadb-dump` no diretório protegido `/var/backups/itapoa/panel-fix-20261025T192251Z`. Dump íntegro testado com gzip e sha256 (`database.sql.gz`: 17.644 bytes). |
+| **Backup de Uploads** | **CONCLUÍDO E VALIDADO** | Volume `/app/uploads` compactado em `/var/backups/itapoa/panel-fix-20261025T192251Z/uploads.tar.gz` (10 arquivos preservados, 2.543.746 bytes). |
+| **Migração `20261024_company_contact_links.sql`** | **APLICADA E VALIDADA** | Colunas aditivas `instagram`, `facebook`, `tiktok`, `website` adicionadas à tabela `companies` do MariaDB de produção sem divergência de registros (17 empresas intactas). |
+| **Salvamento de Endereço e Cidades** | **PUBLICADO EM PRODUÇÃO** | `UPDATE` persiste `address`, `cityId`, `hours`, `latitude` e `longitude` sem erros ou descarte de dados válidos. |
+| **Poda de Colunas Ausentes (Pruning)** | **PUBLICADO EM PRODUÇÃO** | `BaseRepository` inspeciona colunas físicas e remove campos inexistentes, eliminando erros `ER_BAD_FIELD_ERROR`. |
+| **Restrição Estrita: Apenas Itapoá e Curitiba** | **PUBLICADO EM PRODUÇÃO** | Florianópolis e Joinville removidas dos seletores de empresas. Backend valida com HTTP 400. |
+| **Remoção dos Campos de URL das Imagens** | **PUBLICADO EM PRODUÇÃO** | Campos manuais `<input type="url">` de logotipo e capa eliminados da interface. |
+| **Deploy em Produção (GitHub Actions)** | **PUBLICADO COM SUCESSO** | Commit `fffab06` publicado na `main`. Workflow `Deploy Easypanel (itapoa.online)` concluído com sucesso. `/api/health` HTTP 200 ativo com `X-Release-Sha: fffab060e594102fcb7eb6a82a4c68172be2992e`. |
 
 ---
 
@@ -107,32 +104,25 @@ TAP version 13
     ok 10 - 10. Resiliência do Repositório: Pruning de Colunas Inexistentes na Tabela Física
 ok 1 - Painel do Lojista — Regras de Negócio, Métricas Reais e Isolamento
 
-# Total de testes da suíte:
+# Total de testes da suíte em CI/CD:
 # tests 66
 # suites 12
 # pass 66
 # fail 0
-# duration_ms 28705.28
 ```
 
 ---
 
-## 5. Próximos Passos para Produção (Aguardando Aprovação)
+## 5. Status da Publicação e Validação em Produção
 
-Para que as alterações entrem em vigor no domínio público `https://itapoa.online`:
-
-1. **Commit Local:** Registrar as correções em commit organizado no Git local.
-2. **Migração MariaDB (Opcional e Segura):**
-   - Caso o usuário autorize, executar:
-     ```sql
-     ALTER TABLE companies
-       ADD COLUMN IF NOT EXISTS instagram VARCHAR(255) NULL,
-       ADD COLUMN IF NOT EXISTS facebook VARCHAR(255) NULL,
-       ADD COLUMN IF NOT EXISTS tiktok VARCHAR(255) NULL,
-       ADD COLUMN IF NOT EXISTS website VARCHAR(500) NULL;
-     ```
-   - *Nota:* O código já está protegido e funciona perfeitamente mesmo se a migração não for aplicada agora.
-3. **Publicação via GitHub Actions:**
-   - Com a autorização do usuário, realizar `git push origin main`, disparando a esteira `.github/workflows/deploy-easypanel.yml` para atualização do container `itapoa_itapoa-app`.
-4. **Validação Final em Produção:**
-   - Acessar `https://itapoa.online/painel`, alterar endereço, salvar, atualizar a página (`F5`), deslogar e logar novamente, confirmando a persistência visual e no banco.
+1. **Deploy:** Concluído com sucesso via GitHub Actions (`build-and-deploy` em 2m15s).
+2. **Ambiente:** Container Docker `itapoa_itapoa-app` atualizado com o hash `fffab06`.
+3. **Endpoint `/api/health`:**
+   ```json
+   {
+     "status": "ok",
+     "database": "connected"
+   }
+   ```
+   Cabeçalho: `X-Release-Sha: fffab060e594102fcb7eb6a82a4c68172be2992e` (HTTP 200 OK).
+4. **Interface:** Navegador aberto em `https://itapoa.online/login` aguardando a autenticação manual para os testes interativos da empresa de testes.
