@@ -64,6 +64,10 @@ export class CompanyService {
    * what the anti-IDOR middleware relies on.
    */
   async createCompany(data: Record<string, any>, ownerUserId: string) {
+    if (data.cityId && !ALLOWED_COMPANY_CITIES.includes(data.cityId)) {
+      throw new ServiceError(400, 'Cidade não permitida para cadastro. Apenas Itapoá e Curitiba são aceitas.');
+    }
+
     const name = typeof data.name === 'string' ? data.name.trim() : '';
     if (!name) {
       throw new Error('Nome da empresa é obrigatório.');
@@ -73,10 +77,6 @@ export class CompanyService {
     if (!slug) slug = `empresa-${Date.now()}`;
     if (await CompanyRepository.slugExists(slug)) {
       slug = `${slug}-${Date.now().toString(36)}`;
-    }
-
-    if (data.cityId && !ALLOWED_COMPANY_CITIES.includes(data.cityId)) {
-      throw new ServiceError(400, 'Cidade não permitida para cadastro. Apenas Itapoá e Curitiba são aceitas.');
     }
 
     // New self-service listings always start on the free tier. Paid placement
@@ -118,10 +118,14 @@ export class CompanyService {
    * runs; the repository drops any column outside the whitelist.
    */
   async updateCompany(id: string, data: Record<string, any>) {
-    const existing = await CompanyRepository.findById(id);
-
     if (data.cityId !== undefined && data.cityId !== null) {
       const cityId = String(data.cityId).trim();
+      let existing: any = null;
+      try {
+        existing = await CompanyRepository.findById(id);
+      } catch {
+        existing = null;
+      }
       // Allow Itapoá or Curitiba, or preserve existing historical cityId
       if (cityId && !ALLOWED_COMPANY_CITIES.includes(cityId) && (!existing || cityId !== existing.cityId)) {
         throw new ServiceError(400, 'Cidade não permitida. Apenas Itapoá e Curitiba são aceitas.');
