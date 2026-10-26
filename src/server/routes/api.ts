@@ -235,9 +235,18 @@ apiRouter.post('/companies/:id/views', handler(async (req, res) => {
 // Fotos da Galeria da Empresa (com validação estrita de limite por plano)
 apiRouter.get('/companies/:id/media', handler(async (req, res) => {
   const pool = (await import('../mysql.js')).pool;
+  const param = req.params.id;
+  let companyId = param;
+  const [compRows]: any = await pool.query(
+    'SELECT id FROM companies WHERE id = ? OR slug = ? LIMIT 1',
+    [param, param]
+  );
+  if (compRows && compRows.length > 0) {
+    companyId = compRows[0].id;
+  }
   const [rows]: any = await pool.query(
     'SELECT id, url, fileType, createdAt FROM media_items WHERE entityId = ? AND entityType = ? ORDER BY createdAt DESC',
-    [req.params.id, 'company']
+    [companyId, 'company']
   );
   res.json(rows);
 }));

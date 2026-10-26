@@ -45,6 +45,8 @@ const normalizeCompany = (raw: any): Company => {
     whatsapp: raw.whatsapp ?? '',
     address: raw.address ?? '',
     hours: raw.hours ?? '',
+    gallery: Array.isArray(raw.gallery) ? raw.gallery : (Array.isArray(raw.photos) ? raw.photos : []),
+    photos: Array.isArray(raw.photos) ? raw.photos : (Array.isArray(raw.gallery) ? raw.gallery : []),
   } as Company;
 };
 

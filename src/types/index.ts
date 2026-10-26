@@ -89,6 +89,8 @@ export interface Company {
   access_grant_type?: 'bronze' | 'trial' | 'paid' | 'admin_grant';
   trial_ends_at?: string | null;
   features: string[];
+  gallery?: string[];
+  photos?: string[];
   products: ProductOrService[];
   faqs: FAQItem[];
   views: number;
