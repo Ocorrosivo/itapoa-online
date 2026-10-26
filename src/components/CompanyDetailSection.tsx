@@ -19,7 +19,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Phone, Share2, Star, Clock, MapPin, Globe, Sparkles,
   Send, Heart, User, Filter, ArrowUpDown, Search, Award,
-  Zap, Tag, ShoppingBag, CheckCircle2, ChevronRight, MessageSquare
+  Zap, Tag, ShoppingBag, CheckCircle2, ChevronRight, MessageSquare, Camera
 } from 'lucide-react';
 import { Company, Review, City, Category, ProductOrService, FAQItem } from '../types';
 import { featureArray, toNumber, arrayFromPayload } from '../utils/catalogSearch';
@@ -89,9 +89,58 @@ export default function CompanyDetailSection({
 
   const isClaimed = (company as any).claim_status === 'claimed' || Boolean(company.ownerId && company.ownerId !== 'admin_master');
 
+  // Fotos da galeria oficial da empresa (painel lojista / media_items)
+  const [mediaGallery, setMediaGallery] = useState<string[]>(() => {
+    const list: string[] = [];
+    if (Array.isArray((company as any).gallery)) {
+      list.push(...(company as any).gallery.map((g: any) => typeof g === 'string' ? g : g?.url).filter(Boolean));
+    }
+    if (Array.isArray((company as any).photos)) {
+      list.push(...(company as any).photos.map((p: any) => typeof p === 'string' ? p : p?.url).filter(Boolean));
+    }
+    return Array.from(new Set(list));
+  });
+
+  // Carregar fotos da galeria oficial da empresa via API
+  useEffect(() => {
+    let cancelled = false;
+    if (!company?.id) return;
+
+    // Atualizar se a empresa já vier com fotos na propriedade
+    const list: string[] = [];
+    if (Array.isArray((company as any).gallery)) {
+      list.push(...(company as any).gallery.map((g: any) => typeof g === 'string' ? g : g?.url).filter(Boolean));
+    }
+    if (Array.isArray((company as any).photos)) {
+      list.push(...(company as any).photos.map((p: any) => typeof p === 'string' ? p : p?.url).filter(Boolean));
+    }
+    if (list.length > 0) {
+      setMediaGallery(Array.from(new Set(list)));
+    }
+
+    fetch(`/api/companies/${encodeURIComponent(company.id)}/media`)
+      .then(res => res.ok ? res.json() : [])
+      .then((data: any) => {
+        if (cancelled) return;
+        const items = Array.isArray(data) ? data : [];
+        const urls = items.map((item: any) => item?.url || item).filter(Boolean);
+        if (urls.length > 0) {
+          setMediaGallery(Array.from(new Set(urls)));
+        }
+      })
+      .catch(() => {});
+
+    return () => { cancelled = true; };
+  }, [company?.id, company]);
+
   // Galeria de Fotos respeitando estritamente o limite do plano (Logo e Capa à parte)
   const galleryImages = useMemo(() => {
     const rawImages: string[] = [];
+    // 1. Fotos cadastradas na galeria oficial da empresa
+    if (mediaGallery.length > 0) {
+      rawImages.push(...mediaGallery);
+    }
+    // 2. Fotos de produtos e serviços cadastrados
     if (safeProducts.length > 0) {
       safeProducts.forEach(p => {
         if (p.imageUrl) rawImages.push(p.imageUrl);
@@ -99,7 +148,13 @@ export default function CompanyDetailSection({
     }
     const cleanList = Array.from(new Set(rawImages.filter(Boolean)));
     return cleanList.slice(0, maxGalleryPhotos);
-  }, [safeProducts, maxGalleryPhotos]);
+  }, [mediaGallery, safeProducts, maxGalleryPhotos]);
+
+  useEffect(() => {
+    if (activeGalleryIdx >= galleryImages.length && galleryImages.length > 0) {
+      setActiveGalleryIdx(0);
+    }
+  }, [galleryImages.length, activeGalleryIdx]);
 
   // Carregar avaliações
   useEffect(() => {
@@ -556,24 +611,29 @@ export default function CompanyDetailSection({
 
                 {/* Galeria de Fotos Respeitando os Limites do Plano */}
                 {galleryImages.length > 0 && (
-                  <div className="p-6 md:p-8 bg-white border border-slate-200 rounded-3xl shadow-sm flex flex-col">
+                  <div className="p-6 md:p-8 bg-white border border-slate-200/90 rounded-3xl shadow-sm flex flex-col">
                     <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h3 className="text-lg font-black text-slate-900">Galeria de Fotos</h3>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          {isDiamond ? 'Galeria expandida oficial Diamond (até 30 fotos)' : isGold ? 'Galeria exclusiva Gold VIP (até 15 fotos)' : 'Galeria de fotos (até 3 fotos)'}
-                        </p>
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-red-50 text-[#C8102E] flex items-center justify-center shrink-0">
+                          <Camera className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-black text-slate-900 tracking-tight">Galeria de Fotos</h3>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {isDiamond ? 'Galeria expandida oficial Diamond (até 30 fotos)' : isGold ? 'Galeria exclusiva Gold VIP (até 15 fotos)' : 'Fotos oficiais do estabelecimento'}
+                          </p>
+                        </div>
                       </div>
-                      <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">
+                      <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full border border-slate-200/60">
                         {activeGalleryIdx + 1} de {galleryImages.length}
                       </span>
                     </div>
 
-                    <div className="relative w-full h-[280px] md:h-[420px] bg-slate-900 rounded-2xl overflow-hidden shadow-md">
+                    <div className="relative w-full h-[280px] sm:h-[360px] md:h-[440px] bg-slate-950 rounded-2xl overflow-hidden shadow-inner group">
                       <img
                         src={galleryImages[activeGalleryIdx]}
-                        alt={`Foto ${activeGalleryIdx + 1}`}
-                        className="w-full h-full object-cover"
+                        alt={`${company.name} - Foto ${activeGalleryIdx + 1}`}
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                       />
 
                       {galleryImages.length > 1 && (
@@ -581,20 +641,46 @@ export default function CompanyDetailSection({
                           <button
                             type="button"
                             onClick={handlePrevGallery}
-                            className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 text-white hover:bg-black/80 transition flex items-center justify-center font-bold z-10"
+                            className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-slate-950/70 hover:bg-slate-900 text-white backdrop-blur-xs transition flex items-center justify-center font-bold z-10 shadow-lg border border-white/10 cursor-pointer active:scale-95"
+                            aria-label="Foto anterior"
                           >
                             ◀
                           </button>
                           <button
                             type="button"
                             onClick={handleNextGallery}
-                            className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 text-white hover:bg-black/80 transition flex items-center justify-center font-bold z-10"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-slate-950/70 hover:bg-slate-900 text-white backdrop-blur-xs transition flex items-center justify-center font-bold z-10 shadow-lg border border-white/10 cursor-pointer active:scale-95"
+                            aria-label="Próxima foto"
                           >
                             ▶
                           </button>
                         </>
                       )}
                     </div>
+
+                    {/* Miniaturas clicáveis para navegação direta */}
+                    {galleryImages.length > 1 && (
+                      <div className="flex items-center gap-2.5 mt-3 overflow-x-auto pb-1 pt-1 scrollbar-thin">
+                        {galleryImages.map((imgUrl, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setActiveGalleryIdx(idx)}
+                            className={`relative shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-xl overflow-hidden border-2 transition-all cursor-pointer ${
+                              idx === activeGalleryIdx
+                                ? 'border-[#C8102E] ring-2 ring-red-500/30 scale-105 shadow-md'
+                                : 'border-slate-200 hover:border-slate-400 opacity-65 hover:opacity-100'
+                            }`}
+                          >
+                            <img
+                              src={imgUrl}
+                              alt={`Miniatura ${idx + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 

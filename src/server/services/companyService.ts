@@ -55,6 +55,19 @@ export class CompanyService {
     if (company?.id?.startsWith('checkout_') && (!company.categoryId || !company.cityId)) return null;
     if (company) {
       await CompanyRepository.incrementViews(slug);
+      try {
+        const { pool } = await import('../mysql.js');
+        const [mediaRows]: any = await pool.query(
+          'SELECT id, url, fileType, createdAt FROM media_items WHERE entityId = ? AND entityType = ? ORDER BY createdAt DESC',
+          [company.id, 'company']
+        );
+        const galleryUrls = Array.isArray(mediaRows) ? mediaRows.map(m => m.url).filter(Boolean) : [];
+        (company as any).gallery = galleryUrls;
+        (company as any).photos = galleryUrls;
+        (company as any).media = mediaRows;
+      } catch {
+        // silencioso
+      }
     }
     return company;
   }
