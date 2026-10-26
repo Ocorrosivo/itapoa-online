@@ -61,9 +61,9 @@ export const LojistaLayout: React.FC<LojistaLayoutProps> = ({ onNavigateCompany 
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans antialiased overflow-x-hidden">
-      {/* Desktop sidebar */}
-      <div className="hidden md:flex shrink-0">
+    <div className="h-screen h-[100dvh] bg-slate-950 text-slate-100 flex font-sans antialiased overflow-hidden">
+      {/* Desktop sidebar — fixa na viewport; apenas o conteúdo rola */}
+      <div className="hidden md:flex shrink-0 h-screen h-[100dvh] overflow-hidden">
         <LojistaSidebar
           currentTab={currentTab}
           onSelectTab={handleSelectTab}
@@ -109,8 +109,8 @@ export const LojistaLayout: React.FC<LojistaLayoutProps> = ({ onNavigateCompany 
         </>
       )}
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Main content — única região com rolagem vertical */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
         {/* Mobile topbar */}
         <div className="md:hidden sticky top-0 z-20 flex items-center gap-3 px-3 py-3 bg-slate-900/95 backdrop-blur border-b border-slate-800">
           <button
