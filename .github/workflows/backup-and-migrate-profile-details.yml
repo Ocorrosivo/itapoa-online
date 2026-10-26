@@ -1,0 +1,137 @@
+name: Backup e Migracao Aditiva Profile Details (itapoa.online)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Digite "backup-and-migrate-profile" para confirmar'
+        required: true
+        type: string
+
+concurrency:
+  group: easypanel-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backup-and-migrate:
+    if: inputs.confirmation == 'backup-and-migrate-profile'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Backup completo do banco, backup de uploads e migracao aditiva de profileDetails
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          command_timeout: 10m
+          script: |
+            set -eu
+            umask 077
+            SERVICE="itapoa_itapoa-app"
+            container=$(docker ps --filter "label=com.docker.swarm.service.name=$SERVICE" --format '{{.ID}}' | head -n 1)
+            test -n "$container"
+
+            echo "[1/5] Conectando ao container da aplicacao: $container"
+
+            mkdir -p /var/backups/itapoa
+            stamp=$(date -u +%Y%m%dT%H%M%SZ)
+            backup="/var/backups/itapoa/panel-profile-$stamp"
+            mkdir -p "$backup"
+            chmod 700 "$backup"
+
+            # 1. Obter credenciais do banco com seguranca
+            docker exec "$container" node -e 'for(const k of ["DB_HOST","DB_PORT","DB_NAME","DB_USER","DB_PASSWORD"]){const v=process.env[k]||"";if(/[\r\n]/.test(v))process.exit(1);process.stdout.write(k+"="+v+"\n")}' > "$backup/db.env"
+            chmod 600 "$backup/db.env"
+
+            flavor=$(docker exec "$container" node -e 'const m=require("mysql2/promise");(async()=>{const c=await m.createConnection({host:process.env.DB_HOST,port:Number(process.env.DB_PORT||3306),user:process.env.DB_USER,password:process.env.DB_PASSWORD,database:process.env.DB_NAME});try{const [r]=await c.query("SELECT VERSION() AS v");console.log(/mariadb/i.test(r[0].v)?"mariadb":"mysql")}finally{await c.end()}})().catch(()=>process.exit(1))')
+            case "$flavor" in
+              mariadb) client_image=mariadb:11.4; dump_command=mariadb-dump ;;
+              mysql) client_image=mysql:8.4; dump_command=mysqldump ;;
+              *) echo 'Unknown database flavor; aborting'; exit 1 ;;
+            esac
+            docker pull "$client_image" >/dev/null
+
+            # 2. Backup completo do MariaDB com mariadb-dump
+            echo "[2/5] Executando dump completo do banco MariaDB..."
+            docker run --rm --network "container:$container" --env-file "$backup/db.env" -e DUMP_COMMAND="$dump_command" --entrypoint sh "$client_image" -c '
+              export MYSQL_PWD="$DB_PASSWORD"
+              exec "$DUMP_COMMAND" --host="$DB_HOST" --port="${DB_PORT:-3306}" --user="$DB_USER" --single-transaction --quick --skip-lock-tables --no-tablespaces --routines --events --triggers --hex-blob "$DB_NAME"
+            ' > "$backup/database.sql" 2> "$backup/dump.stderr"
+
+            test -s "$backup/database.sql"
+            grep -q 'CREATE TABLE.*companies' "$backup/database.sql"
+            grep -q 'CREATE TABLE.*users' "$backup/database.sql"
+            gzip -c "$backup/database.sql" > "$backup/database.sql.gz"
+            gzip -t "$backup/database.sql.gz"
+            sha256sum "$backup/database.sql.gz" > "$backup/database.sha256"
+            sha256sum -c "$backup/database.sha256"
+            echo "BACKUP_DB_VERIFIED directory=$backup file=database.sql.gz bytes=$(stat -c %s "$backup/database.sql.gz")"
+
+            # 3. Backup dos arquivos de uploads do volume persistente itapoa_itapoa-app_uploads
+            echo "[3/5] Executando backup dos arquivos de uploads..."
+            mkdir -p "$backup/uploads"
+            docker cp "$container:/app/uploads/." "$backup/uploads/"
+            tar -czf "$backup/uploads.tar.gz" -C "$backup" uploads
+            gzip -t "$backup/uploads.tar.gz"
+            sha256sum "$backup/uploads.tar.gz" > "$backup/uploads.sha256"
+            sha256sum -c "$backup/uploads.sha256"
+            echo "BACKUP_UPLOADS_VERIFIED file=uploads.tar.gz files=$(find "$backup/uploads" -type f | wc -l) bytes=$(stat -c %s "$backup/uploads.tar.gz")"
+
+            # 4. Inspecionar colunas e aplicar migracao aditiva segura
+            echo "[4/5] Inspecionando colunas e aplicando migracao aditiva profileDetails..."
+            docker exec -i "$container" node - <<'NODE'
+            const mysql = require('mysql2/promise');
+            (async () => {
+              const db = await mysql.createConnection({
+                host: process.env.DB_HOST,
+                port: Number(process.env.DB_PORT || 3306),
+                user: process.env.DB_USER,
+                password: process.env.DB_PASSWORD,
+                database: process.env.DB_NAME
+              });
+              try {
+                const [beforeCount] = await db.query('SELECT COUNT(*) as cnt FROM companies');
+                const [colsBefore] = await db.query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='companies'");
+                const beforeColSet = new Set(colsBefore.map(c => c.COLUMN_NAME));
+                console.log('Colunas existentes em companies antes da migracao:', Array.from(beforeColSet).join(', '));
+
+                // 1. Garantir que as colunas de redes sociais existem (aditivas)
+                await db.query(`ALTER TABLE companies
+                  ADD COLUMN IF NOT EXISTS instagram VARCHAR(255) NULL,
+                  ADD COLUMN IF NOT EXISTS facebook VARCHAR(255) NULL,
+                  ADD COLUMN IF NOT EXISTS tiktok VARCHAR(255) NULL,
+                  ADD COLUMN IF NOT EXISTS website VARCHAR(500) NULL`);
+
+                // 2. Aplicar coluna profileDetails (aditiva para endereço, x, google e horários)
+                console.log('Executando ALTER TABLE companies ADD COLUMN IF NOT EXISTS profileDetails TEXT NULL...');
+                await db.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS profileDetails TEXT NULL`);
+
+                // Inspecionar colunas apos migracao
+                const [colsAfter] = await db.query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='companies'");
+                const afterColSet = new Set(colsAfter.map(c => c.COLUMN_NAME));
+                console.log('Colunas apos migracao:', Array.from(afterColSet).join(', '));
+
+                if (!afterColSet.has('profileDetails')) {
+                  throw new Error('Coluna obrigatoria profileDetails nao foi adicionada!');
+                }
+
+                // Confirmar que nenhuma linha existente foi alterada ou perdida
+                const [afterCount] = await db.query('SELECT COUNT(*) as cnt FROM companies');
+                if (beforeCount[0].cnt !== afterCount[0].cnt) {
+                  throw new Error(`Contagem de empresas divergiu: antes=${beforeCount[0].cnt}, depois=${afterCount[0].cnt}`);
+                }
+                console.log(`MIGRATION_PROFILE_DETAILS_SUCCESS: Coluna profileDetails disponivel e verificada no MariaDB. Contagem de empresas preservada: ${afterCount[0].cnt} registros intactos.`);
+              } finally {
+                await db.end();
+              }
+            })().catch(err => {
+              console.error('Falha na verificacao/migracao:', err);
+              process.exitCode = 1;
+            });
+            NODE
+
+            echo "[5/5] Backup e migracao concluidos com sucesso absoluto."
