@@ -14,7 +14,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import {
   Save, AlertCircle, CheckCircle2, Loader2, Building2, Globe, Phone,
   Instagram, Facebook, MapPin, Clock, ExternalLink, Camera, Plus, Trash2,
-  Sparkles, Zap, Lock, UploadCloud
+  Sparkles, Zap, Lock, UploadCloud, X
 } from 'lucide-react';
 import { Company } from '../../../types';
 import { useCompany } from '../../../context/CompanyContext';
@@ -84,6 +84,7 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
   const [error, setError] = useState('');
   const [planLimitWarning, setPlanLimitWarning] = useState('');
   const [dirty, setDirty] = useState(false);
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
 
   const galleryFileRef = useRef<HTMLInputElement>(null);
   const logoFileRef = useRef<HTMLInputElement>(null);
@@ -190,37 +191,58 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
     }
   };
 
-  // Upload Foto Galeria
+  // Upload Múltiplo de Fotos para a Galeria
   const handleGalleryFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
 
-    if (gallery.length >= maxGalleryPhotos) {
-      setPlanLimitWarning(`Limite de fotos atingido (${gallery.length} de ${maxGalleryPhotos} fotos). Faça upgrade para adicionar mais fotos.`);
+    const availableSlots = maxGalleryPhotos - gallery.length;
+    if (availableSlots <= 0) {
+      setPlanLimitWarning(`Limite de fotos atingido (${gallery.length} de ${maxGalleryPhotos} fotos).`);
+      if (galleryFileRef.current) galleryFileRef.current.value = '';
       return;
     }
+
+    const allFiles = Array.from(fileList) as File[];
+    const filesToUpload: File[] = allFiles.slice(0, availableSlots);
+    const skippedCount = allFiles.length - filesToUpload.length;
 
     setGalleryUploadBusy(true);
     setPlanLimitWarning('');
     setError('');
-    try {
-      const url = await handleUploadFile(file);
-      await api.post(`/api/companies/${encodeURIComponent(company.id)}/media`, {
-        url,
-        fileType: file.type
-      });
-      await fetchGallery();
-      setSuccess('Foto adicionada à galeria com sucesso!');
-    } catch (err: any) {
-      if (err?.status === 403 || err?.errorType === 'plan_limit') {
-        setPlanLimitWarning(err?.error || `Limite atingido para o plano (${maxGalleryPhotos} fotos).`);
-      } else {
-        setError(err?.message || 'Erro ao salvar foto na galeria.');
+
+    let successCount = 0;
+    const uploadErrors: string[] = [];
+
+    for (const file of filesToUpload) {
+      try {
+        const url = await handleUploadFile(file);
+        await api.post(`/api/companies/${encodeURIComponent(company.id)}/media`, {
+          url,
+          fileType: file.type
+        });
+        successCount++;
+      } catch (err: any) {
+        uploadErrors.push(err?.message || file.name);
       }
-    } finally {
-      setGalleryUploadBusy(false);
-      if (galleryFileRef.current) galleryFileRef.current.value = '';
     }
+
+    await fetchGallery();
+
+    if (successCount > 0) {
+      let msg = successCount === 1 ? 'Foto adicionada à galeria!' : `${successCount} fotos adicionadas à galeria com sucesso!`;
+      if (skippedCount > 0) {
+        msg += ` (${skippedCount} foto(s) ignorada(s) para não exceder o limite de ${maxGalleryPhotos} fotos).`;
+      }
+      setSuccess(msg);
+    }
+
+    if (uploadErrors.length > 0) {
+      setError(`Falha ao enviar ${uploadErrors.length} foto(s).`);
+    }
+
+    setGalleryUploadBusy(false);
+    if (galleryFileRef.current) galleryFileRef.current.value = '';
   };
 
   // Excluir Foto Galeria
@@ -271,6 +293,7 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
       onSaved();
       setSuccess('Informações da empresa salvas com sucesso no guia!');
       setDirty(false);
+      setShowSuccessPopup(true);
     } catch (err: any) {
       setError(err?.message ?? 'Não foi possível salvar os dados da empresa.');
     } finally {
@@ -685,6 +708,7 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
             type="file"
             ref={galleryFileRef}
             accept="image/png,image/jpeg,image/webp"
+            multiple
             className="hidden"
             onChange={handleGalleryFileChange}
           />
@@ -720,15 +744,16 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
                 {galleryUploadBusy ? (
                   <>
                     <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
-                    <span className="text-[11px] font-bold text-slate-400">Enviando foto…</span>
+                    <span className="text-[11px] font-bold text-slate-400">Enviando fotos…</span>
                   </>
                 ) : (
                   <>
                     <div className="w-10 h-10 rounded-2xl bg-slate-800 group-hover:bg-blue-600/20 text-slate-400 group-hover:text-blue-400 flex items-center justify-center transition">
                       <Plus className="w-5 h-5" />
                     </div>
-                    <span className="text-xs font-bold text-slate-300">Adicionar Foto</span>
-                    <span className="text-[10px] text-slate-500">JPG, PNG ou WEBP</span>
+                    <span className="text-xs font-bold text-slate-300">Adicionar Fotos</span>
+                    <span className="text-[10px] text-blue-400 font-medium">Selecione várias de uma vez</span>
+                    <span className="text-[9px] text-slate-500">JPG, PNG ou WEBP</span>
                   </>
                 )}
               </button>
@@ -760,6 +785,80 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
         </div>
 
       </form>
+
+      {/* POPUP DE CONFIRMAÇÃO: SALVO COM SUCESSO */}
+      {showSuccessPopup && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md transition-all duration-300"
+          onClick={() => setShowSuccessPopup(false)}
+        >
+          <div 
+            className="bg-slate-900 border border-slate-700/80 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl text-center space-y-5 relative transform transition-all"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Botão fechar (X) */}
+            <button
+              type="button"
+              onClick={() => setShowSuccessPopup(false)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition cursor-pointer"
+              aria-label="Fechar"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Ícone de Sucesso */}
+            <div className="w-16 h-16 rounded-full bg-emerald-500/10 border-2 border-emerald-500/40 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/10">
+              <CheckCircle2 className="w-9 h-9 text-emerald-400" />
+            </div>
+
+            {/* Mensagem Principal */}
+            <div className="space-y-2">
+              <h3 className="text-xl font-black text-white tracking-tight">
+                Salvo com Sucesso!
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                As informações e mídias de <strong className="text-white">{form.name || company.name}</strong> foram salvas e atualizadas no guia comercial.
+              </p>
+            </div>
+
+            {/* Badges de Confirmação */}
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-1 text-[11px] font-bold text-slate-400">
+              <span className="px-3 py-1 bg-slate-800/80 border border-slate-700 rounded-lg text-emerald-300 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400" /> Dados gravados
+              </span>
+              <span className="px-3 py-1 bg-slate-800/80 border border-slate-700 rounded-lg text-slate-300 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-400" /> Vitrine sincronizada
+              </span>
+            </div>
+
+            {/* Botões de Ação */}
+            <div className="pt-3 flex flex-col sm:flex-row items-center gap-3">
+              {company.slug && onNavigateCompany && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSuccessPopup(false);
+                    onNavigateCompany(company.slug);
+                  }}
+                  className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition border border-slate-700 flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                >
+                  <ExternalLink className="w-4 h-4 text-blue-400" />
+                  <span>Ver no Guia</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setShowSuccessPopup(false)}
+                className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-black text-xs transition shadow-lg shadow-blue-600/25 cursor-pointer"
+              >
+                Concluir
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }

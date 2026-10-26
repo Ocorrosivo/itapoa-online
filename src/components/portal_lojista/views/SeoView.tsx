@@ -6,10 +6,11 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Layers, Save, AlertCircle, Loader2, CheckCircle2, ExternalLink, Info
+  Layers, Save, AlertCircle, Loader2, CheckCircle2, ExternalLink, Info, X
 } from 'lucide-react';
 import { api } from '../../../lib/apiClient';
 import { Company } from '../../../types';
+import { SuccessPopup } from '../../common/SuccessPopup';
 
 interface SeoViewProps {
   company: Company | null;
@@ -23,6 +24,7 @@ export const SeoView: React.FC<SeoViewProps> = ({ company, onNavigateCompany }) 
   const [busy, setBusy] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
 
   useEffect(() => {
     if (!company) return;
@@ -45,6 +47,7 @@ export const SeoView: React.FC<SeoViewProps> = ({ company, onNavigateCompany }) 
         keywords: keywords.trim(),
       });
       setSuccess('Dados de SEO salvos. As alterações refletem no mini-site público em alguns instantes.');
+      setShowSuccessPopup(true);
     } catch (err: any) {
       setError(err?.message ?? 'Não foi possível salvar as configurações de SEO.');
     } finally {
@@ -178,6 +181,13 @@ export const SeoView: React.FC<SeoViewProps> = ({ company, onNavigateCompany }) 
           )}
         </div>
       </form>
+
+      {showSuccessPopup && (
+        <SuccessPopup
+          message="Dados de SEO salvos. As alterações refletem no mini-site público em alguns instantes."
+          onClose={() => setShowSuccessPopup(false)}
+        />
+      )}
     </div>
   );
 };

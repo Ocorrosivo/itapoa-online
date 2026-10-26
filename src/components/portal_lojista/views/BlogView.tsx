@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../../lib/apiClient';
 import { Company } from '../../../types';
+import { SuccessPopup } from '../../common/SuccessPopup';
 
 interface Post {
   id: string;
@@ -221,6 +222,7 @@ export const BlogView: React.FC<BlogViewProps> = ({ company }) => {
   const [deleteTarget, setDeleteTarget] = useState<Post | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [toggleBusy, setToggleBusy] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState('');
 
   const load = useCallback(async () => {
     if (!company) return;
@@ -371,7 +373,19 @@ export const BlogView: React.FC<BlogViewProps> = ({ company }) => {
       )}
 
       {modal !== false && (
-        <BlogPostModal post={modal} companyId={company.id} onClose={() => setModal(false)} onSaved={load} />
+        <BlogPostModal
+          post={modal}
+          companyId={company.id}
+          onClose={() => setModal(false)}
+          onSaved={() => {
+            load();
+            setSuccessMessage('Post salvo com sucesso!');
+          }}
+        />
+      )}
+
+      {successMessage && (
+        <SuccessPopup message={successMessage} onClose={() => setSuccessMessage('')} />
       )}
 
       {deleteTarget && (

@@ -110,9 +110,9 @@ export const LojistaLayout: React.FC<LojistaLayoutProps> = ({ onNavigateCompany 
       )}
 
       {/* Main content — única região com rolagem vertical */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 h-full overflow-hidden">
         {/* Mobile topbar */}
-        <div className="md:hidden sticky top-0 z-20 flex items-center gap-3 px-3 py-3 bg-slate-900/95 backdrop-blur border-b border-slate-800">
+        <div className="md:hidden shrink-0 z-20 flex items-center gap-3 px-3 py-3 bg-slate-900/95 backdrop-blur border-b border-slate-800">
           <button
             type="button"
             onClick={() => setMobileNavOpen(true)}

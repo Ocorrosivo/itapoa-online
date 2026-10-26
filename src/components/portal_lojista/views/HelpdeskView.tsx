@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../../lib/apiClient';
 import { Company, SupportTicket } from '../../../types';
+import { SuccessPopup } from '../../common/SuccessPopup';
 
 interface HelpdeskViewProps {
   company: Company | null;
@@ -217,6 +218,7 @@ export const HelpdeskView: React.FC<HelpdeskViewProps> = ({ company }) => {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -308,7 +310,19 @@ export const HelpdeskView: React.FC<HelpdeskViewProps> = ({ company }) => {
         </div>
       )}
 
-      {showModal && <NewTicketModal onClose={() => setShowModal(false)} onSaved={load} />}
+      {showModal && (
+        <NewTicketModal
+          onClose={() => setShowModal(false)}
+          onSaved={() => {
+            load();
+            setSuccessMessage('Chamado criado com sucesso!');
+          }}
+        />
+      )}
+
+      {successMessage && (
+        <SuccessPopup message={successMessage} onClose={() => setSuccessMessage('')} />
+      )}
     </div>
   );
 };

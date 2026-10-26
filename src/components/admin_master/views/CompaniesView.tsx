@@ -8,7 +8,8 @@ import React, { useState } from 'react';
 import { 
   Building2, Search, Filter, Download, UserCheck, ShieldAlert, 
   Trash2, Edit3, Eye, CheckCircle2, XCircle, ArrowUpDown, Plus,
-  Award, Zap, Sparkles, Calendar, RotateCcw, Ban, History, X, AlertCircle
+  Award, Zap, Sparkles, Calendar, RotateCcw, Ban, History, X, AlertCircle,
+  ShieldCheck, Loader2
 } from 'lucide-react';
 import { useCompany } from '../../../context/CompanyContext';
 import { useAuth } from '../../../context/AuthContext';
@@ -57,12 +58,42 @@ export const CompaniesView: React.FC<{ onNavigateCompany: (slug: string) => void
   );
   const [renewReason, setRenewReason] = useState('');
 
+  // Modal de Importação CSV
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importRows, setImportRows] = useState<any[]>([]);
+  const [importPreview, setImportPreview] = useState<any | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importExecutionResult, setImportExecutionResult] = useState<any | null>(null);
+  const [skipDuplicates, setSkipDuplicates] = useState(true);
+  const [resettingPlans, setResettingPlans] = useState(false);
+
   const getAuthHeaders = () => {
     const activeToken = token || localStorage.getItem('itpoa_auth_token') || '';
     return {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${activeToken}`
     };
+  };
+
+  const handleResetAllToBronze = async () => {
+    if (!window.confirm('Deseja realmente redefinir todas as empresas cadastradas para o Plano Gratuito (Bronze)? Esta ação unifica todos os perfis no plano gratuito sem distinção.')) {
+      return;
+    }
+    setResettingPlans(true);
+    try {
+      const res = await fetch('/api/admin/companies/reset-plans-bronze', {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao redefinir planos');
+      alert(`Sucesso! ${data.affectedRows} empresa(s) unificada(s) no plano gratuito (Bronze).`);
+      if (refreshData) await refreshData();
+    } catch (err: any) {
+      alert(`Erro: ${err?.message || 'Falha na operação'}`);
+    } finally {
+      setResettingPlans(false);
+    }
   };
 
   const filtered = companies.filter(comp => {
@@ -253,13 +284,37 @@ export const CompaniesView: React.FC<{ onNavigateCompany: (slug: string) => void
           </p>
         </div>
 
-        <button
-          onClick={handleExportCSV}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-200 text-xs font-bold transition shadow-sm"
-        >
-          <Download className="w-4 h-4 text-emerald-400" />
-          <span>Exportar CSV</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              setShowImportModal(true);
+              setImportPreview(null);
+              setImportExecutionResult(null);
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-sm cursor-pointer"
+          >
+            <Plus className="w-4 h-4 text-white" />
+            <span>Importar Empresas (CSV)</span>
+          </button>
+
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-200 text-xs font-bold transition shadow-sm cursor-pointer"
+          >
+            <Download className="w-4 h-4 text-emerald-400" />
+            <span>Exportar CSV</span>
+          </button>
+
+          <button
+            onClick={handleResetAllToBronze}
+            disabled={resettingPlans}
+            title="Garante que todas as empresas cadastradas fiquem no plano gratuito (Bronze) sem distinção"
+            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 hover:bg-slate-700 text-amber-400 text-xs font-bold transition shadow-sm cursor-pointer"
+          >
+            {resettingPlans ? <Loader2 className="w-4 h-4 animate-spin text-amber-400" /> : <ShieldCheck className="w-4 h-4 text-amber-400" />}
+            <span>Unificar no Grátis</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter & Search Bar */}
@@ -638,6 +693,236 @@ export const CompaniesView: React.FC<{ onNavigateCompany: (slug: string) => void
                 type="button"
                 onClick={() => setGrantModalCompany(null)}
                 className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE IMPORTAÇÃO ADMINISTRATIVA DE EMPRESAS VIA CSV */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-4xl w-full text-white shadow-2xl space-y-6 max-h-[90vh] flex flex-col">
+            
+            <div className="flex items-start justify-between border-b border-slate-800 pb-4">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                  <Building2 className="w-3.5 h-3.5" />
+                  <span>Importador Administrativo Master</span>
+                </div>
+                <h3 className="text-xl font-black text-white mt-1">Importar Empresas em Lote (CSV)</h3>
+                <p className="text-xs text-slate-400">
+                  Faça upload de arquivos CSV de prospecção. O sistema valida dados, detecta duplicatas e mapeia categorias canônicas automaticamente.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowImportModal(false)}
+                className="p-2 text-slate-400 hover:text-white rounded-full bg-slate-800 hover:bg-slate-700 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-6 pr-1">
+              {/* Resultado de Execução */}
+              {importExecutionResult ? (
+                <div className="p-6 bg-slate-800/80 border border-slate-700 rounded-2xl text-center space-y-4">
+                  <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
+                  <h4 className="text-lg font-black text-white">Importação Concluída com Sucesso!</h4>
+                  <div className="flex justify-center gap-6 text-xs">
+                    <span className="text-emerald-400 font-bold">Importadas: {importExecutionResult.importedCount}</span>
+                    <span className="text-slate-400">Ignoradas (Duplicadas): {importExecutionResult.skippedCount}</span>
+                    <span className="text-rose-400 font-bold">Erros: {importExecutionResult.errors.length}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowImportModal(false);
+                      refreshData();
+                    }}
+                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                  >
+                    Fechar e Atualizar Lista
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Etapa 1: Upload do Arquivo CSV */}
+                  <div className="p-4 bg-slate-800/50 border border-dashed border-slate-700 rounded-2xl flex flex-col items-center justify-center text-center space-y-3">
+                    <Download className="w-8 h-8 text-indigo-400 rotate-180" />
+                    <div>
+                      <p className="text-xs font-bold text-white">Selecione o arquivo CSV de prospecção</p>
+                      <p className="text-[11px] text-slate-400">
+                        Compatível com empresas_itapoa_verificadas.csv e similares (colunas: nome, categoria, bairro, cidade, telefone, whatsapp, endereco)
+                      </p>
+                    </div>
+                    <input
+                      type="file"
+                      accept=".csv,text/csv"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = async (evt) => {
+                          const text = String(evt.target?.result || '');
+                          const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+                          if (lines.length < 2) {
+                            alert('Arquivo CSV vazio ou sem cabeçalho.');
+                            return;
+                          }
+                          const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+                          const parsedRows: any[] = [];
+                          for (let i = 1; i < lines.length; i++) {
+                            // Regex seguro para quebra por vírgula respeitando aspas
+                            const rowValues = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.trim().replace(/^"|"$/g, ''));
+                            const rowObj: any = {};
+                            headers.forEach((h, idx) => {
+                              rowObj[h] = rowValues[idx] || '';
+                            });
+                            parsedRows.push(rowObj);
+                          }
+
+                          setImportRows(parsedRows);
+                          setImportLoading(true);
+                          try {
+                            const res = await fetch('/api/admin/companies/import/preview', {
+                              method: 'POST',
+                              headers: getAuthHeaders(),
+                              body: JSON.stringify({ rows: parsedRows })
+                            });
+                            const data = await res.json();
+                            if (!res.ok) throw new Error(data.error || 'Erro na pré-visualização.');
+                            setImportPreview(data);
+                          } catch (err: any) {
+                            alert(err.message || 'Falha ao processar arquivo.');
+                          } finally {
+                            setImportLoading(false);
+                          }
+                        };
+                        reader.readAsText(file, 'utf-8');
+                      }}
+                      className="text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Etapa 2: Pré-visualização e Validação dos Registros */}
+                  {importLoading && (
+                    <div className="py-8 text-center text-xs text-indigo-400 font-bold">
+                      Validando registros e checando duplicatas no banco...
+                    </div>
+                  )}
+
+                  {importPreview && !importLoading && (
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-slate-800 rounded-2xl border border-slate-700">
+                        <div className="flex items-center gap-4 text-xs font-bold">
+                          <span className="text-white">Total: {importPreview.totalRows}</span>
+                          <span className="text-emerald-400">Válidos: {importPreview.validRows}</span>
+                          <span className="text-amber-400">Duplicados: {importPreview.duplicateRows}</span>
+                          {importPreview.invalidRows > 0 && (
+                            <span className="text-rose-400">Inválidos: {importPreview.invalidRows}</span>
+                          )}
+                        </div>
+
+                        <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={skipDuplicates}
+                            onChange={(e) => setSkipDuplicates(e.target.checked)}
+                            className="rounded border-slate-700 text-indigo-600 focus:ring-0"
+                          />
+                          <span>Ignorar duplicatas automaticamente</span>
+                        </label>
+                      </div>
+
+                      <div className="border border-slate-800 rounded-2xl overflow-hidden max-h-60 overflow-y-auto">
+                        <table className="w-full text-left text-[11px] text-slate-300">
+                          <thead className="bg-slate-800 text-slate-400 font-bold sticky top-0">
+                            <tr>
+                              <th className="p-2.5">#</th>
+                              <th className="p-2.5">Empresa</th>
+                              <th className="p-2.5">Categoria</th>
+                              <th className="p-2.5">Cidade</th>
+                              <th className="p-2.5">WhatsApp</th>
+                              <th className="p-2.5">Status Validação</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800">
+                            {importPreview.items.map((item: any) => (
+                              <tr key={item.rowNumber} className={item.isDuplicate ? 'bg-amber-950/20' : item.errors.length > 0 ? 'bg-rose-950/20' : ''}>
+                                <td className="p-2.5 text-slate-500">{item.rowNumber}</td>
+                                <td className="p-2.5 font-bold text-white">{item.data.nome || item.data.name}</td>
+                                <td className="p-2.5 text-slate-400">{item.categoryId}</td>
+                                <td className="p-2.5 text-slate-400">{item.cityId}</td>
+                                <td className="p-2.5 text-slate-400">{item.cleanWhatsapp || '-'}</td>
+                                <td className="p-2.5">
+                                  {item.isDuplicate ? (
+                                    <span className="text-amber-400 font-bold">Duplicata detectada</span>
+                                  ) : item.errors.length > 0 ? (
+                                    <span className="text-rose-400 font-bold">{item.errors.join(', ')}</span>
+                                  ) : (
+                                    <span className="text-emerald-400 font-bold">Pronto para importar</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="flex justify-end gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setImportPreview(null);
+                            setImportRows([]);
+                          }}
+                          className="px-4 py-2.5 rounded-xl border border-slate-700 text-xs font-bold text-slate-300 hover:bg-slate-800 transition cursor-pointer"
+                        >
+                          Limpar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setImportLoading(true);
+                            try {
+                              const res = await fetch('/api/admin/companies/import/execute', {
+                                method: 'POST',
+                                headers: getAuthHeaders(),
+                                body: JSON.stringify({
+                                  items: importPreview.items,
+                                  skipDuplicates
+                                })
+                              });
+                              const data = await res.json();
+                              if (!res.ok) throw new Error(data.error || 'Erro na execução.');
+                              setImportExecutionResult(data);
+                            } catch (err: any) {
+                              alert(err.message || 'Falha ao executar importação.');
+                            } finally {
+                              setImportLoading(false);
+                            }
+                          }}
+                          className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center gap-2 shadow-lg active:scale-95 cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Executar Importação ({importPreview.validRows} empresas)</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-4 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowImportModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold cursor-pointer"
               >
                 Fechar
               </button>

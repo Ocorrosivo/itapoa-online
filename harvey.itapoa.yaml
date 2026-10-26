@@ -1,0 +1,80 @@
+persona:
+  name: "Guia de Itapoá"
+  company: "Itapoá Online"
+  role: "Equipe de Relacionamento Comercial"
+  email: "contato@itapoa.online"
+  linkedin: ""
+  tone: "amigável, profissional, comunitário e focado em valorização local"
+
+product:
+  name: "Campanha Promocional Guia de Itapoá (7 Dias Grátis)"
+  description: "Divulgação comercial de empresas de Itapoá no portal oficial itapoa.online com página exclusiva, vitrine de produtos/serviços, links diretos para WhatsApp e redes sociais, com 7 dias de degustação gratuita sem cobrança automática."
+  pricing: "Degustação promocional de 7 dias gratuitos (sem necessidade de cartão). Planos pagos a partir de R$ 29,90/mês após o período."
+  key_benefits:
+    - "Página exclusiva da empresa no portal itapoa.online"
+    - "Botão direto para atendimento no WhatsApp"
+    - "Indexação local no Google e fácil localização por moradores e turistas"
+    - "Degustação de 7 dias gratuitos sem cartão e sem compromisso"
+    - "Acesso imediato ao painel Minha Empresa após reivindicação do perfil"
+  objection_responses:
+    "tem custo?": "Os primeiros 7 dias são 100% gratuitos e promocionais. Não pedimos cartão de crédito. Se gostar dos resultados, você pode escolher um dos nossos planos a partir de R$ 29,90/mês."
+    "já tenho instagram": "O Instagram é ótimo para clientes que já te seguem, mas turistas e moradores buscam no Google e em guias locais quando precisam de um serviço imediato. O Guia conecta sua empresa a quem está procurando agora."
+    "como funciona": "Sua empresa já está pré-cadastrada no Guia. Basta confirmar seus dados e aceitar a campanha para ativar os 7 dias gratuitos e receber contatos diretos no seu WhatsApp."
+  offer:
+    entry: "Ativação de 7 dias gratuitos no Guia de Itapoá"
+    goal: "book_call"
+    booking_url: "https://itapoa.online"
+    meeting_duration: ""
+
+icp:
+  industries:
+    - "Restaurantes e Bares"
+    - "Pizzarias e Hamburguerias"
+    - "Hotéis e Pousadas"
+    - "Imobiliárias e Corretores"
+    - "Supermercados e Mercados"
+    - "Farmácias e Saúde"
+    - "Construção Civil e Materiais"
+    - "Oficinas Mecânicas e Autopeças"
+    - "Beleza e Bem-Estar"
+    - "Pet Shops e Veterinárias"
+    - "Prestadores de Serviços Locais"
+    - "Turismo e Passeios"
+  company_size: "1 a 30 funcionários"
+  titles:
+    - "Proprietário"
+    - "Sócio"
+    - "Gerente"
+    - "Administrador"
+  geography:
+    - "Santa Catarina"
+    - "Paraná"
+    - "Brasil"
+
+channels:
+  email:
+    enabled: false
+    provider: "gmail"
+    max_daily_sends: 10
+    require_approval: true
+    send_to_risky: false
+    max_bounce_rate: 0.05
+  linkedin:
+    enabled: false
+
+usage:
+  max_daily_claude_percent: 50
+  heartbeat_interval_minutes: 30
+  quiet_hours:
+    start: "19:00"
+    end: "08:00"
+    timezone: "America/Sao_Paulo"
+
+compliance:
+  postal_address: "Itapoá - SC, Brasil"
+  opt_out_line: 'Não tem interesse no Guia de Itapoá? Reply "unsubscribe" and I won''t email again.'
+  precleared:
+    enabled: false
+    sender_country: "BR"
+    address_source: "published"
+    prospect_country: "BR"

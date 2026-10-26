@@ -12,6 +12,7 @@ import {
 import { api } from '../../../lib/apiClient';
 import { Company } from '../../../types';
 import { useAuth } from '../../../context/AuthContext';
+import { SuccessPopup } from '../../common/SuccessPopup';
 
 interface StaffMember {
   user_id: string;
@@ -42,6 +43,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ company }) => {
   const [inviteError, setInviteError] = useState('');
   const [inviteSuccess, setInviteSuccess] = useState('');
   const [removeBusy, setRemoveBusy] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState('');
 
   const load = useCallback(async () => {
     if (!company) return;
@@ -76,6 +78,7 @@ export const StaffView: React.FC<StaffViewProps> = ({ company }) => {
       });
       setInviteSuccess('Convite enviado! O funcionário precisa ter uma conta no Itapoá Online para aceitar.');
       setInviteEmail('');
+      setSuccessMessage('Membro convidado com sucesso!');
       load();
     } catch (err: any) {
       setInviteError(err?.message ?? 'Não foi possível convidar o funcionário.');
@@ -245,6 +248,10 @@ export const StaffView: React.FC<StaffViewProps> = ({ company }) => {
             );
           })}
         </div>
+      )}
+
+      {successMessage && (
+        <SuccessPopup message={successMessage} onClose={() => setSuccessMessage('')} />
       )}
     </div>
   );

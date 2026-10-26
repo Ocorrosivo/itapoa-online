@@ -18,7 +18,7 @@ export const AdminTopbar: React.FC<AdminTopbarProps> = ({ onOpenSpotlight, onOpe
   const { user, isImpersonating, stopImpersonating } = useAuth();
 
   return (
-    <header className="min-h-20 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 text-white px-4 md:px-6 py-3 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-20">
+    <header className="min-h-20 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 text-white px-4 md:px-6 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0 z-20">
 
       {/* Search Bar Trigger */}
       <div className="flex items-center gap-4 flex-1 min-w-0 max-w-full md:max-w-xl">
