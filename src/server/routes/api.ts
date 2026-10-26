@@ -256,8 +256,117 @@ apiRouter.delete('/companies/:id/media/:mediaId', requireAuth, requireCompanyPar
   res.json({ success: true });
 }));
 
+// Reivindicar perfil empresarial e iniciar os 7 dias promocionais (GUIA_ITAPOA_7_DIAS)
+apiRouter.post('/companies/:id/claim', requireAuth, handler(async (req, res) => {
+  const companyId = req.params.id;
+  const pool = (await import('../mysql.js')).pool;
+  const [rows]: any = await pool.query('SELECT * FROM companies WHERE id = ? LIMIT 1', [companyId]);
+  if (!rows || rows.length === 0) return res.status(404).json({ error: 'Empresa não encontrada.' });
+  const comp = rows[0];
+
+  // Verifica se já tem dono registrado
+  const [owners]: any = await pool.query(
+    "SELECT cu.user_id, u.email FROM companies_users cu JOIN users u ON u.id = cu.user_id WHERE cu.company_id = ? AND cu.access_level = 'owner' AND u.role != 'admin_master' LIMIT 1",
+    [companyId]
+  );
+  if (owners && owners.length > 0 && owners[0].user_id !== req.user!.id) {
+    return res.status(403).json({ error: 'Este perfil empresarial já foi reivindicado por outro responsável.' });
+  }
+
+  const { responsibleName, responsiblePhone, documentNumber, acceptCampaignTerms } = req.body ?? {};
+  if (!responsibleName || !responsiblePhone) {
+    return res.status(400).json({ error: 'Nome do responsável e telefone comercial são obrigatórios.' });
+  }
+  if (!acceptCampaignTerms) {
+    return res.status(400).json({ error: 'É necessário aceitar os termos da campanha promocional de 7 dias.' });
+  }
+
+  // Vincula o usuário atual como proprietário
+  await pool.query(
+    "INSERT INTO companies_users (user_id, company_id, access_level) VALUES (?, ?, 'owner') ON DUPLICATE KEY UPDATE access_level = 'owner'",
+    [req.user!.id, companyId]
+  );
+
+  // Inicia os 7 dias de degustação gratuita (sem cartão e sem cobrança automática)
+  let trialResult: any = null;
+  const eligibility = await EntitlementService.checkTrialEligibility(companyId);
+  if (eligibility.eligible) {
+    trialResult = await EntitlementService.startSevenDayGoldTrial(companyId);
+  }
+
+  // Atualiza metadados da empresa
+  await pool.query(
+    `UPDATE companies SET 
+       claim_status = 'claimed',
+       claimed_by_user_id = ?,
+       claimed_at = NOW()
+     WHERE id = ?`,
+    [req.user!.id, companyId]
+  ).catch(() => {});
+
+  // Registra auditoria
+  const auditId = `audit_claim_${Date.now()}`;
+  await pool.query(
+    `INSERT INTO audit_logs (id, userId, action, entityType, entityId, details, createdAt)
+     VALUES (?, ?, 'CLAIM_COMPANY_PROFILE', 'companies', ?, ?, NOW())`,
+    [
+      auditId,
+      req.user!.id,
+      companyId,
+      JSON.stringify({ responsibleName, responsiblePhone, documentNumber, trialActivated: Boolean(trialResult) })
+    ]
+  ).catch(() => {});
+
+  res.json({
+    success: true,
+    message: 'Perfil reivindicado com sucesso! Seus 7 dias gratuitos estão ativos.',
+    trial: trialResult
+  });
+}));
+
 // ============================================================
-// 3. PUBLIC CATALOGUE (read-only)
+// 2.1 ADMIN CSV IMPORT (admin_master)
+// ============================================================
+
+apiRouter.post('/admin/companies/import/preview', requireAuth, requireRole(ADMIN_ONLY), handler(async (req, res) => {
+  const { CompanyImportService } = await import('../services/companyImportService.js');
+  const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+  if (rows.length === 0) return res.status(400).json({ error: 'Nenhum registro enviado para validação.' });
+  const preview = await CompanyImportService.validateAndPreview(rows);
+  res.json(preview);
+}));
+
+apiRouter.post('/admin/companies/import/execute', requireAuth, requireRole(ADMIN_ONLY), handler(async (req, res) => {
+  const { CompanyImportService } = await import('../services/companyImportService.js');
+  const items = Array.isArray(req.body?.items) ? req.body.items : [];
+  if (items.length === 0) return res.status(400).json({ error: 'Nenhum item válido para importação.' });
+  const result = await CompanyImportService.executeImport(items, req.user!.id, {
+    skipDuplicates: req.body?.skipDuplicates !== false
+  });
+  res.json(result);
+}));
+
+apiRouter.post('/admin/companies/reset-plans-bronze', requireAuth, requireRole(ADMIN_ONLY), handler(async (req, res) => {
+  const pool = (await import('../mysql.js')).pool;
+  const [result]: any = await pool.query(
+    "UPDATE companies SET planLevel = 'bronze', access_grant_type = 'bronze', isSponsored = 0"
+  );
+  try {
+    const { randomUUID } = await import('node:crypto');
+    await pool.query(
+      `INSERT INTO audit_logs (id, userId, action, entityType, entityId, details, createdAt)
+       VALUES (?, ?, 'RESET_ALL_COMPANIES_TO_BRONZE', 'companies', 'ALL', ?, NOW())`,
+      [
+        `audit_${randomUUID()}`,
+        req.user?.id || 'admin',
+        JSON.stringify({ affectedRows: result?.affectedRows ?? 0, reason: 'Plano gratuito unificado sem distincao' })
+      ]
+    );
+  } catch (auditErr) {
+    console.warn('[RESET_ALL_COMPANIES_TO_BRONZE] Falha ao registrar log de auditoria:', auditErr);
+  }
+  res.json({ success: true, affectedRows: result?.affectedRows ?? 0 });
+}));
 // ============================================================
 
 const publicList = (path: string, repository: BaseRepository) => {

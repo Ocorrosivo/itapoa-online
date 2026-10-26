@@ -85,7 +85,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   ];
 
   return (
-    <aside className={`bg-slate-900 border-r border-slate-800 text-white flex flex-col transition-all duration-300 sticky top-0 h-screen z-30 ${
+    <aside className={`bg-slate-900 border-r border-slate-800 text-white flex flex-col transition-all duration-300 h-full z-30 shrink-0 select-none ${
       isCollapsed ? 'w-20' : 'w-64'
     }`}>
       {/* Sidebar Header */}

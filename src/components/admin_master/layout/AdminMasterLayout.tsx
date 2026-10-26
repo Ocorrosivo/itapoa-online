@@ -44,8 +44,8 @@ export const AdminMasterLayout: React.FC<AdminMasterLayoutProps> = ({
   const [isBiAiOpen, setIsBiAiOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans antialiased overflow-x-hidden">
-      <div className="hidden md:flex shrink-0">
+    <div className="h-screen w-screen bg-slate-950 text-slate-100 flex font-sans antialiased overflow-hidden">
+      <div className="hidden md:flex shrink-0 h-full">
         <AdminSidebar
           currentView={currentView}
           onSelectView={v => { setMobileNavOpen(false); setCurrentView(v); }}
@@ -89,8 +89,8 @@ export const AdminMasterLayout: React.FC<AdminMasterLayoutProps> = ({
       )}
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <div className="md:hidden sticky top-0 z-20 flex items-center gap-3 px-3 py-3 bg-slate-900/95 backdrop-blur border-b border-slate-800">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+        <div className="md:hidden shrink-0 z-20 flex items-center gap-3 px-3 py-3 bg-slate-900/95 backdrop-blur border-b border-slate-800">
           <button
             type="button"
             onClick={() => setMobileNavOpen(true)}
