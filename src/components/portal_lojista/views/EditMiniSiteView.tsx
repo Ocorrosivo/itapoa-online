@@ -14,7 +14,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import {
   Save, AlertCircle, CheckCircle2, Loader2, Building2, Globe, Phone,
   Instagram, Facebook, MapPin, Clock, ExternalLink, Camera, Plus, Trash2,
-  Sparkles, Zap, Lock, UploadCloud
+  Sparkles, Zap, Lock, UploadCloud, X
 } from 'lucide-react';
 import { Company } from '../../../types';
 import { useCompany } from '../../../context/CompanyContext';
@@ -84,6 +84,7 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
   const [error, setError] = useState('');
   const [planLimitWarning, setPlanLimitWarning] = useState('');
   const [dirty, setDirty] = useState(false);
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
 
   const galleryFileRef = useRef<HTMLInputElement>(null);
   const logoFileRef = useRef<HTMLInputElement>(null);
@@ -292,6 +293,7 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
       onSaved();
       setSuccess('Informações da empresa salvas com sucesso no guia!');
       setDirty(false);
+      setShowSuccessPopup(true);
     } catch (err: any) {
       setError(err?.message ?? 'Não foi possível salvar os dados da empresa.');
     } finally {
@@ -783,6 +785,80 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
         </div>
 
       </form>
+
+      {/* POPUP DE CONFIRMAÇÃO: SALVO COM SUCESSO */}
+      {showSuccessPopup && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md transition-all duration-300"
+          onClick={() => setShowSuccessPopup(false)}
+        >
+          <div 
+            className="bg-slate-900 border border-slate-700/80 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl text-center space-y-5 relative transform transition-all"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Botão fechar (X) */}
+            <button
+              type="button"
+              onClick={() => setShowSuccessPopup(false)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition cursor-pointer"
+              aria-label="Fechar"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Ícone de Sucesso */}
+            <div className="w-16 h-16 rounded-full bg-emerald-500/10 border-2 border-emerald-500/40 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/10">
+              <CheckCircle2 className="w-9 h-9 text-emerald-400" />
+            </div>
+
+            {/* Mensagem Principal */}
+            <div className="space-y-2">
+              <h3 className="text-xl font-black text-white tracking-tight">
+                Salvo com Sucesso!
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                As informações e mídias de <strong className="text-white">{form.name || company.name}</strong> foram salvas e atualizadas no guia comercial.
+              </p>
+            </div>
+
+            {/* Badges de Confirmação */}
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-1 text-[11px] font-bold text-slate-400">
+              <span className="px-3 py-1 bg-slate-800/80 border border-slate-700 rounded-lg text-emerald-300 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400" /> Dados gravados
+              </span>
+              <span className="px-3 py-1 bg-slate-800/80 border border-slate-700 rounded-lg text-slate-300 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-400" /> Vitrine sincronizada
+              </span>
+            </div>
+
+            {/* Botões de Ação */}
+            <div className="pt-3 flex flex-col sm:flex-row items-center gap-3">
+              {company.slug && onNavigateCompany && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSuccessPopup(false);
+                    onNavigateCompany(company.slug);
+                  }}
+                  className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition border border-slate-700 flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                >
+                  <ExternalLink className="w-4 h-4 text-blue-400" />
+                  <span>Ver no Guia</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setShowSuccessPopup(false)}
+                className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-black text-xs transition shadow-lg shadow-blue-600/25 cursor-pointer"
+              >
+                Concluir
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }

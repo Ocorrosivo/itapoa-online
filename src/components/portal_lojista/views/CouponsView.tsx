@@ -233,6 +233,7 @@ export const CouponsView: React.FC<CouponsViewProps> = ({ company }) => {
   const [modal, setModal] = useState<Coupon | null | false>(false);
   const [deleteTarget, setDeleteTarget] = useState<Coupon | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   const load = useCallback(async () => {
     if (!company) return;
@@ -383,7 +384,15 @@ export const CouponsView: React.FC<CouponsViewProps> = ({ company }) => {
       )}
 
       {modal !== false && (
-        <CouponModal coupon={modal} companyId={company.id} onClose={() => setModal(false)} onSaved={load} />
+        <CouponModal
+          coupon={modal}
+          companyId={company.id}
+          onClose={() => setModal(false)}
+          onSaved={() => {
+            load();
+            setSuccessMessage('Cupom ou promoção salvo com sucesso!');
+          }}
+        />
       )}
 
       {deleteTarget && (
@@ -402,6 +411,41 @@ export const CouponsView: React.FC<CouponsViewProps> = ({ company }) => {
                 Excluir
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP DE SUCESSO */}
+      {successMessage && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md"
+          onClick={() => setSuccessMessage('')}
+        >
+          <div 
+            className="bg-slate-900 border border-slate-700/80 rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl text-center space-y-4 relative"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setSuccessMessage('')}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <div className="w-14 h-14 rounded-full bg-emerald-500/10 border-2 border-emerald-500/40 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/10">
+              <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-lg font-black text-white tracking-tight">Salvo com Sucesso!</h3>
+              <p className="text-xs text-slate-300 leading-relaxed">{successMessage}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSuccessMessage('')}
+              className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-black text-xs transition shadow-lg shadow-blue-600/25 cursor-pointer"
+            >
+              Concluir
+            </button>
           </div>
         </div>
       )}
