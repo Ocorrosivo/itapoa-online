@@ -78,6 +78,17 @@ export default function CompanyDetailSection({
   const [reviewsSearch, setReviewsSearch] = useState<string>('');
   const [activeGalleryIdx, setActiveGalleryIdx] = useState(0);
 
+  // Modal de Reivindicação de Perfil (Campanha 7 Dias Grátis)
+  const [showClaimModal, setShowClaimModal] = useState(false);
+  const [claimName, setClaimName] = useState('');
+  const [claimPhone, setClaimPhone] = useState('');
+  const [claimDocument, setClaimDocument] = useState('');
+  const [claimTermsAccepted, setClaimTermsAccepted] = useState(false);
+  const [claimLoading, setClaimLoading] = useState(false);
+  const [claimSuccessMessage, setClaimSuccessMessage] = useState<string | null>(null);
+
+  const isClaimed = (company as any).claim_status === 'claimed' || Boolean(company.ownerId && company.ownerId !== 'admin_master');
+
   // Galeria de Fotos respeitando estritamente o limite do plano (Logo e Capa à parte)
   const galleryImages = useMemo(() => {
     const rawImages: string[] = [];
@@ -343,6 +354,18 @@ export default function CompanyDetailSection({
                   </span>
                 )}
 
+                {!isClaimed && (
+                  <button
+                    type="button"
+                    onClick={() => setShowClaimModal(true)}
+                    className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[11px] rounded-full transition flex items-center gap-1.5 shadow-lg active:scale-95 cursor-pointer"
+                    title="Esta é sua empresa? Reivindique o perfil e ganhe 7 dias gratuitos"
+                  >
+                    <Award className="w-3.5 h-3.5 text-slate-950" />
+                    <span>Reivindicar Perfil (7 Dias Grátis)</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={handleCopyLink}
@@ -368,17 +391,19 @@ export default function CompanyDetailSection({
             {/* Bottom Content: Logo, Título, Categoria, Avaliação e CTAs */}
             <div className="relative z-10 pt-8 flex flex-col lg:flex-row lg:items-end justify-between gap-6">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
-                {/* Logo Avatar */}
-                <div className="relative shrink-0">
-                  <img
-                    src={company.logo || '/logotipo.png'}
-                    alt={company.name}
-                    className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 rounded-2xl md:rounded-3xl object-contain bg-white p-2 border-2 border-white/80 shadow-2xl"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).src = '/logotipo.png';
-                    }}
-                  />
+                {/* Logo Avatar — foto preenche 100% do quadrado sem fundo branco */}
+                <div className="relative w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 shrink-0 overflow-visible">
+                  <div className="h-full w-full overflow-hidden rounded-2xl md:rounded-3xl bg-transparent shadow-2xl">
+                    <img
+                      src={company.logo || '/logotipo.png'}
+                      alt={company.name}
+                      className="h-full w-full object-cover object-center"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = '/logotipo.png';
+                      }}
+                    />
+                  </div>
                   <span className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center text-white text-[10px] font-bold shadow" title="Empresa Ativa">
                     ✓
                   </span>
@@ -429,9 +454,9 @@ export default function CompanyDetailSection({
                 <button
                   type="button"
                   onClick={handleLeadWhatsAppClick}
-                  className="w-full sm:w-auto px-6 py-3.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-slate-950 font-black text-xs sm:text-sm tracking-wider uppercase rounded-xl transition flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/20 active:scale-95 cursor-pointer"
+                  className="w-full sm:w-auto px-6 py-3.5 bg-gradient-to-r from-[#C8102E] to-[#990B22] hover:from-[#990B22] hover:to-[#7A081B] text-white font-black text-xs sm:text-sm tracking-wider uppercase rounded-xl transition flex items-center justify-center gap-2 shadow-xl shadow-red-900/25 active:scale-95 cursor-pointer"
                 >
-                  <Phone className="w-4 h-4 fill-slate-950" />
+                  <Phone className="w-4 h-4 fill-white text-white" />
                   <span>Conversar no WhatsApp</span>
                 </button>
 
@@ -713,7 +738,7 @@ export default function CompanyDetailSection({
                             <button
                               type="button"
                               onClick={() => handleProductWhatsAppClick(p.name)}
-                              className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 rounded-lg text-xs font-bold transition flex items-center gap-1"
+                              className="px-3 py-1.5 bg-red-50 hover:bg-[#C8102E] text-[#C8102E] hover:text-white border border-red-200 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
                             >
                               <Phone className="w-3 h-3" />
                               <span>Pedir</span>
@@ -907,9 +932,9 @@ export default function CompanyDetailSection({
                 <button
                   type="button"
                   onClick={handleLeadWhatsAppClick}
-                  className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-slate-950 font-black text-xs tracking-wider uppercase rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition cursor-pointer active:scale-95"
+                  className="w-full py-3.5 bg-gradient-to-r from-[#C8102E] to-[#990B22] hover:from-[#990B22] hover:to-[#7A081B] text-white font-black text-xs tracking-wider uppercase rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-red-900/20 transition cursor-pointer active:scale-95"
                 >
-                  <Phone className="w-4 h-4 fill-slate-950" />
+                  <Phone className="w-4 h-4 fill-white text-white" />
                   <span>Conversar no WhatsApp</span>
                 </button>
 
@@ -945,7 +970,7 @@ export default function CompanyDetailSection({
 
                 {company.phone && (
                   <div className="flex gap-3 pt-1 border-t border-slate-100">
-                    <Phone className="w-4 h-4 text-teal-500 shrink-0 mt-0.5" />
+                    <Phone className="w-4 h-4 text-[#C8102E] shrink-0 mt-0.5" />
                     <div>
                       <span className="font-bold text-slate-900 block">Telefone de Contato</span>
                       <button
@@ -1061,6 +1086,191 @@ export default function CompanyDetailSection({
 
         </div>
       </div>
+
+      {/* MODAL DE REIVINDICAÇÃO DE PERFIL COM CAMPANHA 7 DIAS GRÁTIS */}
+      <AnimatePresence>
+        {showClaimModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-lg w-full text-white shadow-2xl space-y-6 relative"
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-400 text-slate-950">
+                    <Award className="w-3.5 h-3.5 fill-slate-950" />
+                    <span>Campanha Guia Itapoá 7 Dias</span>
+                  </div>
+                  <h3 className="text-xl font-black text-white">Reivindicar Perfil Comercial</h3>
+                  <p className="text-xs text-slate-400">
+                    {company.name} — Itapoá/SC
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowClaimModal(false)}
+                  className="p-2 text-slate-400 hover:text-white rounded-full bg-slate-800 hover:bg-slate-700 transition cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {claimSuccessMessage ? (
+                <div className="p-4 bg-emerald-950/80 border border-emerald-500/50 rounded-2xl text-center space-y-3">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
+                  <h4 className="text-sm font-bold text-emerald-200">{claimSuccessMessage}</h4>
+                  <p className="text-xs text-slate-300">
+                    Seu perfil já está habilitado com os benefícios completos do período de teste de 7 dias sem qualquer cobrança.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowClaimModal(false);
+                      window.location.reload();
+                    }}
+                    className="w-full py-2.5 bg-[#C8102E] hover:bg-[#A00D24] text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                  >
+                    Ir para Minha Empresa
+                  </button>
+                </div>
+              ) : (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!claimName || !claimPhone) {
+                      alert('Por favor, informe seu nome e telefone comercial.');
+                      return;
+                    }
+                    if (!claimTermsAccepted) {
+                      alert('É obrigatório aceitar os termos da campanha promocional de 7 dias.');
+                      return;
+                    }
+
+                    const token = localStorage.getItem('itpoa_auth_token');
+                    if (!token) {
+                      alert('Para reivindicar este perfil com segurança, faça login ou cadastre-se no portal primeiro.');
+                      return;
+                    }
+
+                    setClaimLoading(true);
+                    try {
+                      const res = await fetch(`/api/companies/${company.id}/claim`, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                          responsibleName: claimName,
+                          responsiblePhone: claimPhone,
+                          documentNumber: claimDocument,
+                          acceptCampaignTerms: true
+                        })
+                      });
+                      const data = await res.json();
+                      if (!res.ok) {
+                        throw new Error(data.error || 'Erro ao reivindicar perfil.');
+                      }
+                      setClaimSuccessMessage(data.message || 'Perfil reivindicado com sucesso!');
+                    } catch (err: any) {
+                      alert(err.message || 'Falha na reivindicação do perfil.');
+                    } finally {
+                      setClaimLoading(false);
+                    }
+                  }}
+                  className="space-y-4"
+                >
+                  <div className="p-3 bg-slate-800/80 border border-slate-700 rounded-2xl text-xs text-slate-300 space-y-1">
+                    <p className="font-bold text-white flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      Regras da Campanha Promocional:
+                    </p>
+                    <ul className="list-disc list-inside text-[11px] text-slate-400 space-y-0.5">
+                      <li>7 dias corridos gratuitos com recursos VIP (degustação).</li>
+                      <li>Sem necessidade de cartão de crédito.</li>
+                      <li>Sem renovação automática ou cobrança surpresa ao término.</li>
+                    </ul>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-300">Seu Nome Completo (Responsável)</label>
+                    <input
+                      type="text"
+                      value={claimName}
+                      onChange={(e) => setClaimName(e.target.value)}
+                      placeholder="Ex: João da Silva"
+                      required
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-300">Telefone / WhatsApp Comercial</label>
+                      <input
+                        type="text"
+                        value={claimPhone}
+                        onChange={(e) => setClaimPhone(e.target.value)}
+                        placeholder="Ex: (47) 99999-9999"
+                        required
+                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-300">CNPJ ou CPF (Opcional)</label>
+                      <input
+                        type="text"
+                        value={claimDocument}
+                        onChange={(e) => setClaimDocument(e.target.value)}
+                        placeholder="Documento para verificação"
+                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                  </div>
+
+                  <label className="flex items-start gap-2 pt-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={claimTermsAccepted}
+                      onChange={(e) => setClaimTermsAccepted(e.target.checked)}
+                      className="mt-0.5 rounded border-slate-700 text-amber-500 focus:ring-0"
+                    />
+                    <span className="text-[11px] text-slate-300">
+                      Declaro ser o proprietário ou representante legal desta empresa e aceito participar da campanha promocional de 7 dias gratuitos no portal Itapoá Online.
+                    </span>
+                  </label>
+
+                  <div className="flex items-center justify-end gap-3 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowClaimModal(false)}
+                      className="px-4 py-2.5 rounded-xl border border-slate-700 text-xs font-bold text-slate-300 hover:bg-slate-800 transition cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={claimLoading}
+                      className="px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs transition flex items-center gap-1.5 shadow-lg active:scale-95 cursor-pointer disabled:opacity-50"
+                    >
+                      {claimLoading ? (
+                        <span>Validando...</span>
+                      ) : (
+                        <>
+                          <Award className="w-3.5 h-3.5" />
+                          <span>Confirmar e Ativar 7 Dias Grátis</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

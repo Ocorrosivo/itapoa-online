@@ -209,11 +209,11 @@ export const PremiumCompaniesCarousel: React.FC<PremiumCompaniesCarouselProps> =
                   </div>
 
                   {comp.logo && imageIdentity(comp.logo) !== imageIdentity(coverImg) && (
-                    <div className="absolute bottom-3 right-3 w-12 h-12 bg-white border border-slate-200 rounded-2xl p-1 shadow-md">
+                    <div className="absolute bottom-3 right-3 w-12 h-12 overflow-hidden rounded-2xl shadow-md">
                       <img
                         src={comp.logo}
                         alt={comp.name}
-                        className="w-full h-full object-contain rounded-xl"
+                        className="h-full w-full object-cover object-center"
                         loading="lazy"
                         onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')}
                       />
@@ -245,7 +245,7 @@ export const PremiumCompaniesCarousel: React.FC<PremiumCompaniesCarouselProps> =
                       e.stopPropagation();
                       window.open(`https://wa.me/55${comp.whatsapp.replace(/\D/g, '')}`, '_blank');
                     }}
-                    className="flex-1 py-2.5 px-3 bg-emerald-50 hover:bg-emerald-600 border border-emerald-200 text-emerald-700 hover:text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="flex-1 py-2.5 px-3 bg-red-50 hover:bg-[#C8102E] border border-red-200 text-[#C8102E] hover:text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <Phone className="w-3.5 h-3.5" />
                     <span>WhatsApp</span>

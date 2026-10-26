@@ -67,8 +67,8 @@ export const StandardCard: React.FC<StandardCardProps> = ({
           )}
 
           {logoUrl && (
-            <div className="absolute bottom-3 right-3 w-12 h-12 bg-white border border-slate-200 rounded-2xl p-1 shadow-md">
-              <img src={logoUrl} alt={title} className="w-full h-full object-contain rounded-xl" />
+            <div className="absolute bottom-3 right-3 w-12 h-12 overflow-hidden rounded-2xl shadow-md">
+              <img src={logoUrl} alt={title} className="h-full w-full object-cover object-center" />
             </div>
           )}
         </div>
