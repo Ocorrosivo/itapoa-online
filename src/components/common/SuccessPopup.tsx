@@ -1,13 +1,18 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { CheckCircle2, X } from 'lucide-react';
 
 interface SuccessPopupProps {
   message: string;
   onClose: () => void;
   title?: string;
+  duration?: number;
 }
 
-export function SuccessPopup({ message, onClose, title = 'Salvo com Sucesso!' }: SuccessPopupProps) {
+export function SuccessPopup({ message, onClose, title = 'Salvo com Sucesso!', duration = 2800 }: SuccessPopupProps) {
+  useEffect(() => {
+    const t = setTimeout(onClose, duration);
+    return () => clearTimeout(t);
+  }, [onClose, duration]);
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md"
@@ -35,13 +40,10 @@ export function SuccessPopup({ message, onClose, title = 'Salvo com Sucesso!' }:
           <h3 className="text-lg font-black text-white tracking-tight">{title}</h3>
           <p className="text-xs text-slate-300 leading-relaxed">{message}</p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-black text-xs transition shadow-lg shadow-blue-600/25 cursor-pointer"
-        >
-          Concluir
-        </button>
+        <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
+          <div className="h-full bg-emerald-500" style={{ width: '100%' }} />
+        </div>
+        <p className="text-[10px] text-slate-500">Fechando automaticamente…</p>
       </div>
     </div>
   );
