@@ -18,6 +18,7 @@ import {
 import { api } from '../../../lib/apiClient';
 import { Company, CrmLead, CrmLeadStatus } from '../../../types';
 import { maskPhone } from '../../../utils/validators';
+import { SuccessPopup } from '../../common/SuccessPopup';
 
 const STATUS_LABELS: Record<CrmLeadStatus, string> = {
   new: 'Novo',
@@ -263,6 +264,7 @@ export const CrmView: React.FC<CrmViewProps> = ({ company }) => {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<CrmLeadStatus | ''>('');
   const [modal, setModal] = useState<EnrichedLead | null | false>(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   const load = useCallback(async () => {
     if (!company) return;
@@ -522,7 +524,19 @@ export const CrmView: React.FC<CrmViewProps> = ({ company }) => {
       )}
 
       {modal !== false && (
-        <CrmLeadModal lead={modal} companyId={company.id} onClose={() => setModal(false)} onSaved={load} />
+        <CrmLeadModal
+          lead={modal}
+          companyId={company.id}
+          onClose={() => setModal(false)}
+          onSaved={() => {
+            load();
+            setSuccessMessage('Contato salvo com sucesso!');
+          }}
+        />
+      )}
+
+      {successMessage && (
+        <SuccessPopup message={successMessage} onClose={() => setSuccessMessage('')} />
       )}
     </div>
   );
