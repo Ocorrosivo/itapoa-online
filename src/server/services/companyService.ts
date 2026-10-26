@@ -8,6 +8,7 @@
 import { CompanyRepository } from '../repositories/companyRepository.js';
 import { ListOptions } from '../repositories/baseRepository.js';
 import { companyContactLinks } from './companyContactLinks.js';
+import { readProfileDetails, profileDetailsError, formatProfileAddress, formatProfileHours } from '../../utils/companyProfileDetails.js';
 
 import { ServiceError } from './crudService.js';
 
@@ -182,6 +183,18 @@ export class CompanyService {
     }
 
     Object.assign(profile, companyContactLinks(data));
+    if (data.profileDetails !== undefined) {
+      if (!data.profileDetails || typeof data.profileDetails !== 'object' || Array.isArray(data.profileDetails)) throw new ServiceError(400, 'Perfil inválido.');
+      const details = readProfileDetails(data.profileDetails);
+      const error = profileDetailsError(details);
+      if (error) throw new ServiceError(400, error);
+      const [columns]: any = await (await import('../mysql.js')).pool.query("SHOW COLUMNS FROM companies LIKE 'profileDetails'");
+      if (!columns.length) throw new ServiceError(503, 'A atualização dos campos do perfil ainda não foi aplicada ao banco. Nenhuma informação foi salva.');
+      profile.profileDetails = JSON.stringify(details);
+      if (details.street) profile.address = formatProfileAddress(details);
+      const hours = formatProfileHours(details);
+      if (hours) profile.hours = hours;
+    }
     return CompanyRepository.update(id, profile);
   }
 

@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS companies (
     address VARCHAR(255),
     hours TEXT,
     instagram VARCHAR(255),
+    profileDetails TEXT NULL,
     facebook VARCHAR(255),
     tiktok VARCHAR(255),
     website VARCHAR(500),

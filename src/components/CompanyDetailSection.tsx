@@ -19,9 +19,11 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Phone, Share2, Star, Clock, MapPin, Globe, Sparkles,
   Send, Heart, User, Filter, ArrowUpDown, Search, Award,
-  Zap, Tag, ShoppingBag, CheckCircle2, ChevronRight, MessageSquare, Camera
+  Zap, Tag, ShoppingBag, CheckCircle2, ChevronRight, MessageSquare, Camera,
+  Instagram, Facebook, ExternalLink
 } from 'lucide-react';
 import { Company, Review, City, Category, ProductOrService, FAQItem } from '../types';
+import { readProfileDetails } from '../utils/companyProfileDetails';
 import { featureArray, toNumber, arrayFromPayload } from '../utils/catalogSearch';
 
 interface CompanyDetailSectionProps {
@@ -1024,15 +1026,43 @@ export default function CompanyDetailSection({
                   <span>Conversar no WhatsApp</span>
                 </button>
 
-                {company.hours && (
-                  <div className="flex gap-3 pt-2">
-                    <Clock className="w-4 h-4 text-[#C8102E] shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold text-slate-900 block">Horário de Funcionamento</span>
-                      <span className="text-slate-600">{company.hours}</span>
-                    </div>
-                  </div>
-                )}
+                {/* Horários de Funcionamento (estruturado ou legado) */}
+                {(() => {
+                  const details = readProfileDetails(company.profileDetails);
+                  const structuredSchedule = details.schedule.filter(r => r.closed || (r.open && r.close));
+                  if (structuredSchedule.length > 0) {
+                    return (
+                      <div className="flex gap-3 pt-2">
+                        <Clock className="w-4 h-4 text-[#C8102E] shrink-0 mt-0.5" />
+                        <div className="space-y-1 w-full">
+                          <span className="font-bold text-slate-900 block text-sm">Horário de Funcionamento</span>
+                          <div className="text-xs space-y-1 text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                            {structuredSchedule.map(r => (
+                              <div key={r.label} className="flex justify-between items-center py-0.5 border-b border-slate-200/60 last:border-0">
+                                <span className="font-medium text-slate-700">{r.label}:</span>
+                                <span className={r.closed ? 'text-rose-600 font-bold' : 'text-slate-900 font-bold'}>
+                                  {r.closed ? 'Fechado' : `${r.open} às ${r.close}`}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (company.hours) {
+                    return (
+                      <div className="flex gap-3 pt-2">
+                        <Clock className="w-4 h-4 text-[#C8102E] shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-bold text-slate-900 block text-sm">Horário de Funcionamento</span>
+                          <span className="text-slate-600 text-xs">{company.hours}</span>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
 
                 {company.address && (
                   <div className="flex flex-col gap-2 pt-1 border-t border-slate-100">
@@ -1071,7 +1101,7 @@ export default function CompanyDetailSection({
                 )}
 
                 {company.website && (
-                  <div className="flex gap-3">
+                  <div className="flex gap-3 pt-1 border-t border-slate-100">
                     <Globe className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
                     <div>
                       <span className="font-bold text-slate-900 block">Site Oficial</span>
@@ -1082,22 +1112,90 @@ export default function CompanyDetailSection({
                   </div>
                 )}
 
-                {company.instagram && (
-                  <div className="flex gap-3">
-                    <span className="text-pink-500 shrink-0 text-sm">📸</span>
-                    <div>
-                      <span className="font-bold text-slate-900 block">Instagram</span>
-                      <a
-                        href={`https://instagram.com/${company.instagram.replace('@', '')}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-pink-600 hover:underline font-semibold"
-                      >
-                        {company.instagram}
-                      </a>
+                {/* Redes Sociais & Presença Online (Exibidas com ícones oficiais somente se preenchidas) */}
+                {(() => {
+                  const details = readProfileDetails(company.profileDetails);
+                  const socialLinks: { id: string; label: string; url: string; icon: React.ReactNode; color: string }[] = [];
+
+                  if (company.instagram) {
+                    const url = /^https?:\/\//.test(company.instagram)
+                      ? company.instagram
+                      : `https://instagram.com/${company.instagram.replace(/^@/, '')}`;
+                    socialLinks.push({
+                      id: 'instagram',
+                      label: 'Instagram',
+                      url,
+                      icon: <Instagram className="w-4 h-4 text-pink-600 shrink-0" />,
+                      color: 'text-pink-600 group-hover:text-pink-700',
+                    });
+                  }
+
+                  if (company.facebook) {
+                    const url = /^https?:\/\//.test(company.facebook)
+                      ? company.facebook
+                      : `https://facebook.com/${company.facebook.replace(/^@/, '')}`;
+                    socialLinks.push({
+                      id: 'facebook',
+                      label: 'Facebook',
+                      url,
+                      icon: <Facebook className="w-4 h-4 text-blue-600 shrink-0" />,
+                      color: 'text-blue-600 group-hover:text-blue-700',
+                    });
+                  }
+
+                  if (details.x && /^https?:\/\//.test(details.x)) {
+                    socialLinks.push({
+                      id: 'x',
+                      label: 'X (antigo Twitter)',
+                      url: details.x,
+                      icon: (
+                        <svg className="w-4 h-4 text-slate-900 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                        </svg>
+                      ),
+                      color: 'text-slate-900 group-hover:text-black',
+                    });
+                  }
+
+                  if (details.googleBusiness && /^https?:\/\//.test(details.googleBusiness)) {
+                    socialLinks.push({
+                      id: 'googleBusiness',
+                      label: 'Google Meu Negócio',
+                      url: details.googleBusiness,
+                      icon: (
+                        <svg className="w-4 h-4 text-emerald-600 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                        </svg>
+                      ),
+                      color: 'text-emerald-700 group-hover:text-emerald-800',
+                    });
+                  }
+
+                  if (socialLinks.length === 0) return null;
+
+                  return (
+                    <div className="pt-2 border-t border-slate-100 space-y-2">
+                      <span className="font-bold text-slate-900 block text-xs uppercase tracking-wider text-slate-500">
+                        Redes Sociais
+                      </span>
+                      <div className="space-y-1.5">
+                        {socialLinks.map(s => (
+                          <a
+                            key={s.id}
+                            href={s.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2.5 p-2 rounded-xl bg-slate-50 hover:bg-slate-100 transition text-xs font-semibold group cursor-pointer border border-slate-100"
+                          >
+                            {s.icon}
+                            <span className={`${s.color} truncate font-bold flex-1`}>{s.label}</span>
+                            <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 shrink-0" />
+                          </a>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
 

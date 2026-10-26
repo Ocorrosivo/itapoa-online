@@ -528,12 +528,14 @@ apiRouter.post('/jobs/:id/apply', optionalAuth, handler(async (req, res) => {
 // ============================================================
 
 const crmService = new CrudService(CrmLeadRepository, 'lead');
+const crmStages = new Set(['new', 'contacted', 'proposal', 'negotiation', 'won', 'lost']);
 
 apiRouter.get('/crm/leads', requireAuth, attachCompanyScope, handler(async (req, res) => {
   res.json(await crmService.listForUser(req.user!, req.companyIds ?? [], req.query as Record<string, any>));
 }));
 
 apiRouter.post('/crm/leads', requireAuth, requireCompanyAccess, handler(async (req, res) => {
+  if (req.body?.status !== undefined && !crmStages.has(req.body.status)) return res.status(400).json({ error: 'Etapa inválida.' });
   res.json(await crmService.create(req.body ?? {}, req.companyIds ?? []));
 }));
 
@@ -542,6 +544,7 @@ apiRouter.put(
   requireAuth,
   requireRecordOwnership('crm_leads', 'company_id'),
   handler(async (req, res) => {
+    if (req.body?.status !== undefined && !crmStages.has(req.body.status)) return res.status(400).json({ error: 'Etapa inválida.' });
     res.json(await crmService.update(req.params.id, req.body ?? {}));
   })
 );

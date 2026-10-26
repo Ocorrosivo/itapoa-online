@@ -77,6 +77,7 @@ export interface Company {
   phone: string;
   whatsapp: string;
   instagram?: string;
+  profileDetails?: string;
   facebook?: string;
   tiktok?: string;
   website?: string;

@@ -14,10 +14,15 @@ import React, { useEffect, useState, useRef } from 'react';
 import {
   Save, AlertCircle, CheckCircle2, Loader2, Building2, Globe, Phone,
   Instagram, Facebook, MapPin, Clock, ExternalLink, Camera, Plus, Trash2,
-  Sparkles, Zap, Lock, UploadCloud, X
+  Sparkles, Zap, Lock, UploadCloud, X, Share2
 } from 'lucide-react';
 import { Company } from '../../../types';
+import { readProfileDetails, profileDetailsError } from '../../../utils/companyProfileDetails';
+import { ProfileAddressFields } from './ProfileAddressFields';
+import { ProfileScheduleFields } from './ProfileScheduleFields';
+import { ProfileSocialFields } from './ProfileSocialFields';
 import { useCompany } from '../../../context/CompanyContext';
+
 import { api, apiFetch } from '../../../lib/apiClient';
 import { maskPhone } from '../../../utils/validators';
 
@@ -54,6 +59,9 @@ function AutoClose({ ms, onClose }: { ms: number; onClose: () => void }) {
 
 export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMiniSiteViewProps) {
   const { cities, categories, refreshData } = useCompany();
+  const [details, setDetails] = useState(() => readProfileDetails(company.profileDetails));
+  const [detailsDirty, setDetailsDirty] = useState(false);
+  useEffect(() => { setDetails(readProfileDetails(company.profileDetails)); setDetailsDirty(false); }, [company.id]);
 
   const ALLOWED_CITIES = ['city_itapoa', 'city_curitiba'];
   const rawPlan = (company.planLevel || 'bronze').toLowerCase();
@@ -269,6 +277,7 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (detailsDirty && profileDetailsError(details)) { setError(profileDetailsError(details)); return; }
     if (!form.name.trim()) { setError('Nome da empresa é obrigatório.'); return; }
     if (!form.categoryId) { setError('Selecione uma categoria.'); return; }
     if (!form.cityId) { setError('Selecione uma cidade.'); return; }
@@ -295,6 +304,7 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
       };
       if (form.latitude) payload.latitude = parseFloat(form.latitude);
       if (form.longitude) payload.longitude = parseFloat(form.longitude);
+      if (detailsDirty) payload.profileDetails = details;
 
       await api.put(`/api/companies/${encodeURIComponent(company.id)}`, payload);
       await refreshData();
@@ -447,11 +457,11 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
           </FieldRow>
         </section>
 
-        {/* 2. CONTATOS E ATENDIMENTO */}
+        {/* 2. CANAIS DE ATENDIMENTO DIRETO */}
         <section className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
           <h2 className="text-sm font-black text-white border-b border-slate-800 pb-3 flex items-center gap-2">
             <Phone className="w-4 h-4 text-emerald-400" />
-            Canais de Contato & Redes
+            Canais de Atendimento Direto
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <FieldRow label="WhatsApp (com DDD)" hint="Ex: (47) 99999-8888">
@@ -485,79 +495,66 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
               />
             </FieldRow>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FieldRow label="Instagram" hint="@usuario ou link">
-              <input
-                type="text"
-                maxLength={255}
-                value={form.instagram}
-                onChange={e => update('instagram', e.target.value)}
-                placeholder="@suaempresa"
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500 transition"
-              />
-            </FieldRow>
-            <FieldRow label="Facebook">
-              <input
-                type="text"
-                maxLength={255}
-                value={form.facebook}
-                onChange={e => update('facebook', e.target.value)}
-                placeholder="https://facebook.com/suaempresa"
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500 transition"
-              />
-            </FieldRow>
-          </div>
         </section>
 
-        {/* 3. LOCALIZAÇÃO E HORÁRIOS */}
+        {/* 3. REDES SOCIAIS & PRESENÇA ONLINE */}
+        <section className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+          <h2 className="text-sm font-black text-white border-b border-slate-800 pb-3 flex items-center gap-2">
+            <Share2 className="w-4 h-4 text-blue-400" />
+            Redes Sociais & Presença Online
+          </h2>
+          <ProfileSocialFields
+            instagram={form.instagram}
+            facebook={form.facebook}
+            details={details}
+            onUpdateSocial={(field, val) => update(field, val)}
+            onUpdateDetails={nextDetails => {
+              setDetails(nextDetails);
+              setDetailsDirty(true);
+              setDirty(true);
+              setError('');
+            }}
+          />
+        </section>
+
+        {/* 4. ENDEREÇO COMPLETO COM BUSCA POR CEP */}
         <section className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
           <h2 className="text-sm font-black text-white border-b border-slate-800 pb-3 flex items-center gap-2">
             <MapPin className="w-4 h-4 text-rose-400" />
-            Endereço & Horários
+            Endereço Completo
           </h2>
-          <FieldRow label="Endereço Completo">
-            <input
-              type="text"
-              maxLength={255}
-              value={form.address}
-              onChange={e => update('address', e.target.value)}
-              placeholder="Av. André Rodrigues de Freitas, 1234 — Itapema do Norte, Itapoá - SC"
-              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500 transition"
-            />
-          </FieldRow>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <FieldRow label="Horários de Funcionamento">
-              <input
-                type="text"
-                maxLength={255}
-                value={form.hours}
-                onChange={e => update('hours', e.target.value)}
-                placeholder="Seg a Sáb: 08h às 19h"
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500 transition"
-              />
-            </FieldRow>
-            <FieldRow label="Latitude (GPS)" hint="Ex: -26.1172">
-              <input
-                type="number"
-                step="any"
-                value={form.latitude}
-                onChange={e => update('latitude', e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500 transition"
-              />
-            </FieldRow>
-            <FieldRow label="Longitude (GPS)" hint="Ex: -48.6145">
-              <input
-                type="number"
-                step="any"
-                value={form.longitude}
-                onChange={e => update('longitude', e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500 transition"
-              />
-            </FieldRow>
-          </div>
+          <ProfileAddressFields
+            value={details}
+            legacyAddress={form.address}
+            onCityDetected={cityId => update('cityId', cityId)}
+            onChange={next => {
+              setDetails(next);
+              setDetailsDirty(true);
+              setDirty(true);
+              setError('');
+            }}
+          />
         </section>
 
-        {/* 4. IMAGENS PRINCIPAIS (Logo e Capa - Não contam na galeria) */}
+        {/* 5. HORÁRIOS DE FUNCIONAMENTO */}
+        <section className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+          <h2 className="text-sm font-black text-white border-b border-slate-800 pb-3 flex items-center gap-2">
+            <Clock className="w-4 h-4 text-amber-400" />
+            Horários de Funcionamento
+          </h2>
+          <ProfileScheduleFields
+            value={details}
+            legacyHours={form.hours}
+            onChange={next => {
+              setDetails(next);
+              setDetailsDirty(true);
+              setDirty(true);
+              setError('');
+            }}
+          />
+        </section>
+
+        {/* 6. IDENTIDADE VISUAL (Logo e Capa - Não contam na galeria) */}
         <section className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
           <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
             <h2 className="text-sm font-black text-white flex items-center gap-2">
@@ -688,7 +685,7 @@ export function EditMiniSiteView({ company, onSaved, onNavigateCompany }: EditMi
           </div>
         </section>
 
-        {/* 5. GALERIA DE FOTOS CONFORME O PLANO */}
+        {/* 7. GALERIA DE FOTOS CONFORME O PLANO */}
         <section className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
           <div className="border-b border-slate-800 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
