@@ -1,0 +1,20 @@
+{
+  "updatedAt": "2026-10-25",
+  "branch": "main",
+  "worktree": "C:/Users/Agencia FMD/Downloads/Guia Comercial itpoa",
+  "head": "8dc3398afda2613c37f32c8a0d92f193e604d523",
+  "currentTask": "DEPLOY_VERIFY",
+  "lastCompletedStep": "Limpeza de wrapper legado e contexto Docker; clean portátil; lint/build exit 0; 61 testes unitários passaram",
+  "nextTask": "CHECKOUT: reconciliar expiração solicitada de 5 minutos com validade real do gateway",
+  "blockers": [
+    "Mudanças alheias em oito arquivos da raiz: preservar e revisar",
+    "Deploy e pagamentos reais exigem autorização específica"
+  ],
+  "pendingTests": [
+    "regressão perfil SQL isolado",
+    "demais suites"
+  ],
+  "deploy": "PUSH_COMPLETED_RUN_40205164646_IN_PROGRESS",
+  "doneVerified": []
+}
+
