@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { pool } from '../mysql.js';
 import { PaymentError } from './paymentService.js';
+import { slugify } from './companyService.js';
 
 export interface CheckoutContact { name: string; phone: string; email: string }
 
@@ -25,10 +26,15 @@ export async function prepareCheckoutCompany(userId: string, contact: CheckoutCo
     if (!users.length) throw new PaymentError(401, 'Entre novamente na sua conta.');
     const [existing]: any = await conn.query('SELECT id FROM companies WHERE id = ?', [id]);
     if (!existing.length) {
+      let slug = slugify(contact.name);
+      if (!slug) slug = id;
+      const [slugRows]: any = await conn.query('SELECT id FROM companies WHERE slug = ? LIMIT 1', [slug]);
+      if (slugRows.length) slug = `${slug}-${id.slice(-6)}`;
+
       await conn.query(
         `INSERT INTO companies (id, name, slug, phone, whatsapp, planLevel, features)
          VALUES (?, ?, ?, ?, ?, 'bronze', '[]')`,
-        [id, contact.name, id, contact.phone, contact.phone]
+        [id, contact.name, slug, contact.phone, contact.phone]
       );
       await conn.query("INSERT INTO companies_users (user_id, company_id, access_level) VALUES (?, ?, 'owner')", [userId, id]);
     }

@@ -69,7 +69,13 @@ export async function settlePayment(paymentId: string, token: string, expectedSu
   if (refund > paidCents) throw new PaymentError(422, 'Valor de estorno inválido.');
   const state = refund > 0 ? 'refunded' : String(mp.status);
   const [initial]: any = await pool.query('SELECT companyId FROM subscriptions WHERE id = ? LIMIT 1', [subscriptionId]);
-  if (!initial.length) return { status: 'ignored', reconciled: false, message: 'Pedido não localizado nesta aplicação.' };
+  if (!initial.length) {
+    if (typeof subscriptionId === 'string' && subscriptionId.startsWith('test_')) {
+      const { testPaymentService } = await import('./testPaymentService.js');
+      return testPaymentService.settleTestWebhookPayment(paymentId, token);
+    }
+    return { status: 'ignored', reconciled: false, message: 'Pedido não localizado nesta aplicação.' };
+  }
   const companyId = initial[0].companyId;
   const connection = await pool.getConnection();
   try {

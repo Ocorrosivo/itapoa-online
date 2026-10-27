@@ -506,5 +506,28 @@ CREATE TABLE IF NOT EXISTS gateway_payment_state (
     INDEX idx_settlement_company (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS test_payments (
+    id VARCHAR(255) PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    company_id VARCHAR(255) NULL,
+    payment_method VARCHAR(50) NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    environment VARCHAR(20) NOT NULL DEFAULT 'sandbox',
+    status VARCHAR(50) NOT NULL DEFAULT 'pending',
+    gateway_reference VARCHAR(255) NULL,
+    qr_code TEXT NULL,
+    qr_code_base64 LONGTEXT NULL,
+    payer_email VARCHAR(255) NULL,
+    card_last_four VARCHAR(4) NULL,
+    card_brand VARCHAR(50) NULL,
+    error_message TEXT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_test_pay_user (user_id),
+    INDEX idx_test_pay_env (environment),
+    INDEX idx_test_pay_status (status),
+    INDEX idx_test_pay_gateway (gateway_reference)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;
 -- FIM DO DUMP DDL

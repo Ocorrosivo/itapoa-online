@@ -72,20 +72,37 @@ export const CompanyMiniSitePage: React.FC<CompanyMiniSitePageProps> = ({
           setCompany(normalized);
           CompanyRepository.incrementMetric(normalized.id, 'views').catch(() => {});
 
+          // Atualiza a URL na barra de endereços para o slug amigável canônico
+          if (normalized.slug && normalized.slug !== slug && !normalized.slug.startsWith('checkout_')) {
+            const canonicalPath = `/empresa/${encodeURIComponent(normalized.slug)}`;
+            if (window.location.pathname !== canonicalPath) {
+              window.history.replaceState(null, '', canonicalPath);
+            }
+          }
+
           SeoService.updateMetaTags({
             title: `${normalized.name} | Guia Comercial Itapoá`,
             description: normalized.description,
             image: normalized.coverImage || normalized.logo,
-            url: window.location.href,
+            url: normalized.slug && !normalized.slug.startsWith('checkout_')
+              ? `${window.location.origin}/empresa/${encodeURIComponent(normalized.slug)}`
+              : window.location.href,
             type: 'business.business'
           });
 
           const schema = SeoService.generateCompanySchema(normalized);
           SeoService.injectJsonLd(schema);
         } else {
-          const found = companies.find(c => c.slug === slug);
+          const found = companies.find(c => c.slug === slug || c.id === slug);
           if (found) {
-            setCompany(normalizeCompany(found));
+            const normalized = normalizeCompany(found);
+            setCompany(normalized);
+            if (normalized.slug && normalized.slug !== slug && !normalized.slug.startsWith('checkout_')) {
+              const canonicalPath = `/empresa/${encodeURIComponent(normalized.slug)}`;
+              if (window.location.pathname !== canonicalPath) {
+                window.history.replaceState(null, '', canonicalPath);
+              }
+            }
           }
         }
         setLoading(false);

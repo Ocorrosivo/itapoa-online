@@ -74,6 +74,14 @@ export class CompanyRepositoryClass extends BaseRepository {
     );
   }
 
+  async findBySlug(slug: string) {
+    const [rows]: any = await pool.query(
+      'SELECT * FROM companies WHERE slug = ? OR id = ? LIMIT 1',
+      [slug, slug]
+    );
+    return this.sanitize(rows[0] || null);
+  }
+
   async slugExists(slug: string): Promise<boolean> {
     const [rows]: any = await pool.query(
       'SELECT 1 FROM companies WHERE slug = ? LIMIT 1',

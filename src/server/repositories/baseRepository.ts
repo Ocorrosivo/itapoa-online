@@ -101,7 +101,12 @@ const TABLE_COLUMNS: Record<string, string[]> = {
     'emailSupport', 'facebook', 'instagram', 'updatedAt'
   ],
   payment_config: ['id', 'gateway', 'publicKey', 'accessToken', 'webhookUrl', 'updatedAt'],
-  notifications: ['id', 'userId', 'title', 'message', 'isRead', 'createdAt']
+  notifications: ['id', 'userId', 'title', 'message', 'isRead', 'createdAt'],
+  test_payments: [
+    'id', 'user_id', 'company_id', 'payment_method', 'amount', 'environment',
+    'status', 'gateway_reference', 'qr_code', 'qr_code_base64', 'payer_email',
+    'card_last_four', 'card_brand', 'error_message', 'created_at', 'updated_at'
+  ]
 };
 
 /** Columns that must never reach a client response. */

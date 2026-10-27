@@ -25,6 +25,7 @@ import { EventsView } from '../views/EventsView';
 import { BlogAdminView } from '../views/BlogAdminView';
 import { PortalContentView } from '../views/PortalContentView';
 import { InfrastructureView } from '../views/InfrastructureView';
+import { TestPaymentsView } from '../views/TestPaymentsView';
 
 interface AdminMasterLayoutProps {
   onNavigateCompany: (slug: string) => void;
@@ -123,6 +124,7 @@ export const AdminMasterLayout: React.FC<AdminMasterLayoutProps> = ({
           {currentView === 'content' && <PortalContentView />}
           {currentView === 'infrastructure' && <InfrastructureView />}
           {currentView === 'audit' && <AuditLogsView />}
+          {currentView === 'test-payments' && <TestPaymentsView />}
         </main>
       </div>
 

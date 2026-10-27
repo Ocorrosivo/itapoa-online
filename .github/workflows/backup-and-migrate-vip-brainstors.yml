@@ -1,0 +1,207 @@
+name: Backup e Migracao VIP Agencia Brainstors (itapoa.online)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Digite "backup-and-migrate-vip-brainstors" para confirmar'
+        required: true
+        type: string
+
+concurrency:
+  group: easypanel-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backup-and-migrate:
+    if: inputs.confirmation == 'backup-and-migrate-vip-brainstors'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Backup completo do banco, backup de uploads e migracao VIP Agencia Brainstors
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          command_timeout: 10m
+          script: |
+            set -eu
+            umask 077
+            SERVICE="itapoa_itapoa-app"
+            container=$(docker ps --filter "label=com.docker.swarm.service.name=$SERVICE" --format '{{.ID}}' | head -n 1)
+            test -n "$container"
+
+            echo "[1/5] Conectando ao container da aplicacao: $container"
+
+            mkdir -p /var/backups/itapoa
+            stamp=$(date -u +%Y%m%dT%H%M%SZ)
+            backup="/var/backups/itapoa/vip-brainstors-$stamp"
+            mkdir -p "$backup"
+            chmod 700 "$backup"
+
+            # 1. Obter credenciais do banco com seguranca
+            docker exec "$container" node -e 'for(const k of ["DB_HOST","DB_PORT","DB_NAME","DB_USER","DB_PASSWORD"]){const v=process.env[k]||"";if(/[\r\n]/.test(v))process.exit(1);process.stdout.write(k+"="+v+"\n")}' > "$backup/db.env"
+            chmod 600 "$backup/db.env"
+
+            flavor=$(docker exec "$container" node -e 'const m=require("mysql2/promise");(async()=>{const c=await m.createConnection({host:process.env.DB_HOST,port:Number(process.env.DB_PORT||3306),user:process.env.DB_USER,password:process.env.DB_PASSWORD,database:process.env.DB_NAME});try{const [r]=await c.query("SELECT VERSION() AS v");console.log(/mariadb/i.test(r[0].v)?"mariadb":"mysql")}finally{await c.end()}})().catch(()=>process.exit(1))')
+            case "$flavor" in
+              mariadb) client_image=mariadb:11.4; dump_command=mariadb-dump ;;
+              mysql) client_image=mysql:8.4; dump_command=mysqldump ;;
+              *) echo 'Unknown database flavor; aborting'; exit 1 ;;
+            esac
+            docker pull "$client_image" >/dev/null
+
+            # 2. Backup completo do MariaDB com mariadb-dump
+            echo "[2/5] Executando dump completo do banco MariaDB..."
+            docker run --rm --network "container:$container" --env-file "$backup/db.env" -e DUMP_COMMAND="$dump_command" --entrypoint sh "$client_image" -c '
+              export MYSQL_PWD="$DB_PASSWORD"
+              exec "$DUMP_COMMAND" --host="$DB_HOST" --port="${DB_PORT:-3306}" --user="$DB_USER" --single-transaction --quick --skip-lock-tables --no-tablespaces --routines --events --triggers --hex-blob "$DB_NAME"
+            ' > "$backup/database.sql" 2> "$backup/dump.stderr"
+
+            test -s "$backup/database.sql"
+            grep -q 'CREATE TABLE.*companies' "$backup/database.sql"
+            grep -q 'CREATE TABLE.*users' "$backup/database.sql"
+            gzip -c "$backup/database.sql" > "$backup/database.sql.gz"
+            gzip -t "$backup/database.sql.gz"
+            sha256sum "$backup/database.sql.gz" > "$backup/database.sha256"
+            sha256sum -c "$backup/database.sha256"
+            echo "BACKUP_DB_VERIFIED directory=$backup file=database.sql.gz bytes=$(stat -c %s "$backup/database.sql.gz")"
+
+            # 3. Backup dos arquivos de uploads do volume persistente itapoa_itapoa-app_uploads
+            echo "[3/5] Executando backup dos arquivos de uploads..."
+            mkdir -p "$backup/uploads"
+            docker cp "$container:/app/uploads/." "$backup/uploads/"
+            tar -czf "$backup/uploads.tar.gz" -C "$backup" uploads
+            gzip -t "$backup/uploads.tar.gz"
+            sha256sum "$backup/uploads.tar.gz" > "$backup/uploads.sha256"
+            sha256sum -c "$backup/uploads.sha256"
+            echo "BACKUP_UPLOADS_VERIFIED file=uploads.tar.gz files=$(find "$backup/uploads" -type f | wc -l) bytes=$(stat -c %s "$backup/uploads.tar.gz")"
+
+            # 4. Validar e aplicar migracao de concessao Gold VIP e slug amigavel
+            echo "[4/5] Inspecionando dados e aplicando concessao VIP para Agencia Brainstors..."
+            docker exec -i "$container" node - <<'NODE'
+            const mysql = require('mysql2/promise');
+            (async () => {
+              const db = await mysql.createConnection({
+                host: process.env.DB_HOST,
+                port: Number(process.env.DB_PORT || 3306),
+                user: process.env.DB_USER,
+                password: process.env.DB_PASSWORD,
+                database: process.env.DB_NAME
+              });
+              try {
+                // 1. Confirmar ID e nome da empresa
+                const targetId = 'checkout_04d84ff3e123369772b49aa0';
+                const [targetRows] = await db.query('SELECT id, name, slug, planLevel, isSponsored, phone, address FROM companies WHERE id = ?', [targetId]);
+                if (!targetRows.length) {
+                  throw new Error(`Empresa com ID ${targetId} nao foi encontrada no banco de dados!`);
+                }
+                const targetCompany = targetRows[0];
+                console.log('Empresa localizada com sucesso:', {
+                  id: targetCompany.id,
+                  name: targetCompany.name,
+                  slugAtual: targetCompany.slug,
+                  planAtual: targetCompany.planLevel
+                });
+
+                if (!targetCompany.name.toLowerCase().includes('brainstors')) {
+                  throw new Error(`Nome da empresa divergiu do esperado: "${targetCompany.name}"`);
+                }
+
+                // 2. Confirmar que o slug 'agencia-brainstors' nao esta em uso por outra empresa
+                const desiredSlug = 'agencia-brainstors';
+                const [collisionRows] = await db.query('SELECT id, name FROM companies WHERE slug = ? AND id != ?', [desiredSlug, targetId]);
+                if (collisionRows.length) {
+                  throw new Error(`Colisao de slug: o slug "${desiredSlug}" ja pertence a outra empresa (ID: ${collisionRows[0].id}, Nome: ${collisionRows[0].name})`);
+                }
+
+                // 3. Garantir que as tabelas admin_plan_grants e test_payments existem
+                await db.query(`CREATE TABLE IF NOT EXISTS admin_plan_grants (
+                  id VARCHAR(64) PRIMARY KEY,
+                  company_id VARCHAR(64) NOT NULL,
+                  granted_plan VARCHAR(32) NOT NULL,
+                  start_date DATETIME NOT NULL,
+                  end_date DATETIME NOT NULL,
+                  reason TEXT NOT NULL,
+                  status VARCHAR(20) NOT NULL DEFAULT 'active',
+                  granted_by_user_id VARCHAR(64) NULL,
+                  granted_by_email VARCHAR(255) NULL,
+                  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  INDEX idx_grant_company (company_id),
+                  INDEX idx_grant_status (status)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+                await db.query(`CREATE TABLE IF NOT EXISTS test_payments (
+                  id VARCHAR(64) PRIMARY KEY,
+                  user_id VARCHAR(64) NOT NULL,
+                  company_id VARCHAR(64) NULL,
+                  payment_method VARCHAR(32) NOT NULL,
+                  amount DECIMAL(10,2) NOT NULL,
+                  environment ENUM('sandbox', 'production') NOT NULL DEFAULT 'sandbox',
+                  status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                  gateway_reference VARCHAR(128) NULL,
+                  qr_code TEXT NULL,
+                  qr_code_base64 MEDIUMTEXT NULL,
+                  payer_email VARCHAR(255) NULL,
+                  card_last_four VARCHAR(8) NULL,
+                  card_brand VARCHAR(32) NULL,
+                  error_message TEXT NULL,
+                  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                  INDEX idx_test_pay_user (user_id),
+                  INDEX idx_test_pay_status (status)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+
+                const [beforeCount] = await db.query('SELECT COUNT(*) as cnt FROM companies');
+
+                // 4. Aplicar a atualizacao do slug e do plano Gold VIP exclusivamente para a Agencia Brainstors
+                await db.query(`UPDATE companies 
+                  SET 
+                    slug = ?,
+                    planLevel = 'gold_vip',
+                    access_grant_type = 'admin_grant',
+                    isSponsored = 1
+                  WHERE id = ?`,
+                  [desiredSlug, targetId]
+                );
+
+                // 5. Registrar no historico administrativo (idempotente)
+                await db.query(`INSERT INTO admin_plan_grants 
+                  (id, company_id, granted_plan, start_date, end_date, reason, status, granted_by_email, created_at)
+                  VALUES (?, ?, 'gold_vip', NOW(), DATE_ADD(NOW(), INTERVAL 1 YEAR), 'Concessão Gold VIP autorizada pelo administrador master', 'active', 'admin@itapoa.online', NOW())
+                  ON DUPLICATE KEY UPDATE 
+                    status = 'active', 
+                    granted_plan = 'gold_vip', 
+                    end_date = DATE_ADD(NOW(), INTERVAL 1 YEAR)`,
+                  ['grant_brainstors_vip', targetId]
+                );
+
+                // 6. Validar a atualizacao
+                const [afterRows] = await db.query('SELECT id, name, slug, planLevel, access_grant_type, isSponsored FROM companies WHERE id = ?', [targetId]);
+                const updated = afterRows[0];
+                console.log('Dados atualizados com sucesso no MariaDB:', updated);
+
+                if (updated.slug !== desiredSlug || updated.planLevel !== 'gold_vip' || updated.isSponsored !== 1 || updated.access_grant_type !== 'admin_grant') {
+                  throw new Error('Falha na verificacao dos valores atualizados da empresa!');
+                }
+
+                const [afterCount] = await db.query('SELECT COUNT(*) as cnt FROM companies');
+                if (beforeCount[0].cnt !== afterCount[0].cnt) {
+                  throw new Error(`Contagem total de empresas divergiu: antes=${beforeCount[0].cnt}, depois=${afterCount[0].cnt}`);
+                }
+
+                console.log(`MIGRATION_VIP_BRAINSTORS_SUCCESS: Agencia Brainstors (ID: ${targetId}) atualizada com sucesso para slug="${desiredSlug}", planLevel="gold_vip", access_grant_type="admin_grant", isSponsored=1.`);
+              } finally {
+                await db.end();
+              }
+            })().catch(err => {
+              console.error('Falha na migracao VIP:', err);
+              process.exitCode = 1;
+            });
+            NODE
+
+            echo "[5/5] Backup completo e migracao VIP executados com sucesso absoluto."

@@ -166,7 +166,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   return (
     <div className="bg-slate-50 text-slate-900 flex flex-col">
       {/* 1. Panoramic Hero Section with Aerial Background (Image 2 & 3) */}
-      <section className="relative w-full bg-slate-950 overflow-hidden shadow-2xl">
+      <section className="relative w-full min-h-screen min-h-[100dvh] bg-slate-950 overflow-hidden shadow-2xl flex flex-col">
         {/* Background Image: Aerial photo of Itapoá valorizando praia, mar e paisagem */}
         <div
           className="absolute inset-0 bg-cover bg-[center_35%] bg-no-repeat transition-all duration-700"
@@ -177,10 +177,10 @@ export const HomePage: React.FC<HomePageProps> = ({
         {/* Ambient Gradient Overlays: centro e lado direito iluminados e vibrantes; leitura impecável à esquerda */}
         <div className="absolute inset-0 bg-gradient-to-r from-slate-950/70 via-slate-950/20 via-45% to-transparent pointer-events-none" />
         <div className="absolute inset-0 bg-gradient-to-b from-slate-950/30 via-transparent to-transparent pointer-events-none" />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/45 via-transparent to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-slate-950/20 to-transparent pointer-events-none" />
 
-        {/* Hero Content Container */}
-        <div className="relative z-10 max-w-7xl mx-auto px-4 pt-20 sm:pt-24 lg:pt-28 pb-8 sm:pb-10 flex flex-col justify-between min-h-[560px] sm:min-h-[600px] lg:min-h-[640px]">
+        {/* Hero Content Container: preenche 100% da altura da tela sem deixar sobras brancas */}
+        <div className="relative z-10 max-w-7xl mx-auto px-4 pt-20 sm:pt-22 lg:pt-24 pb-6 sm:pb-8 flex-1 flex flex-col justify-between w-full">
           {/* Headline block */}
           <div className="max-w-2xl space-y-3 sm:space-y-4">
             <div className="inline-flex items-center gap-2.5">

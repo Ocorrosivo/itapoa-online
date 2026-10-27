@@ -31,7 +31,7 @@ const stripDiacritics = (value: string): string =>
     })
     .join('');
 
-const slugify = (value: string): string =>
+export const slugify = (value: string): string =>
   stripDiacritics(value.toLowerCase())
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)+/g, '');
@@ -195,6 +195,27 @@ export class CompanyService {
       const hours = formatProfileHours(details);
       if (hours) profile.hours = hours;
     }
+
+    // Garantir slug amigável quando a empresa possuir slug técnico legado (checkout_...)
+    const hasTechnicalSlug = Boolean(
+      (existing?.slug && existing.slug.startsWith('checkout_')) ||
+      (typeof profile.slug === 'string' && profile.slug.startsWith('checkout_'))
+    );
+    const effectiveName = profile.name || existing?.name;
+    if (hasTechnicalSlug && effectiveName) {
+      let candidateSlug = slugify(effectiveName);
+      if (!candidateSlug) candidateSlug = `empresa-${Date.now()}`;
+      const { pool } = await import('../mysql.js');
+      const [existingRows]: any = await pool.query(
+        'SELECT id FROM companies WHERE slug = ? LIMIT 1',
+        [candidateSlug]
+      );
+      if (existingRows.length && existingRows[0].id !== id) {
+        candidateSlug = `${candidateSlug}-${id.slice(-4)}`;
+      }
+      profile.slug = candidateSlug;
+    }
+
     return CompanyRepository.update(id, profile);
   }
 

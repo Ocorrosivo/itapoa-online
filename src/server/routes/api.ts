@@ -303,15 +303,8 @@ apiRouter.post('/companies/:id/claim', requireAuth, handler(async (req, res) => 
     trialResult = await EntitlementService.startSevenDayGoldTrial(companyId);
   }
 
-  // Atualiza metadados da empresa
-  await pool.query(
-    `UPDATE companies SET 
-       claim_status = 'claimed',
-       claimed_by_user_id = ?,
-       claimed_at = NOW()
-     WHERE id = ?`,
-    [req.user!.id, companyId]
-  ).catch(() => {});
+  // A titularidade fica em companies_users (acima) e o historico em
+  // audit_logs (abaixo). A tabela companies nao possui colunas de claim.
 
   // Registra auditoria
   const auditId = `audit_claim_${Date.now()}`;
@@ -806,6 +799,48 @@ apiRouter.get('/billing/invoices', requireAuth, attachCompanyScope, handler(asyn
     companyIds.map(id => billingService.listPaymentLogsByCompany(id))
   );
   res.json(batches.flat());
+}));
+
+// ============================================================
+// 7.1 PAGAMENTOS DE TESTE (Mercado Pago — Exclusivo Admin Master)
+// Valores estritos no backend: PIX R$ 1,00 | Cartão R$ 2,50
+// NUNCA alteram planos comerciais ou concedem status VIP.
+// ============================================================
+
+apiRouter.get('/admin/test-payments/config', requireAuth, requireRole(ADMIN_ONLY), handler(async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const envPref = req.query.env === 'production' ? 'production' : 'sandbox';
+  const { testPaymentService } = await import('../services/testPaymentService.js');
+  res.json(await testPaymentService.getConfig(envPref));
+}));
+
+apiRouter.get('/admin/test-payments/history', requireAuth, requireRole(ADMIN_ONLY), handler(async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const limit = Number(req.query.limit) || 50;
+  const { testPaymentService } = await import('../services/testPaymentService.js');
+  res.json(await testPaymentService.listHistory(limit));
+}));
+
+apiRouter.post('/admin/test-payments/pix', requireAuth, requireRole(ADMIN_ONLY), handler(async (req, res) => {
+  const envPref = req.body?.environment === 'production' ? 'production' : 'sandbox';
+  const payerEmail = typeof req.body?.payerEmail === 'string' ? req.body.payerEmail : req.user!.email;
+  const payerName = typeof req.body?.payerName === 'string' ? req.body.payerName : req.user!.name;
+  const companyId = typeof req.body?.companyId === 'string' ? req.body.companyId : null;
+  const { testPaymentService } = await import('../services/testPaymentService.js');
+  res.json(await testPaymentService.createPixTestPayment(req.user!.id, companyId, payerEmail, payerName, envPref, env.appUrl));
+}));
+
+apiRouter.post('/admin/test-payments/card', requireAuth, requireRole(ADMIN_ONLY), handler(async (req, res) => {
+  const envPref = req.body?.environment === 'production' ? 'production' : 'sandbox';
+  const companyId = typeof req.body?.companyId === 'string' ? req.body.companyId : null;
+  const { testPaymentService } = await import('../services/testPaymentService.js');
+  res.json(await testPaymentService.createCardTestPayment(req.user!.id, companyId, req.body ?? {}, envPref, env.appUrl));
+}));
+
+apiRouter.get('/admin/test-payments/status/:id', requireAuth, requireRole(ADMIN_ONLY), handler(async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const { testPaymentService } = await import('../services/testPaymentService.js');
+  res.json(await testPaymentService.reconcileTestPayment(req.params.id));
 }));
 
 apiRouter.get('/subscriptions', requireAuth, attachCompanyScope, handler(async (req, res) => {

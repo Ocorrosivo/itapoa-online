@@ -8,7 +8,8 @@ import React from 'react';
 import { 
   LayoutDashboard, Building2, Users, CreditCard, DollarSign, 
   Tag, MapPin, Compass, Ticket, FileText, ImageIcon, ShieldCheck, 
-  BarChart3, Settings, Bell, MessageSquare, Briefcase, ChevronLeft, ChevronRight, Layers, Award, Sparkles, FolderTree, Image, LogOut
+  BarChart3, Settings, Bell, MessageSquare, Briefcase, ChevronLeft, ChevronRight, Layers, Award, Sparkles, FolderTree, Image, LogOut,
+  FlaskConical
 } from 'lucide-react';
 
 export type AdminViewType = 
@@ -26,7 +27,8 @@ export type AdminViewType =
   | 'content'
   | 'infrastructure'
   | 'audit'
-  | 'settings';
+  | 'settings'
+  | 'test-payments';
 
 interface AdminSidebarProps {
   currentView: AdminViewType;
@@ -62,7 +64,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       items: [
         { id: 'plans', label: 'Planos SaaS', icon: Award },
         { id: 'financial', label: 'Financeiro Executivo', icon: DollarSign },
-        { id: 'crm', label: 'CRM de Leads', icon: Briefcase }
+        { id: 'crm', label: 'CRM de Leads', icon: Briefcase },
+        { id: 'test-payments', label: 'Pagamentos de Teste', icon: FlaskConical, badge: 'Mercado Pago' }
       ]
     },
     {
