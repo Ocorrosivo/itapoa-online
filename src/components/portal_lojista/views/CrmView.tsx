@@ -17,7 +17,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Users, Plus, Search, Edit2, Trash2, X, Save, AlertCircle, Loader2,
   RefreshCw, Phone, Mail, MessageSquare, Calendar, Tag, FileText,
-  CheckCircle2, Kanban, List, ArrowRight, ArrowLeft
+  CheckCircle2, Kanban, List, ArrowRight, ArrowLeft, GripVertical
 } from 'lucide-react';
 import { api } from '../../../lib/apiClient';
 import { Company, CrmLead, CrmLeadStatus } from '../../../types';
@@ -323,6 +323,7 @@ export const CrmView: React.FC<CrmViewProps> = ({ company }) => {
   const [syncStatus, setSyncStatus] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
   const [dragOverStage, setDragOverStage] = useState<CrmLeadStatus | null>(null);
+  const [draggedLeadId, setDraggedLeadId] = useState<string | null>(null);
   const [view, setView] = useState<'board' | 'list'>('board');
 
   const syncTimer = useRef<NodeJS.Timeout | null>(null);
@@ -356,6 +357,69 @@ export const CrmView: React.FC<CrmViewProps> = ({ company }) => {
     } finally {
       setMoving(false);
       setDragOverStage(null);
+    }
+  };
+
+  const handleDragStart = (e: React.DragEvent<HTMLElement>, leadId: string) => {
+    setDraggedLeadId(leadId);
+    try {
+      e.dataTransfer.setData('text/plain', leadId);
+      e.dataTransfer.setData('application/x-crm-lead', leadId);
+      e.dataTransfer.effectAllowed = 'move';
+    } catch (_) {}
+  };
+
+  const handleDragEnd = () => {
+    setDraggedLeadId(null);
+    setDragOverStage(null);
+  };
+
+  const handleDragOverColumn = (e: React.DragEvent<HTMLElement>, status: CrmLeadStatus) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      e.dataTransfer.dropEffect = 'move';
+    } catch (_) {}
+    if (dragOverStage !== status) {
+      setDragOverStage(status);
+    }
+  };
+
+  const handleDragEnterColumn = (e: React.DragEvent<HTMLElement>, status: CrmLeadStatus) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      e.dataTransfer.dropEffect = 'move';
+    } catch (_) {}
+    if (dragOverStage !== status) {
+      setDragOverStage(status);
+    }
+  };
+
+  const handleDragLeaveColumn = (e: React.DragEvent<HTMLElement>, status: CrmLeadStatus) => {
+    e.preventDefault();
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      if (dragOverStage === status) {
+        setDragOverStage(null);
+      }
+    }
+  };
+
+  const handleDropColumn = (e: React.DragEvent<HTMLElement>, status: CrmLeadStatus) => {
+    e.preventDefault();
+    e.stopPropagation();
+    let leadId = '';
+    try {
+      leadId = e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('application/x-crm-lead');
+    } catch (_) {}
+    if (!leadId && draggedLeadId) {
+      leadId = draggedLeadId;
+    }
+    setDragOverStage(null);
+    setDraggedLeadId(null);
+
+    if (leadId) {
+      void moveLead(leadId, status);
     }
   };
 
@@ -567,27 +631,18 @@ export const CrmView: React.FC<CrmViewProps> = ({ company }) => {
               <section
                 key={status}
                 aria-label={STATUS_LABELS[status]}
-                className={`min-w-[280px] w-[300px] flex-shrink-0 flex flex-col bg-slate-900/90 border rounded-2xl p-3 transition duration-200 ${
+                className={`min-w-[280px] w-[300px] flex-shrink-0 flex flex-col bg-slate-900/90 border rounded-2xl p-3 transition-all duration-200 ${
                   isTarget
-                    ? 'border-blue-400 ring-2 ring-blue-500/30 bg-slate-800/80'
-                    : 'border-slate-800'
+                    ? 'border-blue-400 ring-2 ring-blue-500/40 bg-slate-800/95 scale-[1.01]'
+                    : 'border-slate-800 hover:border-slate-700/80'
                 }`}
-                onDragOver={e => {
-                  e.preventDefault();
-                  if (dragOverStage !== status) setDragOverStage(status);
-                }}
-                onDragLeave={() => {
-                  if (dragOverStage === status) setDragOverStage(null);
-                }}
-                onDrop={e => {
-                  e.preventDefault();
-                  setDragOverStage(null);
-                  const leadId = e.dataTransfer.getData('text/plain');
-                  if (leadId) void moveLead(leadId, status);
-                }}
+                onDragOver={e => handleDragOverColumn(e, status)}
+                onDragEnter={e => handleDragEnterColumn(e, status)}
+                onDragLeave={e => handleDragLeaveColumn(e, status)}
+                onDrop={e => handleDropColumn(e, status)}
               >
                 {/* Header da Coluna */}
-                <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-800">
+                <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-800 select-none">
                   <div className="flex items-center gap-2">
                     <span className={`w-2 h-2 rounded-full ${style.dot}`} />
                     <h2 className="text-xs font-black text-white uppercase tracking-wider">
@@ -600,119 +655,158 @@ export const CrmView: React.FC<CrmViewProps> = ({ company }) => {
                 </div>
 
                 {/* Lista de Cards da Coluna */}
-                <div className="space-y-3 flex-1 min-h-[350px]">
+                <div
+                  className={`space-y-3 flex-1 min-h-[350px] rounded-xl transition-colors p-1 ${
+                    isTarget ? 'bg-blue-950/20' : ''
+                  }`}
+                  onDragOver={e => handleDragOverColumn(e, status)}
+                  onDrop={e => handleDropColumn(e, status)}
+                >
                   {stageLeads.length === 0 ? (
-                    <div className="h-32 border-2 border-dashed border-slate-800/70 rounded-xl flex items-center justify-center text-center p-3 text-slate-500 text-[11px]">
-                      Arraste um card para esta etapa
+                    <div
+                      className={`h-32 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center p-3 text-xs transition select-none ${
+                        isTarget
+                          ? 'border-blue-400 text-blue-300 bg-blue-950/30 ring-1 ring-blue-400/30'
+                          : 'border-slate-800/80 text-slate-500 hover:border-slate-700'
+                      }`}
+                      onDragOver={e => handleDragOverColumn(e, status)}
+                      onDrop={e => handleDropColumn(e, status)}
+                    >
+                      <GripVertical className="w-5 h-5 mb-1.5 opacity-60 text-slate-400" />
+                      <span>{isTarget ? 'Solte para mover para esta etapa' : 'Arraste um card para esta etapa'}</span>
                     </div>
                   ) : (
-                    stageLeads.map(lead => (
-                      <article
-                        key={lead.id}
-                        draggable={!moving}
-                        onDragStart={e => {
-                          e.dataTransfer.setData('text/plain', lead.id);
-                          e.dataTransfer.effectAllowed = 'move';
-                        }}
-                        className="bg-slate-800/90 hover:bg-slate-800 border border-slate-700/70 hover:border-slate-600 rounded-xl p-3.5 space-y-2.5 text-xs text-slate-300 shadow-sm transition group cursor-grab active:cursor-grabbing"
-                      >
-                        {/* Nome do Cliente */}
-                        <div className="flex items-start justify-between gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setModal(lead)}
-                            className="font-bold text-white text-left hover:text-blue-400 transition cursor-pointer text-sm leading-tight flex-1"
-                          >
-                            {lead.name}
-                          </button>
-                          <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100">
-                            <button
-                              type="button"
-                              onClick={() => setModal(lead)}
-                              title="Editar contato"
-                              className="p-1 hover:text-blue-400 transition"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteLead(lead.id)}
-                              title="Excluir contato"
-                              className="p-1 hover:text-rose-400 transition"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                    stageLeads.map(lead => {
+                      const isBeingDragged = draggedLeadId === lead.id;
+                      return (
+                        <article
+                          key={lead.id}
+                          draggable={!moving}
+                          onDragStart={e => handleDragStart(e, lead.id)}
+                          onDragEnd={handleDragEnd}
+                          className={`bg-slate-800/90 hover:bg-slate-800 border rounded-xl p-3.5 space-y-2.5 text-xs text-slate-300 shadow-sm transition group cursor-grab active:cursor-grabbing select-none ${
+                            isBeingDragged
+                              ? 'opacity-40 scale-95 border-dashed border-blue-400 shadow-2xl ring-2 ring-blue-500/50 bg-slate-900'
+                              : 'border-slate-700/70 hover:border-slate-600'
+                          }`}
+                        >
+                          {/* Alça visual de Arraste (Grip Handle) */}
+                          <div className="flex items-center justify-between pb-1.5 border-b border-slate-700/50 text-slate-400 group-hover:text-slate-300 transition select-none">
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 group-hover:text-blue-400 transition">
+                              <GripVertical className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-400 shrink-0" />
+                              <span className="uppercase tracking-wider">Arrastar card</span>
+                            </div>
+                            <span className="text-[10px] text-slate-500 font-mono">#{lead.id.slice(-4)}</span>
                           </div>
-                        </div>
 
-                        {/* Contatos: WhatsApp e Email */}
-                        <div className="space-y-1 text-[11px]">
-                          {lead.phone && (
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="text-slate-400 flex items-center gap-1">
-                                <Phone className="w-3 h-3 text-slate-400" />
-                                {lead.phone}
-                              </span>
+                          {/* Nome do Cliente */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => setModal(lead)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  setModal(lead);
+                                }
+                              }}
+                              className="font-bold text-white text-left hover:text-blue-400 transition cursor-pointer text-sm leading-tight flex-1 select-text"
+                            >
+                              {lead.name}
+                            </div>
+                            <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100">
                               <button
                                 type="button"
-                                onClick={() => handleOpenWhatsApp(lead.phone!, lead.name)}
-                                title="Conversar no WhatsApp"
-                                className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded text-[10px] font-bold flex items-center gap-1 transition"
+                                onClick={(e) => { e.stopPropagation(); setModal(lead); }}
+                                title="Editar contato"
+                                className="p-1 hover:text-blue-400 transition cursor-pointer"
                               >
-                                <MessageSquare className="w-2.5 h-2.5" />
-                                WhatsApp
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handleDeleteLead(lead.id); }}
+                                title="Excluir contato"
+                                className="p-1 hover:text-rose-400 transition cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
+                          </div>
+
+                          {/* Contatos: WhatsApp e Email */}
+                          <div className="space-y-1 text-[11px]">
+                            {lead.phone && (
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="text-slate-400 flex items-center gap-1">
+                                  <Phone className="w-3 h-3 text-slate-400" />
+                                  {lead.phone}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); handleOpenWhatsApp(lead.phone!, lead.name); }}
+                                  title="Conversar no WhatsApp"
+                                  className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 rounded text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
+                                >
+                                  <MessageSquare className="w-2.5 h-2.5" />
+                                  WhatsApp
+                                </button>
+                              </div>
+                            )}
+                            {lead.email && (
+                              <p className="text-slate-400 truncate flex items-center gap-1">
+                                <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span className="truncate">{lead.email}</span>
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Interesse / Serviço */}
+                          {lead.interest && (
+                            <div className="flex items-center gap-1 text-[11px] text-blue-300 bg-blue-950/30 px-2 py-1 rounded-lg border border-blue-900/40">
+                              <Tag className="w-3 h-3 shrink-0 text-blue-400" />
+                              <span className="truncate">{lead.interest}</span>
+                            </div>
                           )}
-                          {lead.email && (
-                            <p className="text-slate-400 truncate flex items-center gap-1">
-                              <Mail className="w-3 h-3 text-slate-400 shrink-0" />
-                              <span className="truncate">{lead.email}</span>
+
+                          {/* Próximo Contato */}
+                          {lead.next_contact_at && (
+                            <div className="flex items-center gap-1 text-[11px] text-amber-400 bg-amber-950/20 px-2 py-0.5 rounded border border-amber-900/30">
+                              <Calendar className="w-3 h-3 shrink-0" />
+                              <span>Retorno: {new Date(lead.next_contact_at).toLocaleDateString('pt-BR')}</span>
+                            </div>
+                          )}
+
+                          {/* Anotações Resumidas */}
+                          {lead.notes && (
+                            <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed bg-slate-900/40 p-2 rounded-lg border border-slate-800">
+                              {lead.notes}
                             </p>
                           )}
-                        </div>
 
-                        {/* Interesse / Serviço */}
-                        {lead.interest && (
-                          <div className="flex items-center gap-1 text-[11px] text-blue-300 bg-blue-950/30 px-2 py-1 rounded-lg border border-blue-900/40">
-                            <Tag className="w-3 h-3 shrink-0 text-blue-400" />
-                            <span className="truncate">{lead.interest}</span>
-                          </div>
-                        )}
-
-                        {/* Próximo Contato */}
-                        {lead.next_contact_at && (
-                          <div className="flex items-center gap-1 text-[11px] text-amber-400 bg-amber-950/20 px-2 py-0.5 rounded border border-amber-900/30">
-                            <Calendar className="w-3 h-3 shrink-0" />
-                            <span>Retorno: {new Date(lead.next_contact_at).toLocaleDateString('pt-BR')}</span>
-                          </div>
-                        )}
-
-                        {/* Anotações Resumidas */}
-                        {lead.notes && (
-                          <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed bg-slate-900/40 p-2 rounded-lg border border-slate-800">
-                            {lead.notes}
-                          </p>
-                        )}
-
-                        {/* Seletor Rápido de Etapa (Mobile & Acessibilidade) */}
-                        <div className="pt-1.5 border-t border-slate-700/50 flex items-center justify-between gap-2">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                            Mover para:
-                          </label>
-                          <select
-                            disabled={moving}
-                            value={lead.status}
-                            onChange={e => void moveLead(lead.id, e.target.value as CrmLeadStatus)}
-                            className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] font-semibold text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
+                          {/* Seletor Rápido de Etapa (Mobile & Acessibilidade) */}
+                          <div
+                            className="pt-1.5 border-t border-slate-700/50 flex items-center justify-between gap-2"
+                            onMouseDown={e => e.stopPropagation()}
                           >
-                            {PIPELINE_STAGES.map(s => (
-                              <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </article>
-                    ))
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                              Mover para:
+                            </label>
+                            <select
+                              disabled={moving}
+                              value={lead.status}
+                              onChange={e => void moveLead(lead.id, e.target.value as CrmLeadStatus)}
+                              className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] font-semibold text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
+                            >
+                              {PIPELINE_STAGES.map(s => (
+                                <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </article>
+                      );
+                    })
                   )}
                 </div>
               </section>

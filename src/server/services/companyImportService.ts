@@ -304,7 +304,6 @@ export class CompanyImportService {
           access_grant_type: 'bronze',
           trial_ends_at: null,
           has_used_trial: 0,
-          claim_status: 'unclaimed',
           views: 0,
           clicksWhatsapp: 0,
           website: item.data.website || null,

@@ -89,7 +89,8 @@ export default function CompanyDetailSection({
   const [claimLoading, setClaimLoading] = useState(false);
   const [claimSuccessMessage, setClaimSuccessMessage] = useState<string | null>(null);
 
-  const isClaimed = (company as any).claim_status === 'claimed' || Boolean(company.ownerId && company.ownerId !== 'admin_master');
+  // Titularidade registrada em companies_users, exposta como ownerId pela API.
+  const isClaimed = Boolean(company.ownerId && company.ownerId !== 'admin_master');
 
   // Fotos da galeria oficial da empresa (painel lojista / media_items)
   const [mediaGallery, setMediaGallery] = useState<string[]>(() => {
