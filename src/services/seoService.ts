@@ -32,7 +32,16 @@ export class SeoService {
     this.setMetaProperty('og:title', options.title);
     this.setMetaProperty('og:description', options.description);
     if (options.image) this.setMetaProperty('og:image', options.image);
-    if (options.url) this.setMetaProperty('og:url', options.url);
+    if (options.url) {
+      this.setMetaProperty('og:url', options.url);
+      let canonical = document.querySelector('link[rel="canonical"]');
+      if (!canonical) {
+        canonical = document.createElement('link');
+        canonical.setAttribute('rel', 'canonical');
+        document.head.appendChild(canonical);
+      }
+      canonical.setAttribute('href', options.url);
+    }
     this.setMetaProperty('og:type', options.type || 'website');
 
     // Update Twitter Cards
