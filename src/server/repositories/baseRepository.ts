@@ -17,7 +17,8 @@ const TABLE_COLUMNS: Record<string, string[]> = {
     'profileDetails',
     'instagram', 'facebook', 'tiktok', 'website',
     'id', 'name', 'slug', 'logo', 'coverImage', 'categoryId', 'cityId', 'description',
-    'detailedDescription', 'rating', 'reviewCount', 'phone', 'whatsapp', 'address', 'hours',
+    'detailedDescription', 'rating', 'reviewCount', 'phone', 'whatsapp', 'instagram', 'facebook', 'website',
+    'address', 'hours',
     'latitude', 'longitude', 'isSponsored', 'planLevel', 'features', 'views', 'clicksWhatsapp',
     'clicksPhone', 'clicksRoute',
     'access_grant_type', 'trial_ends_at', 'has_used_trial', 'createdAt'

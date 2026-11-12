@@ -151,7 +151,8 @@ export class CompanyService {
 
     // Self-service profile completion must never grant paid placement or change identity.
     const editable = ['name','slug','logo','coverImage','categoryId','cityId',
-      'description','detailedDescription','phone','whatsapp','address','hours',
+      'description','detailedDescription','phone','whatsapp','instagram','facebook','tiktok','website',
+      'address','hours',
       'latitude','longitude','features'];
 
     const profile: Record<string, any> = {};
